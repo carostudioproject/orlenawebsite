@@ -1,0 +1,13 @@
+{
+  "templates": {
+    "Pages/Public/Home": "926bbcad073e54deb33278b8b272ba9fb41b9c3f348e570aebd42f8f9199edad",
+    "Pages/Public/About": "67ab1bbb76c06af53d6e03f17805070e39d67fd23d77182e91a0927a55a80b1a",
+    "Pages/Public/BlogIndex": "67af56bac89f928a2d40cd1402a01ea7b68df667c09faa5646600a7a6e70e395",
+    "Pages/Public/BlogShow": "de659d729660d325bf151d2cff6e40fa2e038554bd557642dbe0c6eeea23f859",
+    "Components/AppFooter": "5f6c12b4e2bf193f6ac1f1df96b9d7208380839993d9e2958b642a26982d0ad4"
+  },
+  "data": {
+    "blogs": "167b059b16c101a0020885cfac474117d9c7f77dc34a67a3b0e78e84c38ea579",
+    "outlets": "affa63bcfd0980169f904031819f7bd72680ed6a7d22572daa6e470753e49a49"
+  }
+}

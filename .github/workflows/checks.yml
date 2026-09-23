@@ -1,0 +1,31 @@
+name: Orlena application checks
+on: [push, pull_request]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      DB_HOST: 127.0.0.1
+      DB_USERNAME: root
+      DB_PASSWORD: root
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: composer install --no-interaction --prefer-dist
+      - run: cp .env.example .env
+      - run: php artisan key:generate
+      - name: Start isolated test database
+        run: |
+          sudo systemctl start mysql
+          mysql -h 127.0.0.1 -uroot -proot -e 'CREATE DATABASE orlena_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;'
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test
+      - run: php vendor/bin/pint --test
+      - run: php artisan test

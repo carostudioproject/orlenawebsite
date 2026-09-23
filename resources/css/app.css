@@ -1,0 +1,41 @@
+﻿@import 'tailwindcss';
+@import './brand.css';
+@import './header.css';
+@import './admin.css';
+@import './motion.css';
+@source '../**/*.vue';
+@source '../**/*.blade.php';
+@theme {
+    --font-sans: 'Aileron', sans-serif;
+    --color-almond: #f7dbb3;
+    --color-cream: #f7e5dc;
+    --color-chocolate: #3b0304;
+    --color-light-blue: #75a4cc;
+    --color-matcha: #4d7141;
+    --color-rose: #f3a8ac;
+    --color-berry: #db3e4c;
+}
+@font-face { font-family: 'Aileron'; src: url('/assets/fonts/aileron/Aileron-Regular.otf') format('opentype'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Aileron'; src: url('/assets/fonts/aileron/Aileron-Bold.otf') format('opentype'); font-weight: 700; font-display: swap; }
+@layer base {
+    body { margin: 0; font-family: Arial, sans-serif; line-height: 1.5; background: #fff5f0; color: #3b0304; }
+    h1,h2,h3,h4,h5,h6 { margin-top: 0; margin-bottom: .5rem; font-weight: 500; line-height: 1.2; }
+    p { margin-top: 0; margin-bottom: 1rem; }
+    a { color: inherit; }
+    button, a { -webkit-tap-highlight-color: transparent; }
+    button { cursor: pointer; }
+    :focus-visible { outline: 2px solid #4d7141; outline-offset: 5px; }
+    [id] { scroll-margin-top: 80px; }
+}
+/* Match source container geometry without Bootstrap. */
+.container { width: 100%; margin-inline: auto; padding-inline: 12px; }
+@media (min-width: 576px) { .container { max-width: 540px; } }
+@media (min-width: 768px) { .container { max-width: 720px; } }
+@media (min-width: 992px) { .container { max-width: 960px; } }
+@media (min-width: 1200px) { .container { max-width: 1140px; } }
+@media (min-width: 1400px) { .container { max-width: 1320px; } }
+#mobile-menu { background: #f7dbb3; color: #3b0304; }
+#mobile-menu::backdrop { background: #f7dbb3; }
+.skip-link { position: fixed; left: 1rem; top: -100px; z-index: 100; padding: 12px; background: #f7dbb3; }
+.skip-link:focus { top: 1rem; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; } }

@@ -1,0 +1,254 @@
+[
+  {
+    "sku": "ORL-FB-001",
+    "name": "Kitkat Almond Chocochips",
+    "category": "FULLSIZE BROWNIES",
+    "price": 80000,
+    "description": "Brownies fudge dengan topping kitkat choco, almond dan chocochips"
+  },
+  {
+    "sku": "ORL-FB-002",
+    "name": "Kitkat Chocochips",
+    "category": "FULLSIZE BROWNIES",
+    "price": 80000,
+    "description": "Brownies fudge dengan topping kitkat choco, almond x chocochips, dan oreo"
+  },
+  {
+    "sku": "ORL-FB-003",
+    "name": "Bluberry Cheese",
+    "category": "FULLSIZE BROWNIES",
+    "price": 80000,
+    "description": "Brownies fudge dengan topping kitkat choco dan chocochips"
+  },
+  {
+    "sku": "ORL-FB-004",
+    "name": "Triple Mix Chocolate",
+    "category": "FULLSIZE BROWNIES",
+    "price": 85000,
+    "description": "Brownies fudge dengan topping kitkat choco, almond x chocochips, dan cheese x blueberry jam"
+  },
+  {
+    "sku": "ORL-FB-005",
+    "name": "Blueberry Mix Chocolate",
+    "category": "FULLSIZE BROWNIES",
+    "price": 85000,
+    "description": "Brownies fudge dengan topping cheedar cheese dan blueberry jam"
+  },
+  {
+    "sku": "ORL-FB-006",
+    "name": "Original Fudge Brownies",
+    "category": "FULLSIZE BROWNIES",
+    "price": 70000,
+    "description": "Brownies fudge dengan rasa cokelat tanpa topping"
+  },
+  {
+    "sku": "ORL-FB-007",
+    "name": "Redvelvet Fudge Brownies",
+    "category": "FULLSIZE BROWNIES",
+    "price": 80000,
+    "description": "Brownies fudge dengan rasa red velvet tanpa topping"
+  },
+  {
+    "sku": "ORL-FB-008",
+    "name": "Greentea Fudge Brownies",
+    "category": "FULLSIZE BROWNIES",
+    "price": 88000,
+    "description": "Brownies fudge dengan rasa greentea tanpa topping"
+  },
+  {
+    "sku": "ORL-FB-009",
+    "name": "Brownies Cookies",
+    "category": "FULLSIZE BROWNIES",
+    "price": 90000,
+    "description": "Brownies fudge dengan topping kitkat choco, chocochips dan cookies"
+  },
+  {
+    "sku": "ORL-FB-010",
+    "name": "Berry Crumble Cheesecake",
+    "category": "FULLSIZE BROWNIES",
+    "price": 115000,
+    "description": "Brownies fudge dengan topping original cheesecake dan berry crumble"
+  },
+  {
+    "sku": "ORL-FB-011",
+    "name": "Chocolate Mochi",
+    "category": "FULLSIZE BROWNIES",
+    "price": 95000,
+    "description": "Brownies fudge dengan topping mochi dibagian dalam dan topping belgian chocolate diatasnya"
+  },
+  {
+    "sku": "ORL-FB-012",
+    "name": "Nutella Ovolamaltine",
+    "category": "FULLSIZE BROWNIES",
+    "price": 95000,
+    "description": "Brownies fudge dengan topping nutella drizzle dan ovomaltine spread"
+  },
+  {
+    "sku": "ORL-FB-013",
+    "name": "Nutella Drizzle",
+    "category": "FULLSIZE BROWNIES",
+    "price": 90000,
+    "description": "Brownies fudge dengan topping full nutella drizzle"
+  },
+  {
+    "sku": "ORL-FB-014",
+    "name": "Ovomaltine",
+    "category": "FULLSIZE BROWNIES",
+    "price": 90000,
+    "description": "Brownies fudge dengan topping full ovomaltine spread"
+  },
+  {
+    "sku": "ORL-HB-001",
+    "name": "Kitkat Almond Chocochips",
+    "category": "HALFSIZE BROWNIES",
+    "price": 45000,
+    "description": "Brownies fudge dengan topping kitkat choco, almond dan chocochips"
+  },
+  {
+    "sku": "ORL-HB-002",
+    "name": "Kitkat Chocochips",
+    "category": "HALFSIZE BROWNIES",
+    "price": 45000,
+    "description": "Brownies fudge dengan topping kitkat choco, almond x chocochips, dan oreo"
+  },
+  {
+    "sku": "ORL-HB-003",
+    "name": "Bluberry Cheese",
+    "category": "HALFSIZE BROWNIES",
+    "price": 45000,
+    "description": "Brownies fudge dengan topping kitkat choco dan chocochips"
+  },
+  {
+    "sku": "ORL-HB-004",
+    "name": "Triple Mix Chocolate",
+    "category": "HALFSIZE BROWNIES",
+    "price": 50000,
+    "description": "Brownies fudge dengan topping kitkat choco, almond x chocochips, dan cheese x blueberry jam"
+  },
+  {
+    "sku": "ORL-HB-005",
+    "name": "Blueberry Mix Chocolate",
+    "category": "HALFSIZE BROWNIES",
+    "price": 50000,
+    "description": "Brownies fudge dengan topping cheedar cheese dan blueberry jam"
+  },
+  {
+    "sku": "ORL-HB-006",
+    "name": "Original Fudge Brownies",
+    "category": "HALFSIZE BROWNIES",
+    "price": 40000,
+    "description": "Brownies fudge dengan rasa cokelat tanpa topping"
+  },
+  {
+    "sku": "ORL-HB-007",
+    "name": "Redvelvet Fudge Brownies",
+    "category": "HALFSIZE BROWNIES",
+    "price": 45000,
+    "description": "Brownies fudge dengan rasa red velvet tanpa topping"
+  },
+  {
+    "sku": "ORL-HB-008",
+    "name": "Greentea Fudge Brownies",
+    "category": "HALFSIZE BROWNIES",
+    "price": 60000,
+    "description": "Brownies fudge dengan rasa greentea tanpa topping"
+  },
+  {
+    "sku": "ORL-HB-009",
+    "name": "Brownies Cookies",
+    "category": "HALFSIZE BROWNIES",
+    "price": 65000,
+    "description": "Brownies fudge dengan topping kitkat choco, chocochips dan cookies"
+  },
+  {
+    "sku": "ORL-HB-010",
+    "name": "Berry Crumble Cheesecake",
+    "category": "HALFSIZE BROWNIES",
+    "price": 75000,
+    "description": "Brownies fudge dengan topping original cheesecake dan berry crumble"
+  },
+  {
+    "sku": "ORL-HB-011",
+    "name": "Chocolate Mochi",
+    "category": "HALFSIZE BROWNIES",
+    "price": 65000,
+    "description": "Brownies fudge dengan topping mochi dibagian dalam dan topping belgian chocolate diatasnya"
+  },
+  {
+    "sku": "ORL-HB-012",
+    "name": "Nutella Ovolamaltine",
+    "category": "HALFSIZE BROWNIES",
+    "price": 65000,
+    "description": "Brownies fudge dengan topping nutella drizzle dan ovomaltine spread"
+  },
+  {
+    "sku": "ORL-HB-013",
+    "name": "Nutella Drizzle",
+    "category": "HALFSIZE BROWNIES",
+    "price": 60000,
+    "description": "Brownies fudge dengan topping full nutella drizzle"
+  },
+  {
+    "sku": "ORL-HB-014",
+    "name": "Ovomaltine",
+    "category": "HALFSIZE BROWNIES",
+    "price": 65000,
+    "description": "Brownies fudge dengan topping full ovomaltine spread"
+  },
+  {
+    "sku": "ORL-SC-001",
+    "name": "Nutella",
+    "category": "SAUCE",
+    "price": 8000,
+    "description": null
+  },
+  {
+    "sku": "ORL-SC-002",
+    "name": "Ovomaltine",
+    "category": "SAUCE",
+    "price": 8000,
+    "description": null
+  },
+  {
+    "sku": "ORL-SC-003",
+    "name": "Chocolate",
+    "category": "SAUCE",
+    "price": 5000,
+    "description": null
+  },
+  {
+    "sku": "ORL-SC-004",
+    "name": "Milo",
+    "category": "SAUCE",
+    "price": 5000,
+    "description": null
+  },
+  {
+    "sku": "ORL-SC-005",
+    "name": "Greentea",
+    "category": "SAUCE",
+    "price": 5000,
+    "description": null
+  },
+  {
+    "sku": "ORL-SC-006",
+    "name": "Lotus Biscoff",
+    "category": "SAUCE",
+    "price": 8000,
+    "description": null
+  },
+  {
+    "sku": "ORL-SC-007",
+    "name": "Cookie n Cream",
+    "category": "SAUCE",
+    "price": 8000,
+    "description": null
+  },
+  {
+    "sku": "ORL-SC-008",
+    "name": "Pistachio kunafa",
+    "category": "SAUCE",
+    "price": 18000,
+    "description": null
+  }
+]

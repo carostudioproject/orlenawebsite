@@ -1,0 +1,323 @@
+/* =========================================
+   LOGO
+========================================= */
+
+.navbar-logo {
+    display: block;
+
+    width: auto;
+    height: 40px;
+
+    max-width: 100%;
+
+    object-fit: contain;
+}
+
+
+/* =========================================
+   MOBILE TOGGLE
+========================================= */
+
+.or-mobile-toggle {
+    width: 40px;
+    height: 40px;
+
+    padding: 7px 5px;
+
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+
+    gap: 7px;
+
+    border: 0;
+    outline: 0;
+
+    background: transparent;
+}
+
+.or-mobile-toggle span {
+    display: block;
+
+    height: 1px;
+
+    background-color: #3B0304;
+}
+
+.or-mobile-toggle span:first-child {
+    width: 28px;
+}
+
+.or-mobile-toggle span:last-child {
+    width: 21px;
+}
+
+
+/* =========================================
+   DESKTOP
+========================================= */
+
+@media screen and (min-width: 992px) {
+
+    .offcanvas-body {
+        align-items: center;
+    }
+
+    .menu-wrapper {
+        flex: 1;
+    }
+
+    .navbar-nav {
+        gap: 4px;
+    }
+
+}
+
+
+/* =========================================
+   MOBILE
+========================================= */
+
+@media screen and (max-width: 991.98px) {
+
+    /* OFFCANVAS */
+
+    .header-offcanvas {
+        width: 100% !important;
+        max-width: none !important;
+
+        border: 0 !important;
+
+        background-color: #F7E5DC;
+    }
+
+
+    /* HEADER */
+
+    .or-mobile-header {
+        min-height: 76px;
+
+        padding: 0 24px;
+
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+
+    /* LOGO */
+
+    .or-mobile-logo {
+        display: inline-flex;
+
+        align-items: center;
+    }
+
+    .or-mobile-logo img {
+        display: block;
+
+        width: auto;
+        height: 34px;
+
+        object-fit: contain;
+    }
+
+
+    /* CLOSE */
+
+    .or-mobile-close {
+        position: relative;
+
+        width: 40px;
+        height: 40px;
+
+        padding: 0;
+
+        border: 0;
+
+        background: transparent;
+    }
+
+    .or-mobile-close span {
+        position: absolute;
+
+        top: 50%;
+        left: 50%;
+
+        width: 27px;
+        height: 1px;
+
+        background-color: #3B0304;
+    }
+
+    .or-mobile-close span:first-child {
+        transform:
+            translate(-50%, -50%)
+            rotate(45deg);
+    }
+
+    .or-mobile-close span:last-child {
+        transform:
+            translate(-50%, -50%)
+            rotate(-45deg);
+    }
+
+
+    /* BODY */
+
+    .header-offcanvas .offcanvas-body {
+        min-height:
+            calc(100dvh - 76px);
+
+        padding:
+            50px 24px
+            28px;
+
+        display: flex;
+        flex-direction: column;
+
+        overflow-y: auto;
+    }
+
+
+    /* MENU */
+
+    .header-offcanvas .menu-wrapper {
+        flex: 0 0 auto;
+    }
+
+    .header-offcanvas .navbar-nav {
+        display: flex;
+        flex-direction: column;
+
+        align-items: flex-start;
+
+        gap: 7px;
+
+        padding: 0 !important;
+        margin: 0;
+    }
+
+    .header-offcanvas .nav-item {
+        width: auto;
+
+        margin: 0 !important;
+    }
+
+    .header-offcanvas .nav-link {
+        padding: 0 !important;
+
+        font-family: 'neueRegredeMedium';
+        font-size: 34px;
+        font-weight: normal;
+
+        line-height: 1.18;
+        letter-spacing: -0.015em;
+
+        color: #3B0304 !important;
+
+        text-decoration: none;
+    }
+
+    .header-offcanvas .nav-link:active {
+        opacity: 0.55;
+    }
+
+
+    /* REMOVE DESKTOP UNDERLINE */
+
+    .header-offcanvas
+    .navbar-underline::before {
+        display: none !important;
+    }
+
+
+    /* BOTTOM */
+
+    .or-mobile-bottom {
+        margin-top: auto;
+
+        padding-top: 45px;
+    }
+
+
+    /* BLOG */
+
+    .or-mobile-blog {
+        display: inline-block;
+
+        margin-bottom: 32px;
+
+        font-family: 'Aileron', sans-serif;
+        font-size: 15px;
+        font-weight: 500;
+
+        line-height: 1.4;
+
+        color: #3B0304 !important;
+
+        text-decoration: none;
+    }
+
+
+    /* SOCIAL */
+
+    .or-mobile-social {
+        display: flex;
+
+        gap: 25px;
+    }
+
+    .or-mobile-social a {
+        font-family: 'Aileron', sans-serif;
+        font-size: 13px;
+        font-weight: normal;
+
+        line-height: 1.4;
+
+        color: #3B0304 !important;
+
+        text-decoration: none;
+
+        opacity: 0.7;
+    }
+
+}
+
+
+/* =========================================
+   SMALL MOBILE
+========================================= */
+
+@media screen and (max-width: 576px) {
+
+    .navbar-logo {
+        height: 35px;
+    }
+
+    .or-mobile-header {
+        min-height: 70px;
+
+        padding:
+            0 20px;
+    }
+
+    .or-mobile-logo img {
+        height: 30px;
+    }
+
+    .header-offcanvas .offcanvas-body {
+        min-height:
+            calc(100dvh - 70px);
+
+        padding:
+            42px 20px
+            25px;
+    }
+
+    .header-offcanvas .nav-link {
+        font-size: 32px;
+    }
+
+}

@@ -1,0 +1,2 @@
+<script setup lang="ts">defineProps<{ id: string; label: string; error?: string; hint?: string }>();</script>
+<template><div class="space-y-2"><label :for="id" class="block text-sm font-bold">{{ label }}</label><slot :described-by="error ? `${id}-error` : hint ? `${id}-hint` : undefined" /><p v-if="hint && !error" :id="`${id}-hint`" class="admin-muted text-xs">{{ hint }}</p><p v-if="error" :id="`${id}-error`" class="admin-error-text text-sm" role="alert">{{ error }}</p></div></template>

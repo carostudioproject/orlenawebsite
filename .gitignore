@@ -1,0 +1,16 @@
+/Orlena-System-Docs/
+/vendor/
+/node_modules/
+/public/build/
+/public/hot
+/public/storage
+/.env
+/.env.*
+!/.env.example
+/.laravel-scaffold/
+/.phpunit.cache/
+/.phpunit.result.cache
+/storage/*.key
+/storage/logs/*
+!/storage/logs/.gitignore
+/qa-artifacts/

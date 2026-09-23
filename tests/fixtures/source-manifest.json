@@ -1,0 +1,22 @@
+{
+  "Home": {
+    "source": "src/app/home-page/home-page.component.html",
+    "sha256": "b55969b915214bf0fcfb326463259c4c29c55fed60100c7f9a7e470919c3979f"
+  },
+  "About": {
+    "source": "src/app/our-story-page/our-story-page.component.html",
+    "sha256": "dc90b123e4c898def48f615e3e1225078d26f8acba28d5d512dd5f0ce900f41a"
+  },
+  "BlogIndex": {
+    "source": "src/app/blog-page/blog-page.component.html",
+    "sha256": "995470c961eb32c377b8cd5cc772bf93fbaacd6968ddf945d2d06732576d057b"
+  },
+  "BlogShow": {
+    "source": "src/app/blog-detail-page/blog-detail-page.component.html",
+    "sha256": "276ac7cf75d4fcfc6abe1c066d3c3c55386d4fc423940fc9f5d002059f747010"
+  },
+  "AppFooter": {
+    "source": "src/app/footer/footer.component.html",
+    "sha256": "f2507724357fdbd78c676b9e0da3b0e09b7c65f50ab4b372543025bb4be747d8"
+  }
+}

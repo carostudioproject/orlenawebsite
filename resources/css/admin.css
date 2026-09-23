@@ -1,0 +1,168 @@
+/* Dashboard styling from the Orlena brand guideline (08-frontend-and-brand-guide.md). */
+.admin-shell {
+    --admin-chocolate: #3b0304;
+    --admin-chocolate-hover: #5c1416;
+    --admin-cream: #fff5f0;
+    --admin-almond: #f7dbb3;
+    --admin-matcha: #4d7141;
+    --admin-berry: #db3e4c;
+    /* Berry darkened for small text so it keeps 4.5:1 contrast on light backgrounds. */
+    --admin-berry-text: #a3202d;
+    --admin-light-blue: #75a4cc;
+    --admin-rose: #f3a8ac;
+    --admin-line: #3b030414;
+    font-family: 'Aileron', sans-serif;
+    background: var(--admin-cream);
+    color: var(--admin-chocolate);
+}
+.admin-shell h1, .admin-shell h2 { font-family: 'neueRegredeBold', sans-serif; letter-spacing: .01em; }
+.admin-shell :focus-visible { outline: 2px solid var(--admin-chocolate); outline-offset: 2px; }
+.admin-shell input:not([type='checkbox']):not([type='radio']):not([type='file']):not(.order-qty), .admin-shell select, .admin-shell textarea {
+    width: 100%; border: 1px solid #3b03042e; border-radius: .65rem; padding: .7rem .85rem; background: white; font-family: inherit; font-size: .9rem; line-height: 1.4; color: inherit;
+    transition: border-color .15s, box-shadow .15s;
+}
+.admin-shell input:focus, .admin-shell select:focus, .admin-shell textarea:focus { border-color: var(--admin-chocolate); outline: 2px solid #3b03041f; outline-offset: 0; }
+/* Selects drop the browser's arrow for a Chocolate chevron; !important keeps the arrow's room if the base rule gains specificity. */
+.admin-shell select {
+    appearance: none; -webkit-appearance: none; cursor: pointer; min-width: 9rem; padding-right: 2.6rem !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%233b0304' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 7.5 5 5 5-5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right .85rem center; background-size: 1rem;
+}
+.admin-shell select:hover:not(:disabled) { border-color: #3b030466; background-color: #fffaf6; }
+.admin-shell select:disabled { cursor: not-allowed; opacity: .6; }
+.admin-shell select option { color: var(--admin-chocolate); }
+.admin-shell input:hover:not(:disabled):not(:focus):not([type='checkbox']):not([type='radio']), .admin-shell textarea:hover:not(:disabled):not(:focus) { border-color: #3b030455; }
+.admin-shell input[type='checkbox'] { width: 1.1rem; height: 1.1rem; accent-color: var(--admin-chocolate); }
+.admin-shell input[type='file'] { font-size: .85rem; }
+/* Room for the search icon on the left and loading/clear controls on the right; hide the browser's own clear button. */
+/* !important: the general input rule above grows more specific as exclusions are added; this padding must always win. */
+.admin-shell input.admin-search-input { padding-left: 2.4rem !important; padding-right: 4.25rem !important; }
+.admin-search-input::-webkit-search-cancel-button { display: none; }
+.admin-shell [aria-invalid='true'] { border-color: var(--admin-berry) !important; }
+
+.admin-primary, .admin-secondary { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; border-radius: 999px; padding: .65rem 1.2rem; font-size: .875rem; font-weight: 700; text-decoration: none; text-align: center; transition: background-color .15s, border-color .15s; }
+.admin-primary { border: 1px solid var(--admin-chocolate); background: var(--admin-chocolate); color: var(--admin-cream); }
+.admin-primary:hover:not(:disabled) { background: var(--admin-chocolate-hover); }
+.admin-secondary { border: 1px solid #3b030433; background: white; color: var(--admin-chocolate); }
+.admin-secondary:hover:not(:disabled) { background: var(--admin-almond); border-color: var(--admin-almond); }
+.admin-danger { color: var(--admin-berry-text); border-color: #db3e4c66; }
+.admin-primary:disabled, .admin-secondary:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Positioned for sr-only children; in a layer so utilities such as sticky can override it. */
+@layer components { .admin-card { position: relative; } }
+.admin-card { border: 1px solid var(--admin-line); border-radius: 1.25rem; background: white; padding: 1.5rem; box-shadow: 0 1px 2px #3b03040a; }
+.admin-eyebrow { font-size: .72rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--admin-matcha); }
+.admin-muted { color: #3b0304a6; }
+.admin-shell th { font-weight: 700; font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; color: #3b0304a6; }
+.admin-shell th, .admin-shell td { padding: .9rem .75rem; border-bottom: 1px solid var(--admin-line); vertical-align: top; }
+.admin-shell tbody tr:hover { background: #fff5f080; }
+
+/* Feedback uses brand Berry/Matcha as an accent bar; body text stays Chocolate for contrast. */
+.admin-alert { border-radius: .9rem; border-left: 4px solid; padding: .9rem 1rem; font-size: .875rem; }
+.admin-alert-error { background: #db3e4c12; border-color: var(--admin-berry); }
+.admin-alert-success { background: #4d714114; border-color: var(--admin-matcha); }
+.admin-alert-info { background: #75a4cc1f; border-color: var(--admin-light-blue); }
+.admin-error-text { color: var(--admin-berry-text); }
+
+/* Display for icon buttons comes from utilities (inline-flex lg:hidden) so responsive hiding still works. */
+/* App shell: fixed sidebar, sticky top bar, content on the Cream canvas. */
+.admin-sidebar { background: white; border-right: 1px solid var(--admin-line); }
+.admin-topbar { background: #ffffffd9; backdrop-filter: blur(10px); border-bottom: 1px solid var(--admin-line); }
+.admin-icon-button { align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; border-radius: .75rem; font-size: 1.1rem; transition: background-color .15s; }
+.admin-icon-button:hover { background: #f7dbb366; }
+
+.admin-nav-link { position: relative; display: flex; align-items: center; gap: .75rem; border-radius: .75rem; padding: .6rem .8rem; font-size: .9rem; text-align: left; text-decoration: none; white-space: nowrap; color: #3b0304cc; transition: background-color .15s, color .15s; }
+.admin-nav-link i { width: 1.1rem; font-size: .95rem; color: #3b030499; transition: color .15s; }
+.admin-nav-link:hover { background: #fff5f0; color: var(--admin-chocolate); }
+.admin-nav-link[aria-current='page'] { background: var(--admin-almond); color: var(--admin-chocolate); font-weight: 700; }
+.admin-nav-link[aria-current='page'] i { color: var(--admin-chocolate); }
+.admin-nav-link[aria-current='page']::before { content: ''; position: absolute; left: -.75rem; top: .45rem; bottom: .45rem; width: 3px; border-radius: 0 3px 3px 0; background: var(--admin-chocolate); }
+
+/* Row actions in tables (Edit, Detail, Lihat) and compact icon buttons (move up/down, delete). */
+.admin-action { display: inline-flex; align-items: center; gap: .4rem; border: 1px solid #3b030429; border-radius: .6rem; background: white; padding: .35rem .7rem; font-size: .8rem; font-weight: 700; white-space: nowrap; text-decoration: none; color: var(--admin-chocolate); transition: background-color .15s, border-color .15s, color .15s; }
+.admin-action:hover:not(:disabled) { background: var(--admin-almond); border-color: var(--admin-almond); }
+.admin-action i { font-size: .75rem; }
+.admin-action-icon { display: inline-flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.25rem; border: 1px solid #3b030429; border-radius: .6rem; background: white; font-size: .8rem; color: var(--admin-chocolate); transition: background-color .15s, border-color .15s; }
+.admin-action-icon:hover:not(:disabled) { background: var(--admin-almond); border-color: var(--admin-almond); }
+.admin-action-icon:disabled { opacity: .35; cursor: not-allowed; }
+.admin-action.admin-danger:hover:not(:disabled), .admin-action-icon.admin-danger:hover:not(:disabled) { background: #db3e4c14; border-color: #db3e4c66; }
+.admin-actions { display: flex; flex-wrap: nowrap; justify-content: flex-end; gap: .4rem; }
+.admin-back { display: inline-flex; align-items: center; gap: .45rem; font-size: .875rem; font-weight: 700; text-decoration: none; color: #3b0304b3; transition: color .15s, gap .15s; }
+.admin-back:hover { color: var(--admin-chocolate); gap: .65rem; }
+
+/* KPI tiles: label, hero number, one line of context; the icon chip carries a brand tint. */
+.admin-kpi { display: flex; gap: 1rem; align-items: flex-start; text-decoration: none; transition: border-color .15s, box-shadow .15s, transform .15s; }
+a.admin-kpi:hover { border-color: #3b030433; box-shadow: 0 6px 20px -12px #3b030466; transform: translateY(-1px); }
+.admin-kpi-icon { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; border-radius: .9rem; font-size: 1.05rem; color: var(--admin-chocolate); }
+.admin-kpi-value { margin: .15rem 0 0; font-family: 'neueRegredeBold', sans-serif; font-size: 1.9rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.admin-kpi-value.is-small { font-size: 1.5rem; }
+
+/* Order form: category tabs, product cards, size pills, quantity steppers, and fulfillment choices. */
+.order-step { display: inline-flex; align-items: center; justify-content: center; width: 1.75rem; height: 1.75rem; margin-right: .6rem; border-radius: 999px; background: var(--admin-chocolate); color: var(--admin-cream); font-size: .85rem; vertical-align: .15em; }
+.order-category { display: inline-flex; flex-shrink: 0; align-items: center; gap: .6rem; border: 1px solid #3b030429; border-radius: 999px; background: white; padding: .3rem 1rem .3rem .3rem; font-size: .875rem; font-weight: 700; white-space: nowrap; transition: background-color .15s, border-color .15s; }
+.order-category:hover { border-color: var(--admin-almond); background: #fff5f0; }
+.order-category[aria-pressed='true'] { border-color: var(--admin-chocolate); background: var(--admin-chocolate); color: var(--admin-cream); }
+.order-product { display: flex; flex-direction: column; gap: .75rem; border: 1px solid var(--admin-line); border-radius: 1rem; padding: .85rem; transition: border-color .15s, box-shadow .15s; }
+.order-product:hover { border-color: #3b030429; box-shadow: 0 6px 20px -14px #3b030466; }
+.order-size span { display: inline-block; cursor: pointer; border: 1px solid #3b030429; border-radius: 999px; padding: .35rem .8rem; font-size: .8rem; font-weight: 700; transition: background-color .15s, border-color .15s; }
+.order-size input:checked + span { border-color: var(--admin-chocolate); background: var(--admin-almond); }
+.order-size input:focus-visible + span { outline: 2px solid var(--admin-chocolate); outline-offset: 2px; }
+.order-stepper { display: inline-flex; align-items: center; overflow: hidden; border: 1px solid #3b030429; border-radius: 999px; background: white; }
+.order-stepper button { display: inline-flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.4rem; font-size: .75rem; transition: background-color .15s; }
+.order-stepper button:hover:not(:disabled) { background: var(--admin-almond); }
+.order-stepper button:disabled { opacity: .35; cursor: not-allowed; }
+.order-stepper .order-qty { width: 2.75rem; border: 0; border-radius: 0; padding: 0; text-align: center; font-weight: 700; -moz-appearance: textfield; }
+.order-stepper input::-webkit-inner-spin-button, .order-stepper input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.order-stepper.is-small button { width: 1.9rem; height: 2rem; }
+.order-stepper.is-small .order-qty { width: 2.25rem; }
+.order-method span { display: grid; grid-template-columns: auto 1fr; column-gap: .75rem; height: 100%; cursor: pointer; border: 1px solid #3b030429; border-radius: 1rem; padding: 1rem; transition: background-color .15s, border-color .15s; }
+.order-method i { grid-row: span 2; align-self: center; font-size: 1.2rem; }
+.order-method small { color: #3b0304a6; font-size: .78rem; }
+.order-method input:checked + span { border-color: var(--admin-chocolate); background: #fff5f0; box-shadow: inset 0 0 0 1px var(--admin-chocolate); }
+.order-method input:focus-visible + span { outline: 2px solid var(--admin-chocolate); outline-offset: 2px; }
+.order-method.is-disabled span { cursor: not-allowed; opacity: .5; }
+
+/* Custom dialogs (replacing window.confirm/alert/prompt) and success toasts. */
+.app-dialog { width: min(28rem, calc(100vw - 2rem)); max-width: none; margin: auto; border: 0; border-radius: 1.25rem; padding: 0; background: white; color: var(--admin-chocolate); box-shadow: 0 30px 80px -20px #3b030466; }
+.app-dialog::backdrop { background: #3b030459; backdrop-filter: blur(2px); }
+.app-dialog[open] { animation: app-dialog-in .22s cubic-bezier(.22, .61, .36, 1) both; }
+.app-dialog[open]::backdrop { animation: app-fade-in .22s ease both; }
+.app-dialog-panel { display: flex; flex-direction: column; gap: .9rem; padding: 1.5rem; font-family: 'Aileron', sans-serif; }
+.app-dialog-panel h2 { font-family: 'neueRegredeBold', sans-serif; }
+.app-dialog-icon { display: inline-flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; border-radius: 999px; background: var(--admin-almond); font-size: 1.1rem; }
+.app-dialog-icon.is-danger { background: #db3e4c1f; color: var(--admin-berry-text); }
+.admin-primary.is-danger { border-color: var(--admin-berry-text); background: var(--admin-berry-text); }
+.admin-primary.is-danger:hover:not(:disabled) { background: #85131f; }
+.app-dialog input { width: 100%; border: 1px solid #3b03042e; border-radius: .65rem; padding: .6rem .8rem; font-size: .85rem; }
+@keyframes app-dialog-in { from { opacity: 0; transform: translateY(12px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes app-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+.app-toast { display: flex; align-items: center; gap: .75rem; width: min(24rem, 100%); border: 1px solid #4d714140; border-left: 4px solid var(--admin-matcha); border-radius: 1rem; background: white; padding: .7rem .6rem .7rem .9rem; color: var(--admin-chocolate); box-shadow: 0 18px 40px -18px #3b030466; font-family: 'Aileron', sans-serif; }
+.app-toast-icon { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 1.9rem; height: 1.9rem; border-radius: 999px; background: #4d714126; color: var(--admin-matcha); font-size: .8rem; }
+.toast-enter-active, .toast-leave-active { transition: opacity .25s ease, transform .25s cubic-bezier(.22, .61, .36, 1); }
+.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-10px); }
+@media (max-width: 639px) { .toast-enter-from, .toast-leave-to { transform: translateY(10px); } }
+.admin-profile-link { transition: background-color .15s; }
+.admin-profile-link:hover { background: #fff5f0; }
+
+/* PO schedule load per date: near capacity turns almond, full turns rose (always with the number as text). */
+.schedule-load { border: 1px solid var(--admin-line); border-radius: .9rem; padding: .7rem .8rem; background: #fff; }
+.schedule-load.is-near { background: #f7dbb366; border-color: var(--admin-almond); }
+.schedule-load.is-full { background: #f3a8ac4d; border-color: var(--admin-rose); }
+
+/* Reports: summary tiles, bars behind table rows, and print output. */
+.report-bar { position: relative; }
+.report-bar > span[aria-hidden] { position: absolute; inset: 0 auto 0 0; border-radius: .4rem; background: #f7dbb399; z-index: 0; }
+.report-bar > :not([aria-hidden]) { position: relative; z-index: 1; }
+@media print {
+    .admin-sidebar, .admin-topbar, .report-actions, .admin-toast-region { display: none !important; }
+    .admin-shell { padding-left: 0 !important; background: #fff; }
+    .admin-card { box-shadow: none !important; break-inside: avoid; }
+}
+
+/* Segmented control (report quick periods): equal-padding, centered labels in one pill track. */
+.admin-segment { display: inline-flex; gap: .25rem; padding: .25rem; border: 1px solid var(--admin-line); border-radius: 999px; background: var(--admin-cream); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.admin-segment button { border: 0; border-radius: 999px; background: transparent; padding: .45rem 1rem; font: inherit; font-size: .875rem; font-weight: 700; line-height: 1.2; color: inherit; white-space: nowrap; transition: background-color .15s, color .15s; }
+.admin-segment button:hover { background: #fff; }
+.admin-segment button[aria-pressed='true'] { background: var(--admin-chocolate); color: var(--admin-cream); }
+.admin-segment button:focus-visible { outline: 2px solid var(--admin-chocolate); outline-offset: 2px; }

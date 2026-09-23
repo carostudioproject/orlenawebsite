@@ -1,0 +1,37 @@
+[
+  {
+    "name": "Orlena Padangsambian",
+    "address": "JL Purba Indah Raya Gg. II No.9, Padangsambian, Kec. Denpasar Bar., Kota Denpasar, Bali 80117",
+    "image": "/assets/images/outlet1.jpg",
+    "alt": "Orlena Padang Sambian",
+    "mapsUrl": "https://maps.app.goo.gl/JdUueDNZw9EGF3LP7"
+  },
+  {
+    "name": "Orlena Living World Mall",
+    "address": "Living World DPS - LG Floor",
+    "image": "/assets/images/outlet2.jpg",
+    "alt": "Orlena Living World Denpasar",
+    "mapsUrl": "https://maps.app.goo.gl/Q9xsm6XLMVYAxXbcA"
+  },
+  {
+    "name": "Orlena Sidakarya",
+    "address": "Jl. Bedugul 31, Ruko No-6, Sidakarya, Denpasar Selatan, Kota Denpasar, Bali 80225",
+    "image": "/assets/images/outlet6.jpg",
+    "alt": "Orlena Panjer Denpasar Selatan",
+    "mapsUrl": "https://maps.app.goo.gl/JDUQ7Lu53RzTbVPEA"
+  },
+  {
+    "name": "Orlena Cafe Akasia",
+    "address": "JL Akasia No. 16, Sumerta, Kec. Denpasar Tim., Kota Denpasar, Bali 80239",
+    "image": "/assets/images/outlet4.jpg",
+    "alt": "Orlena Akasia Denpasar Timur",
+    "mapsUrl": "https://maps.app.goo.gl/fuvL5vE2VmNv2332A"
+  },
+  {
+    "name": "Orlena Mal Bali Galeria",
+    "address": "Mal Bali Galeria",
+    "image": "/assets/images/outlet5.png",
+    "alt": "Orlena Mal Bali Galeria",
+    "mapsUrl": "https://maps.app.goo.gl/ocPppEGmMkRc1JKJ7"
+  }
+]

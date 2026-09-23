@@ -1,0 +1,26 @@
+[
+  {
+    "name": "Brownies",
+    "image": "/assets/images/baked-goods-section/Brownies/Brownies-03.png"
+  },
+  {
+    "name": "Choco Layer",
+    "image": "/assets/images/baked-goods-section/Choco Layer/Choco-Layer-07.png"
+  },
+  {
+    "name": "Brownies Cheesecake",
+    "image": "/assets/images/baked-goods-section/Brownies cheesecake/Brownies-Cheesecake-05.jpg"
+  },
+  {
+    "name": "Cookies",
+    "image": "/assets/images/baked-goods-section/Cookies/Cookies-01.jpg"
+  },
+  {
+    "name": "Croissant",
+    "image": "/assets/images/baked-goods-section/Croissant/Croissant-01.png"
+  },
+  {
+    "name": "Tart",
+    "image": "/assets/images/baked-goods-section/Tart/Tart-04.jpg"
+  }
+]

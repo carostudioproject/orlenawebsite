@@ -1,0 +1,30 @@
+/* Public website motion. Everything collapses to instant under prefers-reduced-motion (see app.css). */
+:root { --ease-out-soft: cubic-bezier(.22, .61, .36, 1); }
+
+/* Header links: a thin Chocolate underline draws in from the left and exits to the right. */
+.nav-underline { position: relative; }
+.nav-underline::after {
+    content: ''; position: absolute; left: .5rem; right: .5rem; bottom: .3rem; height: 1px; background: currentColor;
+    transform: scaleX(0); transform-origin: right center; transition: transform .35s var(--ease-out-soft);
+}
+.nav-underline:hover::after, .nav-underline:focus-visible::after { transform: scaleX(1); transform-origin: left center; }
+
+.header-social { display: inline-flex; transition: opacity .25s ease, transform .25s var(--ease-out-soft); }
+.header-social:hover { opacity: .7; transform: translateY(-2px); }
+
+/* Incoming page after an in-place navigation. */
+.page-enter { animation: page-enter .4s var(--ease-out-soft) both; }
+@keyframes page-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* Mobile menu slides in, then its links follow one after another. */
+#mobile-menu[open] { animation: menu-in .35s var(--ease-out-soft) both; }
+#mobile-menu[open] .nav-item { animation: menu-item-in .45s var(--ease-out-soft) both; }
+#mobile-menu[open] .nav-item:nth-child(2) { animation-delay: .04s; }
+#mobile-menu[open] .nav-item:nth-child(3) { animation-delay: .08s; }
+#mobile-menu[open] .nav-item:nth-child(4) { animation-delay: .12s; }
+#mobile-menu[open] .nav-item:nth-child(5) { animation-delay: .16s; }
+@keyframes menu-in { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: none; } }
+@keyframes menu-item-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* Sections receive focus after scroll navigation for keyboard and screen reader users; no outline box on large areas. */
+section[tabindex='-1']:focus, #main-content:focus { outline: none; }

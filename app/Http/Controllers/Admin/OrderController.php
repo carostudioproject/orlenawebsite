@@ -1,0 +1,139 @@
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Actions\Orders\ChangeOrderStatus;
+use App\Actions\Orders\ReviewOrder;
+use App\Actions\Payments\CreatePaymentLink;
+use App\Actions\Payments\ReconcilePayment;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\ReviewOrderRequest;
+use App\Models\IntegrationSync;
+use App\Models\Order;
+use App\Models\Payment;
+use App\Services\Midtrans\MidtransException;
+use App\Support\PreorderDate;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Inertia\Inertia;
+
+class OrderController extends Controller
+{
+    private const ORDER_STATUSES = 'pending_review,confirmed,processing,ready,delivering,completed,cancelled';
+
+    private const PAYMENT_STATUSES = 'not_created,pending,paid,failed,expired,cancelled,refunded';
+
+    public function index(Request $request)
+    {
+        $filters = $request->validate([
+            'search' => ['nullable', 'string', 'max:100'], 'date' => ['nullable', 'date_format:Y-m-d'],
+            'status' => ['nullable', 'in:'.self::ORDER_STATUSES], 'payment' => ['nullable', 'in:'.self::PAYMENT_STATUSES],
+        ]);
+        $orders = Order::with('customer:id,name,whatsapp')->when($filters['search'] ?? null, function ($q, $search) {
+            $q->where(fn ($q) => $q->where('order_code', 'like', '%'.$search.'%')->orWhereHas('customer', fn ($c) => $c->where('name', 'like', '%'.$search.'%')->orWhere('whatsapp', 'like', '%'.$search.'%')));
+        })->when($filters['date'] ?? null, fn ($q, $date) => $q->whereDate('requested_date', $date))
+            ->when($filters['status'] ?? null, fn ($q, $status) => $q->where('order_status', $status))
+            ->when($filters['payment'] ?? null, fn ($q, $payment) => $q->where('payment_status', $payment))
+            ->latest('id')->paginate(10)->withQueryString();
+        Inertia::encryptHistory();
+
+        return Inertia::render('Admin/Orders/Index', compact('orders', 'filters'));
+    }
+
+    public function show(Order $order)
+    {
+        Inertia::encryptHistory();
+
+        $reviews = DB::table('order_reviews')->leftJoin('users', 'users.id', '=', 'order_reviews.actor_id')
+            ->where('order_id', $order->id)->select('order_reviews.*', 'users.name as actor_name')
+            ->orderByDesc('order_reviews.id')->paginate(10);
+        $history = DB::table('order_status_histories')->leftJoin('users', 'users.id', '=', 'order_status_histories.actor_id')
+            ->where('order_id', $order->id)->select('order_status_histories.*', 'users.name as actor_name')
+            ->orderByDesc('order_status_histories.id')->limit(50)->get();
+        $payments = $order->payments()->with('creator:id,name')->orderByDesc('attempt')->get();
+
+        return Inertia::render('Admin/Orders/Show', [
+            'order' => $order->load('customer', 'items'), 'reviews' => $reviews, 'history' => $history, 'payments' => $payments,
+            'additions' => $order->additions()->latest('id')->get(['id', 'items', 'subtotal_added', 'previous_total', 'new_total', 'created_at']),
+            'canCancelPaid' => request()->user()->can('cancel-paid-orders'),
+            // Staff check capacity by hand; this only warns when the date is busy or closed.
+            'dayLoad' => [
+                'orders' => Order::whereDate('requested_date', $order->requested_date)->where('order_status', '!=', 'cancelled')->count(),
+                'capacity' => app(PreorderDate::class)->dailyCapacity(), 'closed' => app(PreorderDate::class)->closedReason($order->requested_date->toDateString(), english: true),
+            ],
+            'erzapSync' => IntegrationSync::where('provider', 'erzap')->where('subject_type', 'orders')->where('subject_id', $order->id)->latest('id')
+                ->first(['id', 'type', 'status', 'attempts', 'last_error', 'synced_at', 'next_attempt_at', 'external_ref']),
+        ]);
+    }
+
+    public function review(ReviewOrderRequest $request, Order $order, ReviewOrder $review)
+    {
+        $review->handle($order, $request->validated(), $request->user()->id);
+
+        return redirect('/admin/orders/'.$order->id)->with('success', 'Review saved.');
+    }
+
+    public function confirm(Request $request, Order $order, CreatePaymentLink $links)
+    {
+        $data = $request->validate(['review_version' => ['required', 'integer', 'min:0']]);
+
+        return $this->paymentResult($order, $links->confirm($order, (int) $data['review_version'], $request->user()->id), 'Order confirmed and the payment link is ready to send.');
+    }
+
+    public function retryPayment(Request $request, Order $order, CreatePaymentLink $links)
+    {
+        return $this->paymentResult($order, $links->retry($order, $request->user()->id), 'Payment link created.');
+    }
+
+    public function renewPayment(Request $request, Order $order, CreatePaymentLink $links)
+    {
+        $data = $request->validate(['reason' => ['required', 'string', 'max:500']], ['reason.required' => 'Write why a new link is needed.']);
+
+        return $this->paymentResult($order, $links->renew($order, $data['reason'], $request->user()->id), 'New payment link created.');
+    }
+
+    public function checkPayment(Order $order, Payment $payment, ReconcilePayment $reconcile)
+    {
+        abort_unless($payment->order_id === $order->id, 404);
+        try {
+            $result = $reconcile->handle($payment);
+        } catch (MidtransException $e) {
+            return back()->withErrors(['payment' => $e->getMessage().'. Try again in a moment.']);
+        }
+        $messages = [
+            'applied' => 'Payment status updated from Midtrans.', 'not_started' => 'The customer has not chosen a payment method in Midtrans yet.',
+            'amount_mismatch' => 'The Midtrans amount does not match. Check the transaction manually.',
+        ];
+
+        return back()->with('success', $messages[$result] ?? 'Payment status already matches Midtrans.');
+    }
+
+    public function advance(Request $request, Order $order, ChangeOrderStatus $status)
+    {
+        $data = $request->validate(['from' => ['required', 'in:'.self::ORDER_STATUSES], 'to' => ['required', 'in:processing,ready,delivering,completed']]);
+        $status->advance($order, $data['from'], $data['to'], $request->user());
+
+        return back()->with('success', 'Order status updated.');
+    }
+
+    public function cancel(Request $request, Order $order, ChangeOrderStatus $status)
+    {
+        $data = $request->validate(
+            ['from' => ['required', 'in:'.self::ORDER_STATUSES], 'cancel_reason' => ['required', 'string', 'max:1000']],
+            ['cancel_reason.required' => 'Write the cancellation reason.'],
+        );
+        $closed = $status->cancel($order, $data['from'], $data['cancel_reason'], $request->user());
+
+        return $closed ? back()->with('success', 'Order cancelled.')
+            : back()->withErrors(['payment' => 'Order cancelled, but the Midtrans link could not be closed automatically. Watch for incoming payments; if the customer still pays, refund manually.']);
+    }
+
+    private function paymentResult(Order $order, Payment $payment, string $success)
+    {
+        if ($payment->status === 'creation_failed') {
+            return redirect('/admin/orders/'.$order->id)->withErrors(['payment' => 'The payment link could not be created: '.$payment->last_error.'. Use the retry button.']);
+        }
+
+        return redirect('/admin/orders/'.$order->id)->with('success', $success);
+    }
+}
