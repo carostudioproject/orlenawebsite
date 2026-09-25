@@ -51,4 +51,4 @@ Pilih periode (atau Today, 7 days, This month, dan seterusnya), lalu outlet, pro
 
 ## Erzap integration (Admin)
 
-Setelah Erzap aktif, transaksi lunas dikirim otomatis. Isi **Mapping** (ID outlet dan ID produk atau barcode Erzap) agar transaksi dapat dicocokkan. Status *Needs mapping* berarti ada outlet atau produk yang belum diisi. Status *Failed* dicoba ulang otomatis, atau klik **Resend**.
+Setelah Erzap aktif, setiap pesanan lunas dikirim otomatis ke Erzap. Isi **Mapping**: ID outlet Erzap per outlet dan **barcode Erzap untuk setiap produk** (termasuk hampers), karena Erzap mencocokkan item berdasarkan barcode. Pesanan yang dibatalkan setelah bayar dikoreksi manual di Erzap. Status *Needs mapping* berarti ada outlet atau produk yang belum diisi. Status *Failed* dicoba ulang otomatis, atau klik **Resend**.

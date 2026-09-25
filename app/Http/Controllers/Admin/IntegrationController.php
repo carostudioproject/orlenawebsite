@@ -32,11 +32,11 @@ class IntegrationController extends Controller
         ]);
 
         return Inertia::render('Admin/Integrations/Index', [
-            'configured' => $erzap->configured(), 'syncs' => $syncs, 'filters' => $filters, 'labels' => IntegrationSync::LABELS,
+            'configured' => $erzap->configured(), 'missingSettings' => $erzap->missingSettings(), 'defaultOutlet' => filled(config('services.erzap.default_outlet_id')), 'syncs' => $syncs, 'filters' => $filters, 'labels' => IntegrationSync::LABELS,
             'counts' => IntegrationSync::where('provider', 'erzap')->selectRaw('status, COUNT(*) as total')->groupBy('status')->pluck('total', 'status'),
             'mapping' => [
                 'outlets' => ['mapped' => Outlet::whereNotNull('erzap_outlet_id')->count(), 'total' => Outlet::count()],
-                'products' => ['mapped' => Product::where(fn ($q) => $q->whereNotNull('erzap_product_id')->orWhereNotNull('barcode'))->count(), 'total' => Product::count()],
+                'products' => ['mapped' => Product::whereNotNull('barcode')->where('barcode', '!=', '')->count(), 'total' => Product::count()],
             ],
         ]);
     }
@@ -46,7 +46,7 @@ class IntegrationController extends Controller
         $filters = $request->validate(['search' => ['nullable', 'string', 'max:100'], 'unmapped' => ['nullable', 'in:1'], 'page' => ['nullable', 'integer', 'min:1']]);
         $products = Product::with('category:id,name')
             ->when($filters['search'] ?? null, fn ($q, $search) => $q->where(fn ($q) => $q->where('name', 'like', '%'.$search.'%')->orWhere('sku', 'like', '%'.$search.'%')->orWhere('barcode', 'like', '%'.$search.'%')))
-            ->when($filters['unmapped'] ?? null, fn ($q) => $q->whereNull('erzap_product_id')->whereNull('barcode'))
+            ->when($filters['unmapped'] ?? null, fn ($q) => $q->where(fn ($q) => $q->whereNull('barcode')->orWhere('barcode', '')))
             ->orderBy('name')->orderBy('variant')->paginate(10, ['id', 'category_id', 'name', 'variant', 'sku', 'is_active', 'erzap_product_id', 'erzap_variant_id', 'barcode', 'reference_stock', 'reference_stock_at'])->withQueryString();
 
         return Inertia::render('Admin/Integrations/Mapping', [

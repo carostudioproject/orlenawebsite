@@ -6,7 +6,7 @@ import vue from '@vitejs/plugin-vue';
 export default defineConfig({
     plugins: [
         laravel({
-            input: ['resources/js/app.ts'],
+            input: ['resources/js/app.ts', 'resources/js/public.ts', 'resources/js/site-chrome.ts'],
             refresh: true,
         }),
         tailwindcss(),

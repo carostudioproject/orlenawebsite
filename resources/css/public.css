@@ -1,0 +1,5 @@
+/* Public website (server-rendered Blade pages): shared site styles plus each page's own scoped styles. */
+@import './app.css';
+@import './pages/about.css';
+@import './pages/blog-index.css';
+@import './pages/blog-show.css';

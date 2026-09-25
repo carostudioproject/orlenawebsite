@@ -11,7 +11,7 @@ import type { AdminProps, Paginated } from '../../../Types/admin';
 defineOptions({ layout: AdminLayout });
 interface SyncRow { id: number; type: string; status: string; attempts: number; last_error: string | null; external_ref: string | null; subject_id: number; order_code: string | null; created_at: string; synced_at: string | null; next_attempt_at: string | null }
 const props = defineProps<{
-    configured: boolean; syncs: Paginated<SyncRow>; filters: { status?: string; search?: string }; labels: Record<string, string>;
+    configured: boolean; missingSettings: string[]; defaultOutlet: boolean; syncs: Paginated<SyncRow>; filters: { status?: string; search?: string }; labels: Record<string, string>;
     counts: Record<string, number>; mapping: { outlets: { mapped: number; total: number }; products: { mapped: number; total: number } };
 }>();
 const page = usePage<AdminProps>();
@@ -31,19 +31,19 @@ const tiles = computed(() => [
 <template>
     <Head title="Erzap integration · Orlena" />
     <div class="flex flex-wrap items-end justify-between gap-4">
-        <div><p class="admin-eyebrow">Integration</p><h1 class="text-3xl font-bold">Erzap</h1><p class="admin-muted mt-2 text-sm">Paid transactions are sent to Erzap. Cancellations or refunds after payment are voided in Erzap too.</p></div>
+        <div><p class="admin-eyebrow">Integration</p><h1 class="text-3xl font-bold">Erzap</h1><p class="admin-muted mt-2 text-sm">Every paid order is sent to Erzap as a sales order (OLZAP API). Cancellations after payment are corrected in Erzap by hand.</p></div>
         <Link href="/admin/integrations/mapping" class="admin-primary"><i class="fa-solid fa-link" aria-hidden="true"></i>Outlet &amp; product mapping</Link>
     </div>
 
     <div role="status" class="admin-alert mt-6" :class="configured ? 'admin-alert-success' : 'admin-alert-info'">
         <p class="m-0 font-bold"><i class="fa-solid" :class="configured ? 'fa-plug-circle-check' : 'fa-plug-circle-xmark'" aria-hidden="true"></i> {{ configured ? 'Connected to Erzap' : 'Erzap is not configured yet' }}</p>
-        <p class="m-0 mt-1 text-sm">{{ configured ? 'The queue is sent automatically every 5 minutes. Failures are retried automatically up to 5 times.' : 'Paid transactions are still queued and will be sent automatically once a developer sets ERZAP_BASE_URL, ERZAP_API_TOKEN and ERZAP_ENABLED=true on the server.' }}</p>
+        <p class="m-0 mt-1 text-sm">{{ configured ? 'The queue is sent automatically every 5 minutes. Failures are retried automatically up to 5 times.' : `Paid orders are still queued and will be sent automatically once a developer sets ${missingSettings.join(', ')} on the server.` }}</p>
     </div>
 
     <ul class="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <li v-for="tile in tiles" :key="tile.label" class="admin-card"><p class="admin-muted m-0 text-sm"><i class="fa-solid" :class="tile.icon" aria-hidden="true"></i> {{ tile.label }}</p><p class="m-0 mt-1 text-3xl font-bold tabular-nums">{{ tile.value }}</p></li>
     </ul>
-    <p class="admin-muted mt-3 text-sm">Mapping: {{ mapping.outlets.mapped }}/{{ mapping.outlets.total }} outlets and {{ mapping.products.mapped }}/{{ mapping.products.total }} products have an Erzap ID or barcode.</p>
+    <p class="admin-muted mt-3 text-sm">Mapping: {{ mapping.outlets.mapped }}/{{ mapping.outlets.total }} outlets have an Erzap outlet ID{{ defaultOutlet ? ' (others use the default outlet)' : '' }}, and {{ mapping.products.mapped }}/{{ mapping.products.total }} products have a barcode.</p>
 
     <h2 class="mt-8 text-xl">Sync log</h2>
     <form class="my-4 flex flex-wrap items-end gap-3" @submit.prevent="apply">
@@ -61,7 +61,7 @@ const tiles = computed(() => [
                     <td class="whitespace-nowrap">{{ syncTypeLabels[sync.type] ?? sync.type }}</td>
                     <td><StatusBadge kind="sync" :status="sync.status" /></td>
                     <td class="tabular-nums">{{ sync.attempts }}</td>
-                    <td class="min-w-56 text-xs">{{ sync.status === 'synced' ? (sync.external_ref ? `Erzap ref: ${sync.external_ref}` : 'Accepted by Erzap') : sync.last_error ?? '—' }}<span v-if="sync.next_attempt_at && sync.status === 'failed'" class="admin-muted block">Automatic retry {{ witaTime(sync.next_attempt_at) }}</span></td>
+                    <td class="min-w-56 text-xs">{{ sync.status === 'synced' ? 'Accepted by Erzap' : sync.last_error ?? '—' }}<span v-if="sync.next_attempt_at && sync.status === 'failed'" class="admin-muted block">Automatic retry {{ witaTime(sync.next_attempt_at) }}</span></td>
                     <td class="whitespace-nowrap text-xs">{{ witaTime(sync.synced_at ?? sync.created_at) }}</td>
                     <td><div class="admin-actions"><button v-if="sync.status !== 'synced'" type="button" class="admin-action" :disabled="retrying === sync.id" :aria-label="`Resend ${sync.order_code ?? sync.subject_id}`" @click="retry(sync)"><i class="fa-solid fa-rotate" :class="{ 'fa-spin': retrying === sync.id }" aria-hidden="true"></i>Resend</button></div></td>
                 </tr>

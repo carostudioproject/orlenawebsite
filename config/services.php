@@ -36,14 +36,15 @@ return [
 
     // Filled in once Erzap sends API documentation and sandbox credentials. Paths are placeholders until then.
     'erzap' => [
+        // OLZAP "simpan_pesanan_penjualan": base URL like https://<domain_erzap>:4443, token sent in the body as token_erzap.
         'enabled' => (bool) env('ERZAP_ENABLED', false),
         'base_url' => env('ERZAP_BASE_URL'),
-        'token' => env('ERZAP_API_TOKEN'),
+        'token' => env('ERZAP_TOKEN'),
+        'order_path' => env('ERZAP_ORDER_PATH', '/apis/simpan_pesanan_penjualan'),
+        // Receiving outlet when an outlet has no Erzap outlet ID in Mapping, and the sales user recorded on every order.
+        'default_outlet_id' => env('ERZAP_DEFAULT_OUTLET_ID'),
+        'sales_user_id' => env('ERZAP_SALES_USER_ID'),
         'timeout' => (int) env('ERZAP_TIMEOUT', 20),
-        'paths' => [
-            'transaction' => env('ERZAP_TRANSACTION_PATH', '/transactions'),
-            'transaction_cancel' => env('ERZAP_TRANSACTION_CANCEL_PATH', '/transactions/cancel'),
-        ],
         // Shared secret Erzap sends (Bearer token) when calling our stock and sync-status endpoints.
         'webhook_token' => env('ERZAP_WEBHOOK_TOKEN'),
     ],

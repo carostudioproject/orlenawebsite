@@ -2,7 +2,6 @@
 
 namespace App\Actions\Orders;
 
-use App\Actions\Integrations\ErzapSync;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
@@ -59,9 +58,6 @@ class ChangeOrderStatus
                 Audit::record('payment.cancelled', $payment, ['attempt' => $payment->attempt], $actor->id);
             }
             $locked->update(['order_status' => 'cancelled'] + ($locked->payment_status === 'pending' ? ['payment_status' => 'cancelled'] : []));
-            if ($locked->payment_status === 'paid') {
-                ErzapSync::queue($locked, 'transaction.cancel');
-            }
             OrderHistory::record($locked, $from, 'cancelled', $actor->id, $reason);
             Audit::record('order.cancelled', $locked, ['from' => $from, 'payment_status' => $locked->payment_status], $actor->id);
 

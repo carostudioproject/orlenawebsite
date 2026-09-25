@@ -11,6 +11,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\PublicPage;
 use Tests\TestCase;
 
 class PreorderFlowTest extends TestCase
@@ -321,7 +322,7 @@ class PreorderFlowTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'content_editor']));
         $this->post('/admin/content/social', ['value' => ['instagramUrl' => 'http://insecure.test', 'tiktokUrl' => '', 'whatsappNumber' => '0812']])->assertSessionHasErrors(['value.instagramUrl', 'value.whatsappNumber']);
         $this->post('/admin/content/social', ['value' => ['instagramUrl' => 'https://instagram.com/orlena', 'tiktokUrl' => '', 'whatsappNumber' => '6281111111111']])->assertSessionHasNoErrors();
-        $this->get('/')->assertInertia(fn (Assert $page) => $page->where('site', ['instagramUrl' => 'https://instagram.com/orlena', 'tiktokUrl' => '', 'whatsappNumber' => '6281111111111']));
+        $this->get('/')->assertPublicPage(fn (PublicPage $page) => $page->where('site', ['instagramUrl' => 'https://instagram.com/orlena', 'tiktokUrl' => '', 'whatsappNumber' => '6281111111111']));
         $this->get('/orders/'.$order->order_code)->assertInertia(fn (Assert $page) => $page->where('whatsappUrl', fn ($link) => str_starts_with($link, 'https://wa.me/6281111111111?text=')));
     }
 }

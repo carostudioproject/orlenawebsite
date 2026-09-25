@@ -14,6 +14,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\PublicPage;
 use Tests\TestCase;
 
 class RolesAndContentTest extends TestCase
@@ -93,11 +94,11 @@ class RolesAndContentTest extends TestCase
         $this->actingAs($this->user('content_editor'));
         $this->post('/admin/content/home', ['value' => [...$this->home(), 'missionTitle' => '']])->assertSessionHasErrors('value.missionTitle');
         $this->post('/admin/content/home', ['value' => [...$this->home(), 'missionTitle' => '  New mission  ', 'extra' => 'ignored']])->assertSessionHasNoErrors();
-        $this->get('/')->assertInertia(fn (Assert $page) => $page->where('home.missionTitle', 'New mission')->missing('home.extra')->has('blogs', 3));
+        $this->get('/')->assertPublicPage(fn (PublicPage $page) => $page->where('home.missionTitle', 'New mission')->missing('home.extra')->has('blogs', 3));
         $this->assertDatabaseHas('audit_logs', ['action' => 'content.updated']);
 
         $this->post('/admin/content/home/reset')->assertRedirect('/admin/content/home');
-        $this->get('/')->assertInertia(fn (Assert $page) => $page->where('home', $this->home()));
+        $this->get('/')->assertPublicPage(fn (PublicPage $page) => $page->where('home', $this->home()));
         $this->get('/admin/content/unknown')->assertNotFound();
     }
 
@@ -105,7 +106,7 @@ class RolesAndContentTest extends TestCase
     {
         Storage::fake('public');
         $this->actingAs($this->user('content_editor'));
-        $this->get('/')->assertInertia(fn (Assert $page) => $page->has('hero', 7));
+        $this->get('/')->assertPublicPage(fn (PublicPage $page) => $page->has('hero', 7));
         $slide = ['alt' => 'New slide'];
         $this->post('/admin/content/hero', ['items' => [[...$slide, 'image' => 'https://evil.example/x.png']]])->assertSessionHasErrors('items.0.image');
         $this->post('/admin/content/hero', ['items' => [[...$slide, 'image' => '/assets/../../.env.png']]])->assertSessionHasErrors('items.0.image');
@@ -114,8 +115,8 @@ class RolesAndContentTest extends TestCase
         $this->post('/admin/content/hero', ['items' => [[...$slide, 'image' => '/assets/images/outlet1.jpg', 'upload' => UploadedFile::fake()->create('doc.pdf', 10, 'application/pdf')]]])->assertSessionHasErrors('items.0.upload');
 
         $this->post('/admin/content/hero', ['items' => [[...$slide, 'upload' => $this->png('hero.png')], ['alt' => 'Kept', 'image' => '/assets/images/outlet1.jpg']]])->assertSessionHasNoErrors();
-        $this->get('/')->assertInertia(fn (Assert $page) => $page->has('hero', 2)->where('hero.1', ['image' => '/assets/images/outlet1.jpg', 'alt' => 'Kept'])
-            ->where('hero.0', fn ($item) => str_starts_with($item['image'], '/storage/content/') && array_keys($item->all()) === ['image', 'alt']));
+        $this->get('/')->assertPublicPage(fn (PublicPage $page) => $page->has('hero', 2)->where('hero.1', ['image' => '/assets/images/outlet1.jpg', 'alt' => 'Kept'])
+            ->where('hero.0', fn ($item) => str_starts_with($item['image'], '/storage/content/') && array_keys($item) === ['image', 'alt']));
         $this->assertCount(1, Storage::disk('public')->files('content'));
     }
 
@@ -132,27 +133,27 @@ class RolesAndContentTest extends TestCase
         // New categories are not added to the homepage automatically, and the category form cannot do it.
         $this->post('/admin/categories', ['name' => 'Tart', 'show_on_website' => true])->assertSessionHasNoErrors();
         $this->assertFalse(Category::where('name', 'Tart')->value('show_on_website'));
-        $this->get('/')->assertInertia(fn (Assert $page) => $page->has('bakedGoods', 0));
+        $this->get('/')->assertPublicPage(fn (PublicPage $page) => $page->has('bakedGoods', 0));
 
         $this->actingAs($this->user('content_editor'));
         $this->get('/admin/content/bakedGoods')->assertInertia(fn (Assert $page) => $page->component('Admin/Content/Order')->where('section', 'bakedGoods')->has('items', 4));
         $this->post('/admin/content/bakedGoods', ['order' => [$cookies->id, $sauce->id, $brownies->id]])->assertSessionHasNoErrors();
         // Chosen and active only, in the chosen order; missing photos fall back to the logo; Tart stays off.
-        $this->get('/')->assertInertia(fn (Assert $page) => $page->has('bakedGoods', 2)->where('bakedGoods.0', ['name' => 'Cookies', 'image' => '/assets/images/Orlena-Logo.png'])
+        $this->get('/')->assertPublicPage(fn (PublicPage $page) => $page->has('bakedGoods', 2)->where('bakedGoods.0', ['name' => 'Cookies', 'image' => '/assets/images/Orlena-Logo.png'])
             ->where('bakedGoods.1', ['name' => 'Brownies', 'image' => $brownies->image]));
         $this->post('/admin/categories/'.$sauce->id.'/toggle', ['is_active' => true])->assertForbidden();
 
         $this->actingAs($this->user('admin'));
         $this->post('/admin/categories/'.$sauce->id.'/toggle', ['is_active' => true])->assertSessionHasNoErrors();
-        $this->get('/')->assertInertia(fn (Assert $page) => $page->has('bakedGoods', 3)->where('bakedGoods.1.name', 'SAUCE'));
+        $this->get('/')->assertPublicPage(fn (PublicPage $page) => $page->has('bakedGoods', 3)->where('bakedGoods.1.name', 'SAUCE'));
 
         // Removing a category from the website keeps it for products; an empty list hides the whole section.
         $this->actingAs($this->user('content_editor'));
         $this->post('/admin/content/bakedGoods', ['order' => [$brownies->id]])->assertSessionHasNoErrors();
-        $this->get('/')->assertInertia(fn (Assert $page) => $page->where('bakedGoods', [['name' => 'Brownies', 'image' => $brownies->image]]));
+        $this->get('/')->assertPublicPage(fn (PublicPage $page) => $page->where('bakedGoods', [['name' => 'Brownies', 'image' => $brownies->image]]));
         $this->assertTrue($sauce->fresh()->is_active);
         $this->post('/admin/content/bakedGoods', ['order' => []])->assertSessionHasNoErrors();
-        $this->get('/')->assertInertia(fn (Assert $page) => $page->has('bakedGoods', 0));
+        $this->get('/')->assertPublicPage(fn (PublicPage $page) => $page->has('bakedGoods', 0));
     }
 
     public function test_inactive_categories_hide_their_products_from_ordering(): void
@@ -173,21 +174,21 @@ class RolesAndContentTest extends TestCase
                 'content' => [['type' => 'paragraph', 'text' => 'Body']], 'is_published' => true])->assertSessionHasNoErrors();
         }
         // 3 approved articles + 4 new ones: the homepage keeps the 5 newest, the blog page lists all 7.
-        $this->get('/')->assertInertia(fn (Assert $page) => $page->has('blogs', 5)->where('blogs.0.slug', 'story-4')->where('blogs.4.slug', 'orlena-cafe'));
-        $this->get('/blog')->assertInertia(fn (Assert $page) => $page->has('blogs', 7));
+        $this->get('/')->assertPublicPage(fn (PublicPage $page) => $page->has('blogs', 5)->where('blogs.0.slug', 'story-4')->where('blogs.4.slug', 'orlena-cafe'));
+        $this->get('/blog')->assertPublicPage(fn (PublicPage $page) => $page->has('blogs', 7));
     }
 
     public function test_about_page_copy_and_story_paragraphs_are_editable(): void
     {
         $this->actingAs($this->user('content_editor'));
         $about = json_decode(file_get_contents(resource_path('content/about.json')), true);
-        $this->get('/about')->assertInertia(fn (Assert $page) => $page->where('about', $about));
+        $this->get('/about')->assertPublicPage(fn (PublicPage $page) => $page->where('about', $about));
         $this->post('/admin/content/about', ['value' => [...$about, 'storyBody' => []]])->assertSessionHasErrors('value.storyBody');
         $this->post('/admin/content/about', ['value' => [...$about, 'storyBody' => ['First', '']]])->assertSessionHasErrors('value.storyBody.1');
         $this->post('/admin/content/about', ['value' => [...$about, 'title' => 'Tentang Orlena', 'storyBody' => ['One', 'Two', 'Three']]])->assertSessionHasNoErrors();
-        $this->get('/about')->assertInertia(fn (Assert $page) => $page->where('about.title', 'Tentang Orlena')->where('about.storyBody', ['One', 'Two', 'Three']));
+        $this->get('/about')->assertPublicPage(fn (PublicPage $page) => $page->where('about.title', 'Tentang Orlena')->where('about.storyBody', ['One', 'Two', 'Three']));
         $this->post('/admin/content/about/reset');
-        $this->get('/about')->assertInertia(fn (Assert $page) => $page->where('about', $about));
+        $this->get('/about')->assertPublicPage(fn (PublicPage $page) => $page->where('about', $about));
     }
 
     public function test_outlets_share_one_record_for_website_order_status_photo_and_preorder(): void
@@ -203,7 +204,7 @@ class RolesAndContentTest extends TestCase
         $this->assertStringStartsWith('/storage/content/', $north->image);
 
         // New outlets are not on the website until chosen there; the order form needs "Aktif" and "Bisa PO".
-        $this->get('/about')->assertInertia(fn (Assert $page) => $page->has('outlets', 0));
+        $this->get('/about')->assertPublicPage(fn (PublicPage $page) => $page->has('outlets', 0));
         $this->get('/order')->assertInertia(fn (Assert $page) => $page->has('outlets', 1)->where('outlets.0.name', 'North'));
 
         $this->actingAs($this->user('content_editor'));
@@ -211,12 +212,12 @@ class RolesAndContentTest extends TestCase
         $this->post('/admin/content/outlets', ['order' => [$south->id, $north->id, $north->id]])->assertSessionHasErrors('order.1');
         $this->post('/admin/content/outlets', ['order' => [$south->id, $closed->id, $north->id]])->assertSessionHasNoErrors();
         // Shown in the chosen order; the inactive outlet stays hidden even though it was chosen.
-        $this->get('/')->assertInertia(fn (Assert $page) => $page->has('outlets', 2)->where('outlets.0.name', 'South')->where('outlets.0.mapsUrl', '')->where('outlets.1.alt', 'North'));
+        $this->get('/')->assertPublicPage(fn (PublicPage $page) => $page->has('outlets', 2)->where('outlets.0.name', 'South')->where('outlets.0.mapsUrl', '')->where('outlets.1.alt', 'North'));
         $this->post('/admin/outlets/'.$closed->id.'/toggle', ['is_active' => true])->assertForbidden();
 
         $this->actingAs($this->user('admin'));
         $this->post('/admin/outlets/'.$closed->id.'/toggle', ['is_active' => true])->assertSessionHasNoErrors();
-        $this->get('/')->assertInertia(fn (Assert $page) => $page->has('outlets', 3)->where('outlets.1.name', 'Closed'));
+        $this->get('/')->assertPublicPage(fn (PublicPage $page) => $page->has('outlets', 3)->where('outlets.1.name', 'Closed'));
         $this->post('/admin/categories/1/toggle', ['is_active' => false])->assertNotFound();
     }
 
@@ -259,11 +260,11 @@ class RolesAndContentTest extends TestCase
 
         $this->get('/blog/new-story')->assertNotFound();
         $this->get('/sitemap.xml')->assertDontSee('/blog/new-story', false);
-        $this->get('/blog')->assertInertia(fn (Assert $page) => $page->has('blogs', 3));
+        $this->get('/blog')->assertPublicPage(fn (PublicPage $page) => $page->has('blogs', 3));
 
         $this->put('/admin/posts/'.$created->id, [...$post, 'category' => null, 'image' => $created->image, 'is_published' => true])->assertSessionHasNoErrors();
-        $this->get('/blog/new-story')->assertOk()->assertInertia(fn (Assert $page) => $page->where('blog.content.1.text', 'Body <script>x</script>')->missing('blog.category'));
-        $this->get('/blog')->assertInertia(fn (Assert $page) => $page->has('blogs', 4)->where('blogs.0.slug', 'new-story'));
+        $this->get('/blog/new-story')->assertOk()->assertPublicPage(fn (PublicPage $page) => $page->where('blog.content.1.text', 'Body <script>x</script>')->missing('blog.category'));
+        $this->get('/blog')->assertPublicPage(fn (PublicPage $page) => $page->has('blogs', 4)->where('blogs.0.slug', 'new-story'));
         $this->get('/sitemap.xml')->assertSee('/blog/new-story', false);
         $this->assertDatabaseHas('audit_logs', ['action' => 'post.updated']);
     }

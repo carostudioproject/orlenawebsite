@@ -78,11 +78,9 @@ class ApplyPaymentStatus
         if (in_array($target, ['paid', 'refunded'], true) || ($latest && $order->payment_status !== 'paid')) {
             $order->update(['payment_status' => $target]);
         }
-        // Paid transactions go to Erzap; a refund voids them there. Sent later by the scheduler, never inside this transaction.
+        // Paid orders go to Erzap; sent later by the scheduler, never inside this transaction.
         if ($target === 'paid') {
-            ErzapSync::queue($order, 'transaction.push');
-        } elseif ($target === 'refunded') {
-            ErzapSync::queue($order, 'transaction.cancel');
+            ErzapSync::queue($order);
         }
         Audit::record('payment.status_changed', $payment, ['from' => $previous, 'to' => $target, 'attempt' => $payment->attempt]);
 

@@ -1,30 +1,47 @@
 # Erzap integration
 
-Status: **built, waiting for Erzap's API documentation, sandbox and credentials.** Until then nothing is sent; paid orders queue up and are sent automatically once configured.
+Scope for now: **every paid order is sent to Erzap** as a sales order through the OLZAP API
+(`POST {ERZAP_BASE_URL}/apis/simpan_pesanan_penjualan`). Stock, product and status callbacks from Erzap
+(`/web_service/...` URLs in the OLZAP document) are not built yet.
 
-## What happens
+## Flow
 
-1. A Midtrans payment becomes **paid** → a `transaction.push` row is added to `integration_syncs` (inside the same database transaction, never twice per order).
-2. A paid order that is **cancelled** by Admin, or a payment that is **refunded**, adds a `transaction.cancel` row. It is skipped if the transaction never reached Erzap.
-3. `php artisan erzap:sync` (scheduled every 5 minutes) sends due rows:
-   - Erzap not configured → `waiting_config`
-   - outlet or a product without an Erzap ID/barcode → `needs_mapping` (retried after mapping is saved)
-   - Erzap error → `failed`, retried automatically after 5, 15, 60, 180 minutes (max 5 attempts), then only by the **Kirim ulang** button
-   - accepted → `synced` with Erzap's reference
-4. Erzap may call back `/api/v1/erzap/sync-status` and push reference stock to `/api/v1/erzap/stock` ([REST API](rest-api.md)).
+1. A Midtrans payment becomes **paid** → one row is added to `integration_syncs` (never twice per order).
+2. `php artisan erzap:sync` (scheduled every 5 minutes) sends due rows:
+   - settings missing → `waiting_config` (the log names the missing `.env` keys)
+   - outlet without an Erzap outlet ID (and no default) or a product without a barcode → `needs_mapping`, retried after Mapping is saved
+   - Erzap answers `status: "0"`, an HTTP error or times out → `failed`, retried after 5, 15, 60, 180 minutes (max 5), then only via **Resend**
+   - Erzap answers `status: "1"` → `synced`
+3. Orders cancelled or refunded after payment are **not** sent again or voided; correct them in Erzap by hand.
 
-Reference stock is shown to staff (product list, mapping page) and **never** validates, reserves or deducts stock for a PO, as agreed in the proposal.
+## Request mapping (`shopping_carts`)
 
-## Dashboard (Admin)
+| Erzap field | From the website |
+|---|---|
+| `kode` | Order Code |
+| `nama`, `telepon`, `email` | Customer name, WhatsApp, email |
+| `alamat`, `alamat_pengiriman` | Delivery address (empty for pickup) |
+| `tempat_penjemputan` | Pickup outlet name (pickup only) |
+| `pelanggan_ekspedisi` | `GOJEK/GRAB` or `PICKUP` |
+| `ongkos_kirim` | Delivery fee (delivery only) |
+| `total_pesanan` | Product subtotal |
+| `total_pembayaran` | Amount paid via Midtrans |
+| `konfirmasi_dari_bank`, `konfirmasi_tanggal_bayar`, `pelanggan_payment_channel` | `Midtrans`, paid time (WITA), e.g. `MIDTRANS-QRIS` |
+| `informasi_tambahan_text` | Pickup/delivery, PO date and time, payment method, customer note |
+| `idoutlet_penerima_pesanan_online_erzap` | Outlet's Erzap outlet ID (Mapping), else `ERZAP_DEFAULT_OUTLET_ID` |
+| `iduser_sales_penerima_pesanan_online_erzap` | `ERZAP_SALES_USER_ID` |
+| `token_erzap` | `ERZAP_TOKEN` (added when sending, never stored in the log) |
+| `shopping_cart_details[]` | `barcode_produk` (product barcode), `harga_satuan`, `jumlah` |
 
-- **Integrasi Erzap** (`/admin/integrations`): connection status, counts, sync log with search/filter and retry.
-- **Mapping** (`/admin/integrations/mapping`): Erzap outlet ID per outlet; Erzap product ID, variant ID and barcode per product.
-- Each order page shows its Erzap sync status.
+## Setup
 
-## To finish when the documentation arrives
+1. Get from Erzap: server address (e.g. `https://domain_erzap:4443`), `token_erzap`, receiving outlet ID(s) and sales user ID.
+2. Fill `.env`: `ERZAP_BASE_URL`, `ERZAP_TOKEN`, `ERZAP_SALES_USER_ID`, optionally `ERZAP_DEFAULT_OUTLET_ID`, then `ERZAP_ENABLED=true`.
+3. Dashboard → **Erzap integration → Outlet & product mapping**: Erzap outlet ID per outlet (or rely on the default) and the **Erzap barcode for every product sold on the website, including hampers**.
+4. Pay one test order and check the log shows **Sent** and the order appears in Erzap.
 
-1. Fill `.env`: `ERZAP_BASE_URL`, `ERZAP_API_TOKEN`, `ERZAP_TRANSACTION_PATH`, `ERZAP_TRANSACTION_CANCEL_PATH`, `ERZAP_WEBHOOK_TOKEN`, then `ERZAP_ENABLED=true`.
-2. Align `App\Services\Erzap\ErzapClient` (auth header, response reference field) and the draft payload in `App\Actions\Integrations\ErzapSync::payload()` with the real field names.
-3. Adjust the callback field names in `App\Http\Controllers\Api\ErzapWebhookController` if Erzap uses a different format.
-4. Product/price import from Erzap (initial and scheduled sync) is added here once the product endpoints are known; mapping columns already exist.
-5. Test on the Erzap sandbox, then fill the mapping for every outlet and product.
+## Open questions for Erzap
+
+- Does the order arrive as a finished (paid) sale or as a sales order to process in Erzap?
+- Is a repeated `kode` rejected (protection against duplicates)?
+- Exact request format (JSON body, `Content-Type`) and whether port 4443 is required; shared hosting may block outgoing ports other than 80/443.

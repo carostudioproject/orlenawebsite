@@ -2,6 +2,8 @@
 
 Public website, staff/catalog foundation, and customer pre-order flow using Laravel 12 + Inertia 2 + Vue 3 + TypeScript + Tailwind 4. One application with MySQL and database sessions.
 
+Rendering: the public pages (`/`, `/about`, `/blog`, `/blog/{slug}`) are **server-rendered Blade** (`resources/views/pages`, shared header/footer in `resources/views/partials`) so search engines and AI crawlers read the full text without JavaScript; `resources/js/public.ts` only adds sliders, the mobile menu and smooth section scrolling. They include schema.org data (`Bakery` with outlets, `BlogPosting`). The order pages and the dashboard (`/admin`) are Inertia + Vue; order pages reuse the same Blade header and footer. `tests/Feature/PublicWebsiteTest.php` checks the raw HTML against `tests/fixtures/public-pages.json`, the approved copy captured from the previous Vue version.
+
 ## Run locally (Windows PowerShell)
 
 Requirements: PHP 8.2+, Composer, Node 22.12+ (verified with Node 24), npm, and a running MySQL-compatible database. The local workspace uses XAMPP MariaDB; deployment remains MySQL-compatible.
@@ -43,7 +45,7 @@ Open http://127.0.0.1:8000. Only copy `.env.example` on first setup; do not over
 - `/admin/integrations`: Erzap sync log, retry and outlet/product mapping (Admin); see [Erzap](docs/erzap-integration.md)
 - `/api/v1/*`: REST API, public catalog plus token-protected orders and reports ([REST API](docs/rest-api.md))
 
-Unknown pages/articles return 404. The existing WhatsApp, maps, social links, section anchors, and footer are retained. Customer PO submission, staff review, Midtrans payment links, and fulfillment statuses are implemented ([payment notes](docs/payments-and-fulfillment.md)). Erzap sync is built and queues paid orders, but sends nothing until Erzap's API documentation and credentials are configured. Products have free-text variants (Fullsize, Halfsize, Box isi 6, ...), and hampers are products with a contents list and an optional sale period. Products/outlets are still inactive until reviewed by Admin; see [customer ordering notes](docs/customer-ordering.md).
+Unknown pages/articles return 404. The existing WhatsApp, maps, social links, section anchors, and footer are retained. Customer PO submission, staff review, Midtrans payment links, and fulfillment statuses are implemented ([payment notes](docs/payments-and-fulfillment.md)). Paid orders are sent to Erzap through the OLZAP API (simpan_pesanan_penjualan) once the Erzap settings and product barcodes are filled; until then they wait in the queue. Products have free-text variants (Fullsize, Halfsize, Box isi 6, ...), and hampers are products with a contents list and an optional sale period. Products/outlets are still inactive until reviewed by Admin; see [customer ordering notes](docs/customer-ordering.md).
 
 The local first-admin credentials are in `storage/app/private/admin-initial-access.json` (ignored by Git, never served publicly). **Staff log in with a username, not an email**; the local admin's username is `admin` (existing accounts received the part of their email before @). Each user can change their name, username, email, and password under **Profil saya** (`/admin/profile`). They were generated for this workspace only. Change name, email, and password in **Akun tim → Ubah**. Fresh installations should use the interactive `orlena:create-admin` command. The optional `--local-preview` flag only works locally when no users exist; it never overwrites an existing account.
 
@@ -61,7 +63,7 @@ The local first-admin credentials are in `storage/app/private/admin-initial-acce
 - `QUEUE_CONNECTION=database`: no permanent worker is needed.
 - `WHATSAPP_NUMBER`: business handoff number, defaulting to the existing `6282145809558`.
 - `MIDTRANS_SERVER_KEY`, `MIDTRANS_IS_PRODUCTION`: backend-only Midtrans credentials (sandbox first). Set the Midtrans Payment Notification URL to `{APP_URL}/webhooks/midtrans` over public HTTPS.
-- `ERZAP_*`: Erzap connection, leave `ERZAP_ENABLED=false` until the documentation and sandbox arrive ([Erzap](docs/erzap-integration.md)).
+- `ERZAP_*`: Erzap OLZAP connection for sending paid orders (base URL, token, sales user, default outlet); keep `ERZAP_ENABLED=false` until Erzap provides the values ([Erzap](docs/erzap-integration.md)).
 - `API_TOKENS`: comma-separated bearer tokens for the protected REST API; empty keeps those endpoints closed.
 - Cron: run `php artisan schedule:run` every minute in production (reconciles expired payment links every 10 minutes and sends Erzap syncs every 5). Locally use `php artisan schedule:work`.
 

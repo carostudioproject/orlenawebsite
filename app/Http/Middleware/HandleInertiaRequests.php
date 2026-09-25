@@ -3,7 +3,6 @@
 namespace App\Http\Middleware;
 
 use App\Support\PreorderDate;
-use App\Support\SiteContent;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -14,8 +13,8 @@ class HandleInertiaRequests extends Middleware
     public function share(Request $request): array
     {
         if (! $request->is('admin', 'admin/*')) {
-            // Social links and the WhatsApp number are edited once in the dashboard and used on every public page.
-            return [...parent::share($request), 'site' => fn () => app(SiteContent::class)->get('social'), 'poCutoff' => fn () => app(PreorderDate::class)->cutoffLabel()];
+            // Order pages: the header and footer (with social links) are server-rendered in app.blade.php.
+            return [...parent::share($request), 'poCutoff' => fn () => app(PreorderDate::class)->cutoffLabel()];
         }
 
         $user = $request->user();

@@ -10,21 +10,23 @@ use App\Support\Audit;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Paid orders are sent to Erzap as transactions; paid orders later cancelled or refunded are voided there.
+ * Paid orders are sent to Erzap as sales orders (OLZAP simpan_pesanan_penjualan).
  * Queuing only writes a row (safe inside the payment transaction); the scheduler or a staff retry sends it.
  */
 class ErzapSync
 {
+    public const TYPE = 'transaction.push';
+
     /** Minutes to wait after each failed attempt. */
     private const BACKOFF = [5, 15, 60, 180, 720];
 
     public function __construct(private ErzapClient $erzap) {}
 
-    public static function queue(Order $order, string $type): void
+    public static function queue(Order $order): void
     {
         DB::table('integration_syncs')->insertOrIgnore([
-            'provider' => 'erzap', 'type' => $type, 'subject_type' => 'orders', 'subject_id' => $order->id,
-            'sync_key' => 'erzap:'.$type.':orders:'.$order->id, 'status' => 'pending', 'attempts' => 0,
+            'provider' => 'erzap', 'type' => self::TYPE, 'subject_type' => 'orders', 'subject_id' => $order->id,
+            'sync_key' => 'erzap:'.self::TYPE.':orders:'.$order->id, 'status' => 'pending', 'attempts' => 0,
             'created_at' => now(), 'updated_at' => now(),
         ]);
     }
@@ -38,39 +40,33 @@ class ErzapSync
                 return 'synced';
             }
             $order = Order::with('items.product', 'outlet', 'customer', 'payments')->find($sync->subject_id);
-            if (! $order) {
-                $sync->update(['status' => 'skipped', 'last_error' => 'Order not found.', 'next_attempt_at' => null]);
-
-                return 'skipped';
-            }
-            // A void is only needed when the transaction reached Erzap.
-            if ($sync->type === 'transaction.cancel' && ! IntegrationSync::where('sync_key', 'erzap:transaction.push:orders:'.$order->id)->where('status', 'synced')->exists()) {
-                $sync->update(['status' => 'skipped', 'last_error' => 'The transaction was never sent to Erzap.', 'next_attempt_at' => null]);
+            if (! $order || $order->payment_status !== 'paid') {
+                $sync->update(['status' => 'skipped', 'last_error' => $order ? 'The order is no longer paid.' : 'Order not found.', 'next_attempt_at' => null]);
 
                 return 'skipped';
             }
             if (! $this->erzap->configured()) {
-                $sync->update(['status' => 'waiting_config', 'last_error' => 'Erzap credentials and endpoints are not set yet.', 'next_attempt_at' => null]);
+                $sync->update(['status' => 'waiting_config', 'last_error' => 'Missing Erzap settings: '.implode(', ', $this->erzap->missingSettings()).'.', 'next_attempt_at' => null]);
 
                 return 'waiting_config';
             }
             if ($missing = $this->missingMapping($order)) {
-                $sync->update(['status' => 'needs_mapping', 'last_error' => 'No Erzap ID yet for: '.implode(', ', $missing).'.', 'next_attempt_at' => null]);
+                $sync->update(['status' => 'needs_mapping', 'last_error' => 'Missing in Mapping: '.implode(', ', $missing).'.', 'next_attempt_at' => null]);
 
                 return 'needs_mapping';
             }
-            $payload = $this->payload($order);
+            $cart = $this->cart($order);
             try {
-                $result = $sync->type === 'transaction.cancel' ? $this->erzap->cancelTransaction($payload) : $this->erzap->pushTransaction($payload);
+                $result = $this->erzap->sendOrder($cart);
             } catch (ErzapException $e) {
                 if ($e->notConfigured) {
-                    $sync->update(['status' => 'waiting_config', 'payload' => $payload, 'last_error' => 'Erzap credentials and endpoints are not set yet.', 'next_attempt_at' => null]);
+                    $sync->update(['status' => 'waiting_config', 'payload' => $cart, 'last_error' => 'Erzap settings are not complete.', 'next_attempt_at' => null]);
 
                     return 'waiting_config';
                 }
                 $attempts = $sync->attempts + 1;
                 $sync->update([
-                    'status' => 'failed', 'attempts' => $attempts, 'payload' => $payload, 'last_error' => mb_substr($e->getMessage(), 0, 500),
+                    'status' => 'failed', 'attempts' => $attempts, 'payload' => $cart, 'last_error' => mb_substr($e->getMessage(), 0, 500),
                     'next_attempt_at' => $attempts < IntegrationSync::MAX_AUTO_ATTEMPTS ? now()->addMinutes(self::BACKOFF[$attempts - 1]) : null,
                 ]);
                 Audit::log('erzap.sync_failed', 'integration_syncs', $sync->id, ['attempts' => $attempts, 'error' => $sync->last_error], $actor);
@@ -78,10 +74,10 @@ class ErzapSync
                 return 'failed';
             }
             $sync->update([
-                'status' => 'synced', 'attempts' => $sync->attempts + 1, 'payload' => $payload, 'response' => $result['body'],
-                'external_ref' => $result['reference'] !== '' ? mb_substr($result['reference'], 0, 120) : null, 'last_error' => null, 'next_attempt_at' => null, 'synced_at' => now(),
+                'status' => 'synced', 'attempts' => $sync->attempts + 1, 'payload' => $cart, 'response' => $result['body'],
+                'external_ref' => $order->order_code, 'last_error' => null, 'next_attempt_at' => null, 'synced_at' => now(),
             ]);
-            Audit::log('erzap.synced', 'integration_syncs', $sync->id, ['type' => $sync->type, 'order' => $order->order_code], $actor);
+            Audit::log('erzap.synced', 'integration_syncs', $sync->id, ['order' => $order->order_code], $actor);
 
             return 'synced';
         });
@@ -90,44 +86,78 @@ class ErzapSync
     /** Syncs the scheduler should try now: new rows, failures past their backoff, and rows waiting for config or mapping. */
     public function due(int $limit = 50)
     {
-        return IntegrationSync::where('provider', 'erzap')->whereIn('status', IntegrationSync::RUNNABLE)
+        return IntegrationSync::where('provider', 'erzap')->where('type', self::TYPE)->whereIn('status', IntegrationSync::RUNNABLE)
             ->where(fn ($q) => $q->where('status', '!=', 'failed')->orWhere(fn ($q) => $q->whereNotNull('next_attempt_at')->where('next_attempt_at', '<=', now())))
             ->orderBy('id')->limit($limit)->get();
     }
 
+    /** Erzap matches items by barcode and needs a receiving outlet. */
     private function missingMapping(Order $order): array
     {
         $missing = [];
-        if (! $order->outlet?->erzap_outlet_id) {
-            $missing[] = 'outlet '.$order->outlet_name_snapshot;
+        if (! $this->outletId($order)) {
+            $missing[] = 'Erzap outlet ID for '.$order->outlet_name_snapshot;
         }
         foreach ($order->items as $item) {
-            if (! $item->product?->erzap_product_id && ! $item->product?->barcode) {
-                $missing[] = 'product '.$item->product_name_snapshot.($item->variant_snapshot ? ' ('.$item->variant_snapshot.')' : '');
+            if (blank($item->product?->barcode)) {
+                $missing[] = 'barcode for '.$item->product_name_snapshot.($item->variant_snapshot ? ' ('.$item->variant_snapshot.')' : '');
             }
         }
 
         return array_values(array_unique($missing));
     }
 
-    /** Draft transaction format; align field names with the Erzap API documentation when it is received. */
-    private function payload(Order $order): array
+    private function outletId(Order $order): ?int
     {
+        $id = $order->outlet?->erzap_outlet_id ?: config('services.erzap.default_outlet_id');
+
+        return filled($id) && is_numeric($id) ? (int) $id : null;
+    }
+
+    /** OLZAP "shopping_carts" (token added by the client). Amounts use Erzap's decimal-string style, e.g. "120000.0". */
+    private function cart(Order $order): array
+    {
+        $money = fn (?int $amount) => number_format((float) ($amount ?? 0), 1, '.', '');
         $payment = $order->payments->where('status', 'paid')->sortByDesc('attempt')->first();
+        $delivery = $order->fulfillment_method === 'delivery';
+        $address = $delivery ? (string) $order->delivery_address : '';
+        $schedule = $order->requested_date->toDateString().($order->requested_time ? ' '.substr($order->requested_time, 0, 5) : '').' WITA';
+        $note = implode(' | ', array_filter([
+            ($delivery ? 'Delivery (Gojek/Grab)' : 'Pickup '.$order->outlet_name_snapshot).', '.$schedule,
+            'Paid via Midtrans'.($payment?->payment_type ? ' ('.$payment->payment_type.')' : ''),
+            $order->customer_note ? 'Note: '.$order->customer_note : null,
+        ]));
 
         return [
-            'reference' => $order->order_code,
-            'outlet_id' => $order->outlet->erzap_outlet_id,
-            'transaction_at' => ($payment?->paid_at ?? $order->updated_at)->setTimezone('Asia/Makassar')->toIso8601String(),
-            'customer' => ['name' => $order->customer->name, 'phone' => $order->customer->whatsapp],
-            'fulfillment' => ['method' => $order->fulfillment_method, 'date' => $order->requested_date->toDateString()],
-            'items' => $order->items->map(fn ($item) => [
-                'product_id' => $item->product?->erzap_product_id, 'variant_id' => $item->product?->erzap_variant_id, 'barcode' => $item->product?->barcode,
-                'sku' => $item->sku_snapshot, 'name' => $item->product_name_snapshot, 'variant' => $item->variant_snapshot,
-                'quantity' => $item->quantity, 'price' => $item->unit_price_snapshot, 'subtotal' => $item->subtotal,
+            'alamat' => $address, 'alamat_pengiriman' => $address,
+            'biaya_admin' => 0.0,
+            'created_at' => $order->created_at->setTimezone('Asia/Makassar')->toIso8601String(),
+            'email' => (string) ($order->customer->email ?? ''),
+            'is_drop_ship' => false,
+            'kode' => $order->order_code,
+            'kode_pos' => '', 'kode_pos_pengiriman' => '',
+            'konfirmasi_dari_bank' => 'Midtrans',
+            'konfirmasi_nama_akun' => null, 'konfirmasi_no_rekening_akun' => null,
+            'konfirmasi_tanggal_bayar' => ($payment?->paid_at ?? $order->updated_at)->setTimezone('Asia/Makassar')->toIso8601String(),
+            'nama' => $order->customer->name, 'nama_penerima_pengiriman' => $order->customer->name,
+            'nominal_voucher' => '0.0',
+            'ongkos_kirim' => $delivery ? $money($order->delivery_fee) : null,
+            'telepon' => $order->customer->whatsapp, 'telepon_pengiriman' => $order->customer->whatsapp,
+            'tempat_penjemputan' => $delivery ? null : $order->outlet_name_snapshot,
+            'total_pembayaran' => $money($payment?->amount ?? $order->total),
+            'total_pesanan' => $money($order->subtotal),
+            'pelanggan_kecamatan' => '', 'pelanggan_kota' => '', 'pelanggan_country' => '', 'pelanggan_provinsi' => '',
+            'pelanggan_kecamatan_pengiriman' => '', 'pelanggan_kota_pengiriman' => '', 'pelanggan_country_pengiriman' => '', 'pelanggan_provinsi_pengiriman' => '',
+            'pelanggan_payment_channel' => strtoupper('MIDTRANS'.($payment?->payment_type ? '-'.$payment->payment_type : '')),
+            'pelanggan_ekspedisi' => $delivery ? 'GOJEK/GRAB' : 'PICKUP',
+            'pelanggan_kode' => null,
+            'idoutlet_penerima_pesanan_online_erzap' => $this->outletId($order),
+            'iduser_sales_penerima_pesanan_online_erzap' => (int) config('services.erzap.sales_user_id'),
+            'informasi_tambahan_text' => mb_substr($note, 0, 500),
+            'kode_voucher_text' => '',
+            'shopping_cart_details' => $order->items->map(fn ($item) => [
+                'harga_satuan' => (float) $item->unit_price_snapshot, 'jumlah' => $item->quantity, 'tgl_check_in' => null, 'barcode_produk' => $item->product->barcode,
             ])->values()->all(),
-            'subtotal' => $order->subtotal, 'delivery_fee' => $order->delivery_fee ?? 0, 'total' => $order->total,
-            'payment' => ['provider' => 'midtrans', 'method' => $payment?->payment_type, 'transaction_id' => $payment?->transaction_id, 'amount' => $payment?->amount],
         ];
     }
 }

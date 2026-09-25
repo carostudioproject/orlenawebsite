@@ -5,7 +5,6 @@ import AdminLayout from '../../../Layouts/AdminLayout.vue';
 import Pagination from '../../../Components/Admin/Pagination.vue';
 import SearchInput from '../../../Components/Admin/SearchInput.vue';
 import { useLiveFilters } from '../../../Composables/useLiveFilters';
-import { witaTime } from '../../../Support/orderStatus';
 import type { Paginated } from '../../../Types/admin';
 defineOptions({ layout: AdminLayout });
 interface OutletRow { id: number; name: string; code: string; erzap_outlet_id: string | null }
@@ -26,7 +25,7 @@ function save() { form.put('/admin/integrations/mapping', { preserveScroll: true
     <Head title="Erzap mapping · Orlena" />
     <Link href="/admin/integrations" class="admin-back"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i>Back to integration</Link>
     <p class="admin-eyebrow mt-5">Erzap integration</p><h1 class="text-3xl font-bold">Outlet &amp; product mapping</h1>
-    <p class="admin-muted mt-2 max-w-3xl text-sm">Enter the IDs from Erzap so transactions can be matched. A product needs either an Erzap product ID <strong>or</strong> a barcode. Reference stock from Erzap is information for staff only and never limits PO.</p>
+    <p class="admin-muted mt-2 max-w-3xl text-sm">Erzap receives each order at an Erzap outlet and matches items by <strong>barcode</strong>, so every product sold on the website (including hampers) needs the same barcode as in Erzap. Outlets without an ID use the default outlet from the server settings.</p>
 
     <form class="mt-6 space-y-6" @submit.prevent="save">
         <div v-if="form.hasErrors" role="alert" class="admin-alert admin-alert-error"><ul class="list-disc pl-5"><li v-for="(error, key) in form.errors" :key="key">{{ error }}</li></ul></div>
@@ -42,20 +41,18 @@ function save() { form.put('/admin/integrations/mapping', { preserveScroll: true
             <h2 id="products-title" class="mb-4 text-xl">Products</h2>
             <div class="mb-4 flex flex-wrap items-end gap-3">
                 <SearchInput id="search" v-model="live.search" label="Name, SKU or barcode" :loading="loading" />
-                <label class="flex items-center gap-2 text-sm"><input v-model="live.unmapped" type="checkbox" true-value="1" false-value="">Only unmapped</label>
+                <label class="flex items-center gap-2 text-sm"><input v-model="live.unmapped" type="checkbox" true-value="1" false-value="">Only without barcode</label>
                 <button v-if="active" type="button" class="admin-secondary" @click="reset"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i>Reset</button>
             </div>
             <p v-if="form.isDirty" class="admin-muted mb-3 text-xs">Save first before changing page or filters.</p>
             <div class="overflow-x-auto">
                 <table v-if="products.data.length" class="w-full text-left text-sm">
-                    <thead><tr><th>Product</th><th>Erzap product ID</th><th>Erzap variant ID</th><th>Barcode</th><th>Ref. stock</th></tr></thead>
+                    <thead><tr><th>Product</th><th>Erzap barcode</th><th>Status</th></tr></thead>
                     <tbody>
                         <tr v-for="(product, index) in products.data" :key="product.id">
                             <td class="min-w-48"><span class="font-bold">{{ product.name }}</span><span v-if="product.variant" class="ml-1 rounded-full bg-cream px-2 py-0.5 text-xs font-bold">{{ product.variant }}</span><span class="admin-muted block text-xs">{{ product.sku }} · {{ product.category?.name }}</span></td>
-                            <td><label :for="`p-${product.id}`" class="sr-only">Erzap product ID for {{ product.name }}</label><input :id="`p-${product.id}`" v-model="form.products[index].erzap_product_id" maxlength="80" class="min-w-32"></td>
-                            <td><label :for="`v-${product.id}`" class="sr-only">Erzap variant ID for {{ product.name }}</label><input :id="`v-${product.id}`" v-model="form.products[index].erzap_variant_id" maxlength="80" class="min-w-28"></td>
-                            <td><label :for="`b-${product.id}`" class="sr-only">Barcode for {{ product.name }}</label><input :id="`b-${product.id}`" v-model="form.products[index].barcode" maxlength="80" class="min-w-32"></td>
-                            <td class="whitespace-nowrap tabular-nums">{{ product.reference_stock ?? '—' }}<span v-if="product.reference_stock_at" class="admin-muted block text-xs">{{ witaTime(product.reference_stock_at) }}</span></td>
+                            <td><label :for="`b-${product.id}`" class="sr-only">Erzap barcode for {{ product.name }}</label><input :id="`b-${product.id}`" v-model="form.products[index].barcode" maxlength="80" class="min-w-48" placeholder="Not set"></td>
+                            <td class="whitespace-nowrap text-xs"><span v-if="form.products[index].barcode.trim()" class="font-bold text-matcha"><i class="fa-solid fa-check" aria-hidden="true"></i> Ready</span><span v-else class="admin-error-text"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> Barcode needed</span></td>
                         </tr>
                     </tbody>
                 </table>

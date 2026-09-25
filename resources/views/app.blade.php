@@ -3,6 +3,9 @@
 <head>
     @php
         $seo = $seo ?? ['title' => 'Orlena Staff', 'description' => 'Orlena staff dashboard', 'canonical' => url()->current(), 'image' => url('/assets/images/Orlena-Logo.png'), 'indexable' => false];
+        // Order pages share the public site's header and footer (rendered here, outside the Vue app); the dashboard has its own layout.
+        $shop = ! request()->is('admin', 'admin/*');
+        $site = $shop ? app(\App\Support\SiteContent::class)->get('social') : [];
     @endphp
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -15,14 +18,17 @@
     <meta property="og:image" content="{{ $seo['image'] }}" inertia="og:image">
     <meta name="robots" content="{{ $seo['indexable'] ? 'index,follow' : 'noindex,nofollow' }}" inertia="robots">
     <link rel="icon" href="/favicon.ico">
-    @vite('resources/js/app.ts')
+    @vite($shop ? ['resources/js/app.ts', 'resources/js/site-chrome.ts'] : ['resources/js/app.ts'])
     @inertiaHead
 </head>
 <body>
-    @inertia
-    @if (config('site.meta_pixel_enabled') && !request()->is('admin', 'admin/*', 'order', 'cart', 'checkout', 'orders/*', 'products', 'products/*'))
-        <script src="/assets/js/meta-pixel.js" defer></script>
-        <noscript><img height="1" width="1" style="display:none" alt="" src="https://www.facebook.com/tr?id=787759320264256&amp;ev=PageView&amp;noscript=1"></noscript>
+    @if ($shop)
+        <a href="#main-content" class="skip-link">Skip to content</a>
+        @include('partials.site-header')
+        <main id="main-content" tabindex="-1">@inertia</main>
+        @include('partials.site-footer')
+    @else
+        @inertia
     @endif
 </body>
 </html>

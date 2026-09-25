@@ -65,56 +65,77 @@ class ErzapAndApiTest extends TestCase
         return $order->fresh();
     }
 
-    public function test_paid_orders_queue_for_erzap_and_wait_for_config_and_mapping(): void
+    public function test_paid_orders_are_sent_to_erzap_as_olzap_sales_orders(): void
     {
-        // Erzap fails once, then accepts the retry and the later cancellation.
-        Http::fake(['erzap.test/*' => Http::sequence()->push(['message' => 'down'], 500)->push(['id' => 'ERZ-123'], 201)->push(['id' => 'ERZ-123'])]);
+        // Erzap first answers status "0" (rejected), then accepts the staff retry.
+        Http::fake(['erzap.test:4443/*' => Http::sequence()->push(['status' => '0', 'message ' => 'Barcode tidak ditemukan'])->push(['message ' => '', 'status' => '1'])]);
         $order = $this->paidOrder();
         $sync = IntegrationSync::sole();
         $this->assertSame(['erzap', 'transaction.push', 'pending', $order->id], [$sync->provider, $sync->type, $sync->status, $sync->subject_id]);
 
         // Queuing the same order again never creates a second sync.
-        ErzapSync::queue($order, 'transaction.push');
+        ErzapSync::queue($order);
         $this->assertSame(1, IntegrationSync::count());
 
-        // Not configured: nothing is sent, the row waits.
+        // Not configured: nothing is sent, the row waits and names what is missing.
         $this->artisan('erzap:sync')->assertSuccessful();
         $this->assertSame('waiting_config', $sync->fresh()->status);
+        $this->assertStringContainsString('ERZAP_TOKEN', $sync->fresh()->last_error);
         Http::assertNothingSent();
 
-        // Configured but not mapped: waits for mapping, still nothing sent.
-        config(['services.erzap.enabled' => true, 'services.erzap.base_url' => 'https://erzap.test/api', 'services.erzap.token' => 'erzap-secret']);
+        // Configured but no barcode / outlet ID: waits for mapping, still nothing sent.
+        config(['services.erzap.enabled' => true, 'services.erzap.base_url' => 'https://erzap.test:4443', 'services.erzap.token' => 'erzap-secret', 'services.erzap.sales_user_id' => '8']);
         $this->artisan('erzap:sync')->assertSuccessful();
         $this->assertSame('needs_mapping', $sync->fresh()->status);
-        $this->assertStringContainsString('outlet Test Outlet', $sync->fresh()->last_error);
+        $this->assertStringContainsString('Erzap outlet ID for Test Outlet', $sync->fresh()->last_error);
+        $this->assertStringContainsString('barcode for Berry (Fullsize)', $sync->fresh()->last_error);
         Http::assertNothingSent();
 
         $admin = User::factory()->create(['role' => 'admin']);
         $this->actingAs(User::factory()->create())->get('/admin/integrations')->assertForbidden();
-        $this->actingAs($admin)->get('/admin/integrations/mapping')->assertInertia(fn (Assert $page) => $page->component('Admin/Integrations/Mapping')->has('products.data', 1));
-        $this->put('/admin/integrations/mapping', ['outlets' => [['id' => $this->outlet->id, 'erzap_outlet_id' => 'OUT-9']], 'products' => [['id' => $this->product->id, 'erzap_product_id' => 'P-77', 'erzap_variant_id' => '', 'barcode' => '8990001']]])->assertSessionHasNoErrors();
+        $this->actingAs($admin)->get('/admin/integrations/mapping?unmapped=1')->assertInertia(fn (Assert $page) => $page->component('Admin/Integrations/Mapping')->has('products.data', 1));
+        $this->put('/admin/integrations/mapping', ['outlets' => [['id' => $this->outlet->id, 'erzap_outlet_id' => '1']], 'products' => [['id' => $this->product->id, 'erzap_product_id' => '', 'erzap_variant_id' => '', 'barcode' => '200207230802']]])->assertSessionHasNoErrors();
         $this->assertSame('pending', $sync->fresh()->status);
 
+        // Status "0" is a failure with Erzap's message, retried later.
         $this->artisan('erzap:sync')->assertSuccessful();
         $sync->refresh();
         $this->assertSame(['failed', 1], [$sync->status, $sync->attempts]);
-        $this->assertStringContainsString('HTTP 500', $sync->last_error);
+        $this->assertStringContainsString('Barcode tidak ditemukan', $sync->last_error);
         $this->assertTrue($sync->next_attempt_at->equalTo(now()->addMinutes(5)));
+        $this->assertArrayNotHasKey('token_erzap', $sync->payload);
+
         $this->post('/admin/integrations/syncs/'.$sync->id.'/retry')->assertSessionHasNoErrors();
         $sync->refresh();
-        $this->assertSame(['synced', 'ERZ-123', 2], [$sync->status, $sync->external_ref, $sync->attempts]);
-        Http::assertSent(fn (HttpRequest $request) => $request->url() === 'https://erzap.test/api/transactions' && $request->hasHeader('Authorization', 'Bearer erzap-secret')
-            && $request['reference'] === $order->order_code && $request['outlet_id'] === 'OUT-9' && $request['items'][0]['product_id'] === 'P-77' && $request['total'] === 175000
-            && $request['payment']['method'] === 'qris' && ! isset($request['customer']['address']));
-        $this->get('/admin/orders/'.$order->id)->assertInertia(fn (Assert $page) => $page->where('erzapSync.status', 'synced'));
-        $this->get('/admin/integrations?status=synced')->assertInertia(fn (Assert $page) => $page->has('syncs.data', 1)->where('syncs.data.0.order_code', $order->order_code)->where('configured', true));
+        $this->assertSame(['synced', $order->order_code, 2], [$sync->status, $sync->external_ref, $sync->attempts]);
+        Http::assertSent(function (HttpRequest $request) use ($order) {
+            $cart = $request['shopping_carts'];
 
-        // Cancelling the paid order voids the transaction in Erzap.
+            return $request->url() === 'https://erzap.test:4443/apis/simpan_pesanan_penjualan' && $request->method() === 'POST'
+                && $cart['kode'] === $order->order_code && $cart['token_erzap'] === 'erzap-secret'
+                && $cart['idoutlet_penerima_pesanan_online_erzap'] === 1 && $cart['iduser_sales_penerima_pesanan_online_erzap'] === 8
+                && $cart['total_pesanan'] === '160000.0' && $cart['ongkos_kirim'] === '15000.0' && $cart['total_pembayaran'] === '175000.0'
+                && $cart['nama'] === 'Sinta' && $cart['telepon'] === '6281234567890' && $cart['alamat_pengiriman'] === 'Secret address 1'
+                && $cart['pelanggan_ekspedisi'] === 'GOJEK/GRAB' && $cart['pelanggan_payment_channel'] === 'MIDTRANS-QRIS'
+                && $cart['shopping_cart_details'] == [['harga_satuan' => 80000, 'jumlah' => 2, 'tgl_check_in' => null, 'barcode_produk' => '200207230802']];
+        });
+        $this->get('/admin/orders/'.$order->id)->assertInertia(fn (Assert $page) => $page->where('erzapSync.status', 'synced'));
+        $this->get('/admin/integrations?status=synced')->assertInertia(fn (Assert $page) => $page->has('syncs.data', 1)->where('syncs.data.0.order_code', $order->order_code)->where('configured', true)->where('missingSettings', []));
+
+        // Only paid orders go to Erzap; cancelling afterwards queues nothing new.
         $this->post('/admin/orders/'.$order->id.'/cancel', ['from' => 'confirmed', 'cancel_reason' => 'Customer request'])->assertSessionHasNoErrors();
-        $cancel = IntegrationSync::where('type', 'transaction.cancel')->where('subject_id', $order->id)->sole();
+        $this->assertSame(1, IntegrationSync::count());
+    }
+
+    public function test_the_default_erzap_outlet_covers_outlets_without_their_own_id(): void
+    {
+        Http::fake(['erzap.test/*' => Http::response(['status' => '1', 'message ' => ''])]);
+        config(['services.erzap.enabled' => true, 'services.erzap.base_url' => 'https://erzap.test', 'services.erzap.token' => 't', 'services.erzap.sales_user_id' => '8', 'services.erzap.default_outlet_id' => '5']);
+        $this->product->update(['barcode' => '111']);
+        $this->paidOrder();
         $this->artisan('erzap:sync')->assertSuccessful();
-        $this->assertSame('synced', $cancel->fresh()->status);
-        Http::assertSent(fn (HttpRequest $request) => $request->url() === 'https://erzap.test/api/transactions/cancel');
+        $this->assertSame('synced', IntegrationSync::sole()->status);
+        Http::assertSent(fn (HttpRequest $request) => $request['shopping_carts']['idoutlet_penerima_pesanan_online_erzap'] === 5);
     }
 
     public function test_erzap_can_push_reference_stock_and_sync_results_with_its_token(): void

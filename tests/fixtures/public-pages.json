@@ -1,0 +1,217 @@
+{
+  "note": "Text of the public pages as rendered by the approved Vue version (default content + seeders), captured before the move to server-rendered Blade. Whitespace is removed so only the copy itself is compared.",
+  "pages": {
+    "/": {
+      "title": "Orlena",
+      "main": "OrlenaTomakeindulgencefeeleffortlessthroughapproachablepricing,availability,andformatshasbeenourcoremissioninservingdesserts.Ourpurposeissimplytomakepeoplefeelcaredfor,celebrated,andemotionallyfulfilledthroughthoughtfullycrafteddesserts.BakedGoodsBrowniesChocoLayerBrowniesCheesecakeCookiesCroissantTartOrlena'sOutletsOrlenaPadangsambianJLPurbaIndahRayaGg.IINo.9,Padangsambian,Kec.DenpasarBar.,KotaDenpasar,Bali80117ViewonMapsOrlenaLivingWorldMallLivingWorldDPS-LGFloorViewonMapsOrlenaSidakaryaJl.Bedugul31,RukoNo-6,Sidakarya,DenpasarSelatan,KotaDenpasar,Bali80225ViewonMapsOrlenaCafeAkasiaJLAkasiaNo.16,Sumerta,Kec.DenpasarTim.,KotaDenpasar,Bali80239ViewonMapsOrlenaMalBaliGaleriaMalBaliGaleriaViewonMapsBrandCollaborationOrlenaxGarudaIndonesiaCreatingaSpecialMerchandiseforDirectFlightsfromBalitoBalikpapanOrlenaxKopiKenanganCreatingaSpecialPairing&BundlingCollaborationOrlenaxMiloCreatingaSpecialFoodInnovationinCollaborationwithMiloOrlenaxKitKatCreatingaSpecialFoodInnovationinCollaborationwithKitKatWhat'sonOrlenaStories,updates,andmomentsfromourjourney.OrlenaCafeJimbaranANewWaytoEnjoyOur#BitesofHappiness:MeetOrlenaCaféAfter8yearsofservingaccessibledesserts...ReadMoreOrlenaCSRBringingHappinessBeyondOurBrandThroughOrlenaCSRAtOrlena,webelieve#BitesofHappinessshouldnotstopwithus.Itshouldcreateacircleofhappin...ReadMoreOneBite,ThreeLayersofHappiness:MeettheNewOrlenaChocoLayersWhysettleforonelayerwhenyoucanhavethree?ReadMoreShowMore",
+      "header": "HomeAboutBakedGoodsLocationCollaboration",
+      "footer": "QuickLinksAboutBakedGoodsLocationCollaborationExploreWhat'sonOrlenaFollowUsInstagramTikTok©2026Orlena",
+      "h1": [
+        "Orlena"
+      ],
+      "links": [
+        "https://maps.app.goo.gl/JdUueDNZw9EGF3LP7",
+        "https://maps.app.goo.gl/Q9xsm6XLMVYAxXbcA",
+        "https://maps.app.goo.gl/JDUQ7Lu53RzTbVPEA",
+        "https://maps.app.goo.gl/fuvL5vE2VmNv2332A",
+        "https://maps.app.goo.gl/ocPppEGmMkRc1JKJ7",
+        "/blog",
+        "/blog/orlena-cafe",
+        "/blog",
+        "/blog/orlena-csr",
+        "/blog",
+        "/blog/choco-layers",
+        "/blog"
+      ],
+      "images": [
+        [
+          "/assets/images/hero-section/Header orlena-01.png",
+          "Orlena"
+        ],
+        [
+          "/assets/images/hero-section/Header orlena-02.png",
+          "Orlena"
+        ],
+        [
+          "/assets/images/hero-section/Header orlena-03.png",
+          "Orlena"
+        ],
+        [
+          "/assets/images/hero-section/Header orlena-04.png",
+          "Orlena"
+        ],
+        [
+          "/assets/images/hero-section/Header orlena-05.png",
+          "Orlena"
+        ],
+        [
+          "/assets/images/hero-section/Header orlena-06.png",
+          "Orlena"
+        ],
+        [
+          "/assets/images/hero-section/Header orlena-07.jpg",
+          "Orlena"
+        ],
+        [
+          "/assets/images/baked-goods-section/Brownies/Brownies-03.png",
+          "Brownies"
+        ],
+        [
+          "/assets/images/baked-goods-section/Choco Layer/Choco-Layer-07.png",
+          "Choco Layer"
+        ],
+        [
+          "/assets/images/baked-goods-section/Brownies cheesecake/Brownies-Cheesecake-05.jpg",
+          "Brownies Cheesecake"
+        ],
+        [
+          "/assets/images/baked-goods-section/Cookies/Cookies-01.jpg",
+          "Cookies"
+        ],
+        [
+          "/assets/images/baked-goods-section/Croissant/Croissant-01.png",
+          "Croissant"
+        ],
+        [
+          "/assets/images/baked-goods-section/Tart/Tart-04.jpg",
+          "Tart"
+        ],
+        [
+          "/assets/images/outlet1.jpg",
+          "Orlena Padangsambian"
+        ],
+        [
+          "/assets/images/outlet2.jpg",
+          "Orlena Living World Mall"
+        ],
+        [
+          "/assets/images/outlet6.jpg",
+          "Orlena Sidakarya"
+        ],
+        [
+          "/assets/images/outlet4.jpg",
+          "Orlena Cafe Akasia"
+        ],
+        [
+          "/assets/images/outlet5.png",
+          "Orlena Mal Bali Galeria"
+        ],
+        [
+          "/assets/images/collaboration/Garuda Indonesia.png",
+          "Orlena x Garuda Indonesia"
+        ],
+        [
+          "/assets/images/collaboration/Kopi Kenangan.png",
+          "Orlena x Kopi Kenangan"
+        ],
+        [
+          "/assets/images/collaboration/milo.png",
+          "Orlena x Milo"
+        ],
+        [
+          "/assets/images/collaboration/kitkat.png",
+          "Orlena x KitKat"
+        ],
+        [
+          "/assets/images/blog/blog-01.jpg",
+          "A New Way to Enjoy Our #BitesofHappiness: Meet Orlena Café"
+        ],
+        [
+          "/assets/images/blog/blog-02.JPG",
+          "Bringing Happiness Beyond Our Brand Through Orlena CSR"
+        ],
+        [
+          "/assets/images/blog/blog-03.png",
+          "One Bite, Three Layers of Happiness: Meet the New Orlena Choco Layers"
+        ]
+      ]
+    },
+    "/about": {
+      "title": "About Orlena",
+      "main": "AboutOrlenaEstablishedin2018,undertheumbrellaofPTOrlenaDelapanMulia,OrlenaisadessertbrowniebrandfromBali.Rootedinquality,innovation,andexploration,westronglycommittedtoourvisiontobecomealeadingaccessiblebrowniesbrandinIndonesia.Ourmissionistomakeindulgencefeeleffortlessthroughapproachablepricing,availability,andformats,soeveryonecanbehappyeasily.OurStoryOrlenawasfoundedin2018byPutuMettaPuspitaDewiattheageof15,startingfromasmallhomekitchen.Sheknewnothingaboutbusinessatthetime,butwasdrivenbyherpassionfordessertsandherintentiontomakepeoplehappythroughindulgence.Astheproductsgrewmoredeeplyintopeople’shearts,Orlenagrewfromahomekitchenintoaproperbrand,expandingitspresencetosixbranches,includingoneinamallandtwocaféexperiencestores.AllmadepossiblebyFrenna’sloveforOrlena.Orlena'sOutletsOrlenaPadangsambianJLPurbaIndahRayaGg.IINo.9,Padangsambian,Kec.DenpasarBar.,KotaDenpasar,Bali80117ViewonMapsOrlenaLivingWorldMallLivingWorldDPS-LGFloorViewonMapsOrlenaSidakaryaJl.Bedugul31,RukoNo-6,Sidakarya,DenpasarSelatan,KotaDenpasar,Bali80225ViewonMapsOrlenaCafeAkasiaJLAkasiaNo.16,Sumerta,Kec.DenpasarTim.,KotaDenpasar,Bali80239ViewonMapsOrlenaMalBaliGaleriaMalBaliGaleriaViewonMaps",
+      "header": "HomeAboutBakedGoodsLocationCollaboration",
+      "footer": "QuickLinksAboutBakedGoodsLocationCollaborationExploreWhat'sonOrlenaFollowUsInstagramTikTok©2026Orlena",
+      "h1": [
+        "About Orlena"
+      ],
+      "links": [
+        "https://maps.app.goo.gl/JdUueDNZw9EGF3LP7",
+        "https://maps.app.goo.gl/Q9xsm6XLMVYAxXbcA",
+        "https://maps.app.goo.gl/JDUQ7Lu53RzTbVPEA",
+        "https://maps.app.goo.gl/fuvL5vE2VmNv2332A",
+        "https://maps.app.goo.gl/ocPppEGmMkRc1JKJ7"
+      ],
+      "images": [
+        [
+          "/assets/images/outlet1.jpg",
+          "Orlena Padangsambian"
+        ],
+        [
+          "/assets/images/outlet2.jpg",
+          "Orlena Living World Mall"
+        ],
+        [
+          "/assets/images/outlet6.jpg",
+          "Orlena Sidakarya"
+        ],
+        [
+          "/assets/images/outlet4.jpg",
+          "Orlena Cafe Akasia"
+        ],
+        [
+          "/assets/images/outlet5.png",
+          "Orlena Mal Bali Galeria"
+        ]
+      ]
+    },
+    "/blog": {
+      "title": "What's on Orlena",
+      "main": "What'sonOrlenaStories,updates,andmomentsfromourjourney.OrlenaCafeJimbaranANewWaytoEnjoyOur#BitesofHappiness:MeetOrlenaCaféAfter8yearsofservingaccessibledesserts...ReadMoreOrlenaCSRBringingHappinessBeyondOurBrandThroughOrlenaCSRAtOrlena,webelieve#BitesofHappinessshouldnotstopwithus.Itshouldcreateacircleofhappinessthatgrowsbiggerandgivesbacktosociety.ReadMoreOneBite,ThreeLayersofHappiness:MeettheNewOrlenaChocoLayersWhysettleforonelayerwhenyoucanhavethree?ReadMore",
+      "header": "HomeAboutBakedGoodsLocationCollaboration",
+      "footer": "QuickLinksAboutBakedGoodsLocationCollaborationExploreWhat'sonOrlenaFollowUsInstagramTikTok©2026Orlena",
+      "h1": [
+        "What's on Orlena"
+      ],
+      "links": [
+        "/blog/orlena-cafe",
+        "/blog/orlena-cafe",
+        "/blog/orlena-csr",
+        "/blog/orlena-csr",
+        "/blog/choco-layers",
+        "/blog/choco-layers"
+      ],
+      "images": [
+        [
+          "/assets/images/blog/blog-01.jpg",
+          "A New Way to Enjoy Our #BitesofHappiness: Meet Orlena Café"
+        ],
+        [
+          "/assets/images/blog/blog-02.JPG",
+          "Bringing Happiness Beyond Our Brand Through Orlena CSR"
+        ],
+        [
+          "/assets/images/blog/blog-03.png",
+          "One Bite, Three Layers of Happiness: Meet the New Orlena Choco Layers"
+        ]
+      ]
+    },
+    "/blog/orlena-cafe": {
+      "title": "A New Way to Enjoy Our #BitesofHappiness: Meet Orlena Café",
+      "main": "OrlenaCafeJimbaranANewWaytoEnjoyOur#BitesofHappiness:MeetOrlenaCaféAfter8yearsofservingaccessibledesserts,especiallyourbelovedbrownies,throughourgrab-and-gostores,we'refinallytakingastepfurtherbycreatinganewwayforyoutoexperienceandenjoyourBitesofHappiness.OnePlace,ManyOccasions,MoreHappinessFromcatchingupwithfriends,gettingsomeworkdoneovercoffee,enjoyingasweetafternoonbreak,tosimplyspendingtimewithyourself,OrlenaCaféismadeforallkindsofmoments.Designedwithatrendyyetcozyambience,thecafébringsamoreexperientialsideofOrlenawhilestayingtruetotheidentityyou'vealwaysknownandloved,includingouriconicpink.Morethanjustanewplacetoenjoyourproducts,OrlenaCaféisdesignedtobeamoreinclusivespacewhereeveryonecanfeelwelcome,stayalittlelonger,andcreatetheirownmomentsofhappiness.Andthisisjustthebeginning.WithOrlenaCaféJimbaran,we'renotleavingourrootsbehind.We'resimplyfindinganewwaytobeclosertoyoureverydaymoments,one#BitesofHappinessatatime.BacktoWhat'sonOrlena",
+      "header": "HomeAboutBakedGoodsLocationCollaboration",
+      "footer": "QuickLinksAboutBakedGoodsLocationCollaborationExploreWhat'sonOrlenaFollowUsInstagramTikTok©2026Orlena",
+      "h1": [
+        "A New Way to Enjoy Our #BitesofHappiness: Meet Orlena Café"
+      ],
+      "links": [
+        "/blog"
+      ],
+      "images": [
+        [
+          "/assets/images/blog/blog-01.jpg",
+          "A New Way to Enjoy Our #BitesofHappiness: Meet Orlena Café"
+        ]
+      ]
+    }
+  }
+}
