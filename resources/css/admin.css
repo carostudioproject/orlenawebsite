@@ -102,6 +102,13 @@ a.admin-kpi:hover { border-color: #3b030433; box-shadow: 0 6px 20px -12px #3b030
 .order-category { display: inline-flex; flex-shrink: 0; align-items: center; gap: .6rem; border: 1px solid #3b030429; border-radius: 999px; background: white; padding: .3rem 1rem .3rem .3rem; font-size: .875rem; font-weight: 700; white-space: nowrap; transition: background-color .15s, border-color .15s; }
 .order-category:hover { border-color: var(--admin-almond); background: #fff5f0; }
 .order-category[aria-pressed='true'] { border-color: var(--admin-chocolate); background: var(--admin-chocolate); color: var(--admin-cream); }
+.order-category-count { min-width: 1.4rem; border-radius: 999px; background: var(--admin-cream); padding: .05rem .4rem; font-size: .7rem; text-align: center; font-variant-numeric: tabular-nums; }
+.order-category[aria-pressed='true'] .order-category-count { background: #ffffff26; color: inherit; }
+.order-categories { scrollbar-width: none; scroll-snap-type: x proximity; }
+.order-categories::-webkit-scrollbar { display: none; }
+.order-categories .order-category { scroll-snap-align: start; }
+/* Phones: compact text chips without the image. */
+@media (max-width: 639px) { .order-category { gap: .45rem; padding: .5rem .5rem .5rem .9rem; } }
 .order-product { display: flex; flex-direction: column; gap: .75rem; border: 1px solid var(--admin-line); border-radius: 1rem; padding: .85rem; transition: border-color .15s, box-shadow .15s; }
 .order-product:hover { border-color: #3b030429; box-shadow: 0 6px 20px -14px #3b030466; }
 .order-size span { display: inline-block; cursor: pointer; border: 1px solid #3b030429; border-radius: 999px; padding: .35rem .8rem; font-size: .8rem; font-weight: 700; transition: background-color .15s, border-color .15s; }

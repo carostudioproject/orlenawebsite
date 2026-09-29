@@ -37,15 +37,16 @@ Open http://127.0.0.1:8000. Only copy `.env.example` on first setup; do not over
 - `/order`: one-page order form with product/quantity selection, customer details, and pickup/delivery schedule
 - `/orders/{code}`: private confirmation for the originating browser session
 - `/admin/orders`, `/admin/orders/{id}`: staff order search, review, Confirm & Create Payment, fulfillment status, and cancellation
-- `/webhooks/midtrans`: signed Midtrans payment notifications
+- `/webhooks/doku`: signed DOKU payment notifications
 - `/order/tambah`, `/orders/{code}/tambah`: customers add items to an unpaid order ([order additions](docs/order-additions.md))
 - `/admin/payments`, `/admin/customers`: all payment attempts; customers grouped by WhatsApp number (Admin, Staff, Finance)
 - `/admin/reports`: sales and performance report with print, PDF and Excel export (Admin, Finance)
 - `/admin/schedule`: PO cutoff time, closed weekdays and dates, daily capacity warning (Admin, Staff)
 - `/admin/integrations`: Erzap sync log, retry and outlet/product mapping (Admin); see [Erzap](docs/erzap-integration.md)
+- `/admin/products/import`: import products from an Erzap export file; updates name, price, barcode and code only, never photos (Admin)
 - `/api/v1/*`: REST API, public catalog plus token-protected orders and reports ([REST API](docs/rest-api.md))
 
-Unknown pages/articles return 404. The existing WhatsApp, maps, social links, section anchors, and footer are retained. Customer PO submission, staff review, Midtrans payment links, and fulfillment statuses are implemented ([payment notes](docs/payments-and-fulfillment.md)). Paid orders are sent to Erzap through the OLZAP API (simpan_pesanan_penjualan) once the Erzap settings and product barcodes are filled; until then they wait in the queue. Products have free-text variants (Fullsize, Halfsize, Box isi 6, ...), and hampers are products with a contents list and an optional sale period. Products/outlets are still inactive until reviewed by Admin; see [customer ordering notes](docs/customer-ordering.md).
+Unknown pages/articles return 404. The existing WhatsApp, maps, social links, section anchors, and footer are retained. Customer PO submission, staff review, DOKU Checkout payment links, and fulfillment statuses are implemented ([payment notes](docs/payments-and-fulfillment.md)). Paid orders are sent to Erzap through the OLZAP API (simpan_pesanan_penjualan) once the Erzap settings and product barcodes are filled; until then they wait in the queue. Products have free-text variants (Fullsize, Halfsize, Box isi 6, ...), and hampers are products with a contents list and an optional sale period. Products/outlets are still inactive until reviewed by Admin; see [customer ordering notes](docs/customer-ordering.md).
 
 The local first-admin credentials are in `storage/app/private/admin-initial-access.json` (ignored by Git, never served publicly). **Staff log in with a username, not an email**; the local admin's username is `admin` (existing accounts received the part of their email before @). Each user can change their name, username, email, and password under **Profil saya** (`/admin/profile`). They were generated for this workspace only. Change name, email, and password in **Akun tim → Ubah**. Fresh installations should use the interactive `orlena:create-admin` command. The optional `--local-preview` flag only works locally when no users exist; it never overwrites an existing account.
 
@@ -62,12 +63,12 @@ The local first-admin credentials are in `storage/app/private/admin-initial-acce
 - `SESSION_SECURE_COOKIE=true`: set on production HTTPS.
 - `QUEUE_CONNECTION=database`: no permanent worker is needed.
 - `WHATSAPP_NUMBER`: business handoff number, defaulting to the existing `6282145809558`.
-- `MIDTRANS_SERVER_KEY`, `MIDTRANS_IS_PRODUCTION`: backend-only Midtrans credentials (sandbox first). Set the Midtrans Payment Notification URL to `{APP_URL}/webhooks/midtrans` over public HTTPS.
+- `DOKU_CLIENT_ID`, `DOKU_SECRET_KEY`, `DOKU_IS_PRODUCTION`: backend-only DOKU Checkout credentials (sandbox first). Set the DOKU Notification URL to `{APP_URL}/webhooks/doku` over public HTTPS.
 - `ERZAP_*`: Erzap OLZAP connection for sending paid orders (base URL, token, sales user, default outlet); keep `ERZAP_ENABLED=false` until Erzap provides the values ([Erzap](docs/erzap-integration.md)).
 - `API_TOKENS`: comma-separated bearer tokens for the protected REST API; empty keeps those endpoints closed.
 - Cron: run `php artisan schedule:run` every minute in production (reconciles expired payment links every 10 minutes and sends Erzap syncs every 5). Locally use `php artisan schedule:work`.
 
-Timezone is `Asia/Makassar`. Local migrations have been applied for users/session, cache/jobs, roles, categories, outlets, products, outlet prices, audit logs, customers, orders, item snapshots, and initial order history. Seeders import 6 existing marketing categories, 5 outlets, and the owner-provided 36 products in 3 additional categories (14 fullsize brownies, 14 halfsize brownies, 8 sauces). Products and outlets start inactive for ordering. Seeders do not overwrite later dashboard edits or create default accounts. See [product import notes](docs/product-catalog-import.md). Payment attempts and Midtrans events are stored in `payments` and `payment_events`.
+Timezone is `Asia/Makassar`. Local migrations have been applied for users/session, cache/jobs, roles, categories, outlets, products, outlet prices, audit logs, customers, orders, item snapshots, and initial order history. Seeders import 6 existing marketing categories, 5 outlets, and the owner-provided 36 products in 3 additional categories (14 fullsize brownies, 14 halfsize brownies, 8 sauces). Products and outlets start inactive for ordering. Seeders do not overwrite later dashboard edits or create default accounts. See [product import notes](docs/product-catalog-import.md). Payment attempts and DOKU events are stored in `payments` and `payment_events`.
 
 ## Verify
 

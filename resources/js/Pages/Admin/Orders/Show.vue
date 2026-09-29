@@ -52,7 +52,7 @@ function act(url: string, data: Record<string, unknown> = {}, onSuccess?: () => 
 async function confirmOrder() {
     const ok = await confirmDialog({
         title: 'Confirm this order?', icon: 'fa-circle-check', confirmLabel: 'Confirm & Create Payment',
-        message: `A Midtrans payment link for ${rupiah(props.order.total)} will be created for ${props.order.order_code}. Make sure the products, schedule and delivery fee are correct.`,
+        message: `A DOKU payment link for ${rupiah(props.order.total)} will be created for ${props.order.order_code}. Make sure the products, schedule and delivery fee are correct.`,
     });
     if (ok) act('/confirm', { review_version: props.order.review_version });
 }
@@ -75,7 +75,7 @@ const canCancel = computed(() => can.value.review && !finished.value && (props.o
 async function cancelOrder() {
     const ok = await confirmDialog({
         title: 'Cancel this order?', tone: 'danger', confirmLabel: 'Yes, cancel it', cancelLabel: 'Go back',
-        message: props.order.payment_status === 'paid' ? 'This order is paid; the refund is done manually in Midtrans. This cannot be undone.' : 'Any open payment link will be closed. This cannot be undone.',
+        message: props.order.payment_status === 'paid' ? 'This order is paid; the refund is done manually in DOKU. This cannot be undone.' : 'Any open payment link will be closed. This cannot be undone.',
     });
     if (ok) act('/cancel', { from: props.order.order_status, cancel_reason: cancelReason.value }, () => { cancelReason.value = ''; });
 }
@@ -87,7 +87,7 @@ async function copyLink(url: string) {
 const whatsappLink = computed(() => {
     const payment = current.value;
     if (!payment?.payment_url || payment.status !== 'pending') return null;
-    const text = `Halo ${props.order.customer.name}, pesanan ${props.order.order_code} sudah kami konfirmasi.\n\nTotal: ${rupiah(payment.amount)}\nLink pembayaran: ${payment.payment_url}\nBerlaku sampai: ${witaTime(payment.expires_at)}\n\nTerima kasih.`;
+    const text = `Halo ${props.order.customer.name}, pesanan ${props.order.order_code} sudah kami konfirmasi.\n\nTotal: ${rupiah(payment.amount)}\nLink pembayaran: ${payment.payment_url}\nBerlaku sampai: ${witaTime(payment.expires_at)}\n\nCek status pesanan kapan saja: ${window.location.origin}/cek-pesanan?code=${props.order.order_code}\n\nTerima kasih.`;
     return `https://wa.me/${props.order.customer.whatsapp}?text=${encodeURIComponent(text)}`;
 });
 
@@ -108,14 +108,14 @@ onBeforeUnmount(() => clearInterval(timer));
     <p v-if="['pending_review', 'confirmed'].includes(order.order_status) && (dayLoad.closed || (dayLoad.capacity && dayLoad.orders > dayLoad.capacity))" class="admin-alert admin-alert-error mb-6"><i class="fa-solid fa-calendar-xmark" aria-hidden="true"></i> {{ dayLoad.closed ?? `This PO date is over capacity: ${dayLoad.orders} orders for a capacity of ${dayLoad.capacity}.` }} Make sure production can handle it or agree on another date with the customer.</p>
     <p v-else-if="order.order_status === 'pending_review' && dayLoad.capacity" class="admin-muted mb-4 text-sm"><i class="fa-solid fa-calendar-day" aria-hidden="true"></i> {{ dayLoad.orders }} of {{ dayLoad.capacity }} orders for this PO date.</p>
     <p v-if="additions.length && order.order_status === 'pending_review'" class="admin-alert admin-alert-info mb-6"><i class="fa-solid fa-cart-plus" aria-hidden="true"></i> The customer added items {{ additions.length }} time(s), last on {{ witaTime(additions[0].created_at) }}. Items and total below include the additions; check availability again before confirming.</p>
-    <p v-if="paidAfterCancel" role="alert" class="admin-alert admin-alert-error mb-6">This order was cancelled but payment was received. Refund it manually in Midtrans and record the result.</p>
-    <div class="grid grid-cols-1 gap-6 xl:grid-cols-2"><section class="admin-card"><h2 class="mb-5 text-xl">Customer and fulfillment</h2><dl class="space-y-4 text-sm"><div><dt class="font-bold">Name</dt><dd>{{ order.customer.name }}</dd></div><div><dt class="font-bold">WhatsApp</dt><dd>{{ order.customer.whatsapp }}</dd></div><div v-if="order.customer.email"><dt class="font-bold">Email</dt><dd>{{ order.customer.email }}</dd></div><div><dt class="font-bold">Fulfillment</dt><dd>{{ order.fulfillment_method === 'delivery' ? `Delivery (Gojek/Grab) from ${order.outlet_name_snapshot}` : `Pickup at ${order.outlet_name_snapshot}` }}</dd></div><div><dt class="font-bold">Requested date / time</dt><dd>{{ order.requested_date }} {{ order.requested_time?.slice(0,5) }} WITA</dd></div><div v-if="order.delivery_address"><dt class="font-bold">Address</dt><dd class="whitespace-pre-wrap">{{ order.delivery_address }}</dd></div><div v-if="order.customer_note"><dt class="font-bold">Customer note</dt><dd class="whitespace-pre-wrap">{{ order.customer_note }}</dd></div></dl></section><section class="admin-card"><h2 class="mb-5 text-xl">Order items</h2><OrderSummary :order="order" lang="en" /></section></div>
+    <p v-if="paidAfterCancel" role="alert" class="admin-alert admin-alert-error mb-6">This order was cancelled but payment was received. Refund it manually in DOKU and record the result.</p>
+    <div class="grid grid-cols-1 gap-6 xl:grid-cols-2"><section class="admin-card"><h2 class="mb-5 text-xl">Customer and fulfillment</h2><dl class="space-y-4 text-sm"><div><dt class="font-bold">Name</dt><dd>{{ order.customer.name }}</dd></div><div><dt class="font-bold">WhatsApp</dt><dd>{{ order.customer.whatsapp }}</dd></div><div v-if="order.customer.email"><dt class="font-bold">Email</dt><dd>{{ order.customer.email }}</dd></div><div><dt class="font-bold">Fulfillment</dt><dd>{{ order.fulfillment_method === 'delivery' ? `Delivery (Gojek/Grab) from ${order.outlet_name_snapshot}` : `Pickup at ${order.outlet_name_snapshot}` }}</dd></div><div><dt class="font-bold">Requested date / time</dt><dd>{{ order.requested_date }} {{ order.requested_time?.slice(0,5) }} WITA</dd></div><div v-if="order.delivery_address"><dt class="font-bold">Address</dt><dd class="whitespace-pre-wrap">{{ order.delivery_address }}</dd></div><div v-if="order.customer_note"><dt class="font-bold">Customer note</dt><dd class="whitespace-pre-wrap">{{ order.customer_note }}</dd></div><div v-if="order.card_message"><dt class="font-bold"><i class="fa-solid fa-envelope-open-text" aria-hidden="true"></i> Greeting card</dt><dd class="whitespace-pre-wrap rounded-lg bg-cream p-3">{{ order.card_message }}</dd></div></dl></section><section class="admin-card"><h2 class="mb-5 text-xl">Order items</h2><OrderSummary :order="order" lang="en" /></section></div>
 
     <section class="admin-card mt-6">
         <h2 class="mb-4 text-xl">Payment</h2>
         <p v-if="errors.payment" role="alert" class="admin-alert admin-alert-error mb-4">{{ errors.payment }}</p>
         <div v-if="can.review && order.order_status === 'pending_review'" class="space-y-3 text-sm">
-            <p>Check products, production capacity, schedule and delivery fee. Confirming creates a Midtrans link for <strong>{{ rupiah(order.total) }}</strong>, valid for 24 hours (until {{ $page.props.poCutoff }} at the latest).</p>
+            <p>Check products, production capacity, schedule and delivery fee. Confirming creates a DOKU payment link for <strong>{{ rupiah(order.total) }}</strong>, valid for 24 hours (until {{ $page.props.poCutoff }} at the latest).</p>
             <p v-if="order.delivery_fee === null" class="admin-error-text">Set the delivery fee in the review form before confirming.</p>
             <button class="admin-primary" :disabled="busy || order.delivery_fee === null" @click="confirmOrder"><i class="fa-solid fa-circle-check" aria-hidden="true"></i>{{ busy ? 'Processing…' : 'Confirm & Create Payment' }}</button>
         </div>
@@ -124,11 +124,11 @@ onBeforeUnmount(() => clearInterval(timer));
             <div v-if="current.status === 'pending' && current.payment_url" class="flex flex-wrap gap-3">
                 <button type="button" class="admin-primary" @click="copyLink(current.payment_url)"><i class="fa-solid fa-copy" aria-hidden="true"></i>{{ copied ? 'Link copied' : 'Copy payment link' }}</button>
                 <a v-if="whatsappLink" :href="whatsappLink" target="_blank" rel="noopener noreferrer" class="admin-secondary"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i>Send via WhatsApp</a>
-                <a :href="current.payment_url" target="_blank" rel="noopener noreferrer" class="admin-secondary"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i>Open Midtrans page</a>
+                <a :href="current.payment_url" target="_blank" rel="noopener noreferrer" class="admin-secondary"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i>Open DOKU page</a>
             </div>
             <p v-if="current.status === 'creation_failed' && current.last_error" class="admin-error-text">{{ current.last_error }}</p>
-            <button v-if="can.review && ['pending', 'expired', 'failed', 'cancelled'].includes(current.status)" type="button" class="admin-secondary" :disabled="busy" @click="act(`/payments/${current.id}/check`)"><i class="fa-solid fa-rotate" aria-hidden="true"></i>Check status in Midtrans</button>
-            <p v-if="current.status === 'pending'" class="text-xs text-chocolate/65">The status updates automatically when Midtrans sends a notification. This page refreshes every 15 seconds.</p>
+            <button v-if="can.review && ['pending', 'expired', 'failed', 'cancelled'].includes(current.status)" type="button" class="admin-secondary" :disabled="busy" @click="act(`/payments/${current.id}/check`)"><i class="fa-solid fa-rotate" aria-hidden="true"></i>Check status in DOKU</button>
+            <p v-if="current.status === 'pending'" class="text-xs text-chocolate/65">The status updates automatically when DOKU sends a notification. This page refreshes every 15 seconds.</p>
         </div>
         <div v-if="can.review && order.order_status === 'confirmed' && order.payment_status === 'not_created' && !openPayment" class="mt-4">
             <button type="button" class="admin-primary" :disabled="busy" @click="act('/payments/retry')"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i>Try creating the link again</button>
@@ -151,7 +151,7 @@ onBeforeUnmount(() => clearInterval(timer));
         <details v-if="canCancel" class="mt-5 text-sm"><summary class="admin-error-text cursor-pointer font-bold">Cancel order</summary>
             <form class="mt-3 space-y-3" @submit.prevent="cancelOrder">
                 <Field id="cancel_reason" label="Cancellation reason" :error="errors.cancel_reason"><template #default="{ describedBy }"><textarea id="cancel_reason" v-model="cancelReason" required maxlength="1000" rows="2" :aria-describedby="describedBy" :disabled="busy"></textarea></template></Field>
-                <p v-if="order.payment_status === 'paid'" class="admin-error-text">This order is paid. The refund is done manually in Midtrans.</p>
+                <p v-if="order.payment_status === 'paid'" class="admin-error-text">This order is paid. The refund is done manually in DOKU.</p>
                 <p v-else-if="openPayment" class="text-chocolate/65">The open payment link will be closed.</p>
                 <button class="admin-secondary admin-danger" :disabled="busy"><i class="fa-solid fa-ban" aria-hidden="true"></i>Cancel order</button>
             </form>

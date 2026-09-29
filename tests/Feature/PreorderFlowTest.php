@@ -325,4 +325,31 @@ class PreorderFlowTest extends TestCase
         $this->get('/')->assertPublicPage(fn (PublicPage $page) => $page->where('site', ['instagramUrl' => 'https://instagram.com/orlena', 'tiktokUrl' => '', 'whatsappNumber' => '6281111111111']));
         $this->get('/orders/'.$order->order_code)->assertInertia(fn (Assert $page) => $page->where('whatsappUrl', fn ($link) => str_starts_with($link, 'https://wa.me/6281111111111?text=')));
     }
+
+    public function test_greeting_card_is_optional_and_kept_only_for_hampers(): void
+    {
+        [$product, $outlet] = $this->catalog();
+        $payload = $this->checkout($product, $outlet);
+        // A regular order never stores a card message.
+        $this->post('/order', [...$payload, 'card_message' => 'Selamat!'])->assertSessionHasNoErrors();
+        $this->assertNull(Order::sole()->card_message);
+
+        $hamper = Product::create(['category_id' => $product->category_id, 'sku' => 'HMP-1', 'name' => 'Hampers Lebaran', 'price' => 350000, 'is_active' => true,
+            'is_hamper' => true, 'hamper_contents' => "Brownies\nKartu"]);
+        $payload = $this->checkout($product, $outlet);
+        $payload['items'][] = ['product_id' => $hamper->id, 'quantity' => 1, 'quoted_price' => 350000];
+        $this->post('/order', [...$payload, 'card_message' => str_repeat('a', 301)])->assertSessionHasErrors('card_message');
+        $this->post('/order', [...$payload, 'card_message' => '  Selamat Hari Raya, dari Sinta.  '])->assertSessionHasNoErrors();
+        $order = Order::latest('id')->first();
+        $this->assertSame('Selamat Hari Raya, dari Sinta.', $order->card_message);
+        $this->get('/orders/'.$order->order_code)->assertInertia(fn (Assert $page) => $page
+            ->where('order.card_message', 'Selamat Hari Raya, dari Sinta.')
+            ->where('whatsappUrl', fn ($link) => str_contains(rawurldecode($link), '*Kartu ucapan:* Selamat Hari Raya, dari Sinta.')));
+
+        // Without a message the hampers order is fine too.
+        $payload = $this->checkout($product, $outlet);
+        $payload['items'][] = ['product_id' => $hamper->id, 'quantity' => 1, 'quoted_price' => 350000];
+        $this->post('/order', $payload)->assertSessionHasNoErrors();
+        $this->assertNull(Order::latest('id')->first()->card_message);
+    }
 }

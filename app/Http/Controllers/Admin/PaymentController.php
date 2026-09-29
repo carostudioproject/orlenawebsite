@@ -8,7 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
-/** Every Midtrans payment attempt across orders; changes still happen on the order page. */
+/** Every payment attempt (DOKU) across orders; changes still happen on the order page. */
 class PaymentController extends Controller
 {
     private const STATUSES = ['creating', 'creation_failed', 'pending', 'paid', 'failed', 'expired', 'cancelled', 'refunded'];

@@ -37,11 +37,13 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('view-reports', $roles(Role::Admin, Role::Finance));
         Gate::define('manage-schedule', $roles(Role::Admin, Role::Staff));
         Gate::define('manage-integrations', $roles(Role::Admin));
-        RateLimiter::for('midtrans-webhook', fn (Request $request) => Limit::perMinute(120)->by($request->ip()));
+        RateLimiter::for('payment-webhook', fn (Request $request) => Limit::perMinute(120)->by($request->ip()));
         RateLimiter::for('payment-check', fn (Request $request) => Limit::perMinute(10)->by((string) $request->user()?->id));
         RateLimiter::for('report-export', fn (Request $request) => Limit::perMinute(10)->by((string) $request->user()?->id));
         RateLimiter::for('staff-login', fn (Request $request) => Limit::perMinute(20)->by($request->ip()));
         RateLimiter::for('api', fn (Request $request) => Limit::perMinute(60)->by($request->bearerToken() ? hash('sha256', $request->bearerToken()) : $request->ip()));
         RateLimiter::for('preorder-submit', fn (Request $request) => Limit::perMinute(5)->by($request->ip()));
+        // Order tracking: a burst limit here; failed codes are also limited in OrderStatusController.
+        RateLimiter::for('order-track', fn (Request $request) => Limit::perMinute(20)->by($request->ip()));
     }
 }

@@ -28,10 +28,12 @@ return [
         'key' => env('RESEND_KEY'),
     ],
 
-    'midtrans' => [
-        'server_key' => env('MIDTRANS_SERVER_KEY'),
-        'is_production' => (bool) env('MIDTRANS_IS_PRODUCTION', false),
-        'timeout' => (int) env('MIDTRANS_TIMEOUT', 20),
+    // DOKU Checkout (non-SNAP). Client ID and Secret Key from DOKU Back Office > Integration > API Keys.
+    'doku' => [
+        'client_id' => env('DOKU_CLIENT_ID'),
+        'secret_key' => env('DOKU_SECRET_KEY'),
+        'is_production' => (bool) env('DOKU_IS_PRODUCTION', false),
+        'timeout' => (int) env('DOKU_TIMEOUT', 20),
     ],
 
     // Filled in once Erzap sends API documentation and sandbox credentials. Paths are placeholders until then.
@@ -45,8 +47,8 @@ return [
         'default_outlet_id' => env('ERZAP_DEFAULT_OUTLET_ID'),
         'sales_user_id' => env('ERZAP_SALES_USER_ID'),
         'timeout' => (int) env('ERZAP_TIMEOUT', 20),
-        // Shared secret Erzap sends (Bearer token) when calling our stock and sync-status endpoints.
-        'webhook_token' => env('ERZAP_WEBHOOK_TOKEN'),
+        // false sends "kode": null so Erzap uses its own order numbering.
+        'send_order_code' => (bool) env('ERZAP_SEND_ORDER_CODE', true),
     ],
 
     // Bearer tokens for the read-only REST API (comma separated). Empty means the protected endpoints are closed.

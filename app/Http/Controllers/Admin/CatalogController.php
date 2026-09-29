@@ -18,28 +18,28 @@ class CatalogController extends Controller
 {
     private const MODELS = ['products' => Product::class, 'outlets' => Outlet::class, 'categories' => Category::class];
 
+    private const FILTER_RULES = ['search' => ['nullable', 'string', 'max:100'], 'status' => ['nullable', 'in:active,inactive'], 'type' => ['nullable', 'in:regular,hampers']];
+
     public function index(Request $request)
     {
         $resource = $request->route('resource');
-        $filters = $request->validate(['search' => ['nullable', 'string', 'max:100'], 'status' => ['nullable', 'in:active,inactive'], 'type' => ['nullable', 'in:regular,hampers'], 'page' => ['nullable', 'integer', 'min:1']]);
-        $query = self::MODELS[$resource]::query();
-        if (! empty($filters['search'])) {
-            $query->where('name', 'like', '%'.$filters['search'].'%');
-        }
-        if (! empty($filters['status'])) {
-            $query->where('is_active', $filters['status'] === 'active');
-        }
+        $filters = $request->validate([...self::FILTER_RULES, 'page' => ['nullable', 'integer', 'min:1']]);
+        $query = $this->filtered($resource, $filters);
         if ($resource === 'products') {
             $query->with('category');
-            if (! empty($filters['type'])) {
-                $query->where('is_hamper', $filters['type'] === 'hampers');
-            }
         }
-        if ($resource !== 'products') {
+        // Categories list in order-form order; outlets in website order.
+        if ($resource === 'categories') {
+            $query->orderBy('order_position');
+        } elseif ($resource === 'outlets') {
             $query->orderBy('position');
         }
 
-        return Inertia::render('Admin/Catalog/Index', ['resource' => $resource, 'records' => $query->orderBy('name')->paginate(10)->withQueryString(), 'filters' => $filters]);
+        return Inertia::render('Admin/Catalog/Index', [
+            'resource' => $resource, 'records' => $query->orderBy('name')->paginate(10)->withQueryString(), 'filters' => $filters,
+            // Ids of inactive products without a price in these filters, so bulk activation can say what will be skipped.
+            'unpriced' => $resource === 'products' ? $this->filtered($resource, $filters)->where('is_active', false)->whereNull('price')->pluck('id') : [],
+        ]);
     }
 
     public function create(Request $request)
@@ -132,5 +132,65 @@ class CatalogController extends Controller
         $label = $record instanceof Product ? $record->label() : $record->name;
 
         return back()->with('success', $label.' '.($record->is_active ? 'diaktifkan.' : 'dinonaktifkan.'));
+    }
+
+    /**
+     * Activate or deactivate many rows at once: the selected ids, or every row matching the list filters.
+     * Products without a base price are never activated; they are counted as skipped.
+     */
+    public function bulkStatus(Request $request)
+    {
+        $resource = $request->route('resource');
+        $data = $request->validate([
+            'is_active' => ['required', 'boolean'], 'all' => ['boolean'],
+            'ids' => ['exclude_if:all,true', 'required', 'array', 'min:1', 'max:500'], 'ids.*' => ['integer', 'min:1', 'distinct'],
+            'filters' => ['array'], ...collect(self::FILTER_RULES)->mapWithKeys(fn ($rule, $key) => ['filters.'.$key => $rule])->all(),
+        ], ['ids.required' => 'Select at least one row.']);
+        $active = (bool) $data['is_active'];
+
+        [$changed, $skipped] = DB::transaction(function () use ($resource, $data, $active) {
+            $query = ($data['all'] ?? false) ? $this->filtered($resource, $data['filters'] ?? []) : self::MODELS[$resource]::whereKey($data['ids']);
+            $records = $query->where('is_active', ! $active)->lockForUpdate()->get();
+            [$skipped, $changing] = $records->partition(fn ($record) => $active && $record instanceof Product && ! $record->price);
+            if ($changing->isNotEmpty()) {
+                self::MODELS[$resource]::whereKey($changing->modelKeys())->update(['is_active' => $active]);
+                foreach ($changing as $record) {
+                    Audit::record('catalog.'.($active ? 'activated' : 'deactivated'), $record, ['is_active' => $active, 'bulk' => true]);
+                }
+            }
+
+            return [$changing->count(), $skipped->count()];
+        });
+
+        $noun = [
+            'products' => ['product', 'products'], 'outlets' => ['outlet', 'outlets'], 'categories' => ['category', 'categories'],
+        ][$resource][$changed === 1 ? 0 : 1];
+        // Nothing could be activated: say why instead of a "0 activated" success.
+        if ($changed === 0 && $skipped) {
+            return back()->withErrors(['is_active' => 'No products were activated: '.$skipped.' '.($skipped === 1 ? 'has' : 'have').' no base price yet. Set the price (Edit, or import the Excel file with Harga Jual filled), then activate again.']);
+        }
+        $message = $changed.' '.$noun.' '.($active ? 'activated' : 'deactivated').'.';
+        if ($skipped) {
+            $message .= ' '.$skipped.' stayed inactive because they have no base price yet.';
+        }
+
+        return back()->with('success', $message);
+    }
+
+    /** The list query for the given filters (search by name, status, and product type). */
+    private function filtered(string $resource, array $filters)
+    {
+        $query = self::MODELS[$resource]::query();
+        if (! empty($filters['search'])) {
+            $query->where('name', 'like', '%'.$filters['search'].'%');
+        }
+        if (! empty($filters['status'])) {
+            $query->where('is_active', $filters['status'] === 'active');
+        }
+        if ($resource === 'products' && ! empty($filters['type'])) {
+            $query->where('is_hamper', $filters['type'] === 'hampers');
+        }
+
+        return $query;
     }
 }

@@ -19,6 +19,19 @@ const groups = computed(() => {
         hamperItems: variants.find(variant => variant.is_hamper)?.hamper_items ?? [], saleEndsOn: variants.find(variant => variant.sale_ends_on)?.sale_ends_on ?? null,
     }));
 });
+// Number of items (variants grouped) per category, shown on each chip.
+const counts = computed(() => {
+    const names = new Map<number, Set<string>>();
+    for (const product of props.products) names.set(product.category_id, (names.get(product.category_id) ?? new Set()).add(product.name));
+    return new Map([...names].map(([id, set]) => [id, set.size]));
+});
+// Phones show one scrollable row; "Semua kategori" wraps them all into view. Wider screens always wrap.
+const expanded = ref(false);
+function choose(id: number, event: MouseEvent) {
+    activeCategory.value = id;
+    expanded.value = false;
+    (event.currentTarget as HTMLElement).scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+}
 const pickers = reactive<Record<string, { productId: number; quantity: number }>>({});
 const picker = (group: { key: string; variants: OrderProduct[] }) => (pickers[group.key] ??= { productId: group.variants[0].id, quantity: 1 });
 const formatDate = (date: string) => new Intl.DateTimeFormat('id-ID', { dateStyle: 'long', timeZone: 'UTC' }).format(new Date(`${date}T00:00:00Z`));
@@ -34,10 +47,20 @@ function add(group: { key: string; variants: OrderProduct[] }) {
 </script>
 <template>
     <div class="space-y-5">
-        <div role="group" aria-label="Kategori" class="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-            <button v-for="category in categories" :key="category.id" type="button" class="order-category" :aria-pressed="activeCategory === category.id" @click="activeCategory = category.id">
-                <span class="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-cream"><img v-if="category.image" :src="category.image" alt="" class="size-full object-cover"><i v-else class="fa-solid fa-cookie-bite text-xs" aria-hidden="true"></i></span>{{ category.name }}
-            </button>
+        <div class="space-y-2">
+            <div class="flex items-center justify-between gap-3 sm:hidden">
+                <p class="m-0 text-sm font-bold">Kategori</p>
+                <button v-if="categories.length > 3" type="button" class="text-sm font-bold underline" :aria-expanded="expanded" aria-controls="order-categories" @click="expanded = !expanded">{{ expanded ? 'Ringkas' : `Semua kategori (${categories.length})` }}</button>
+            </div>
+            <div class="relative">
+                <div id="order-categories" role="group" aria-label="Kategori" class="order-categories -mx-1 flex gap-2 px-1 pb-1 sm:flex-wrap sm:overflow-visible" :class="expanded ? 'flex-wrap' : 'overflow-x-auto'">
+                    <button v-for="category in categories" :key="category.id" type="button" class="order-category" :aria-pressed="activeCategory === category.id" @click="choose(category.id, $event)">
+                        <span class="hidden size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-cream sm:flex"><img v-if="category.image" :src="category.image" alt="" class="size-full object-cover"><i v-else class="fa-solid fa-cookie-bite text-xs" aria-hidden="true"></i></span>{{ category.name }}<span class="order-category-count">{{ counts.get(category.id) ?? 0 }}</span>
+                    </button>
+                </div>
+                <!-- Hint that the row scrolls on phones. -->
+                <span v-if="!expanded" class="pointer-events-none absolute inset-y-0 right-0 w-10 bg-linear-to-l from-white to-transparent sm:hidden" aria-hidden="true"></span>
+            </div>
         </div>
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <article v-for="group in groups" :key="group.key" class="order-product">

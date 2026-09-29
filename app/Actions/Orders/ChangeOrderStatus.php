@@ -5,7 +5,7 @@ namespace App\Actions\Orders;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
-use App\Services\Midtrans\MidtransClient;
+use App\Services\Doku\DokuClient;
 use App\Support\Audit;
 use App\Support\OrderHistory;
 use Illuminate\Support\Facades\DB;
@@ -20,7 +20,7 @@ class ChangeOrderStatus
         'delivering' => ['completed'],
     ];
 
-    public function __construct(private MidtransClient $midtrans) {}
+    public function __construct(private DokuClient $doku) {}
 
     public function advance(Order $order, string $from, string $to, User $actor): void
     {
@@ -41,7 +41,7 @@ class ChangeOrderStatus
         }, 3);
     }
 
-    /** Returns false when an open Midtrans link could not be closed and may still accept payment. */
+    /** Returns false when an open DOKU link could not be closed and may still accept payment. */
     public function cancel(Order $order, string $from, string $reason, User $actor): bool
     {
         $closing = DB::transaction(function () use ($order, $from, $reason, $actor) {
@@ -61,10 +61,10 @@ class ChangeOrderStatus
             OrderHistory::record($locked, $from, 'cancelled', $actor->id, $reason);
             Audit::record('order.cancelled', $locked, ['from' => $from, 'payment_status' => $locked->payment_status], $actor->id);
 
-            return $open->filter(fn ($payment) => $payment->snap_token !== null);
+            return $open->filter(fn ($payment) => $payment->checkout_token !== null && $payment->provider_request_id !== null);
         }, 3);
 
-        return $closing->map(fn ($payment) => $this->midtrans->cancel($payment->snap_token, $payment->provider_order_id))->every(fn ($closed) => $closed);
+        return $closing->map(fn ($payment) => $this->doku->cancel($payment->provider_order_id, $payment->provider_request_id))->every(fn ($closed) => $closed);
     }
 
     private function lock(Order $order, string $from): Order

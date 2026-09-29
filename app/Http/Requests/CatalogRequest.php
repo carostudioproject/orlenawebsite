@@ -25,6 +25,7 @@ class CatalogRequest extends FormRequest
         return match ($this->route('resource')) {
             'categories' => [
                 'name' => ['required', 'string', 'max:120', Rule::unique('categories')->ignore($id)],
+                'order_position' => ['sometimes', 'integer', 'min:0', 'max:999'],
                 'is_active' => ['sometimes', 'boolean'],
                 'upload' => ContentImage::RULES,
             ],

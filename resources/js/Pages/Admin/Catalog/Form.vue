@@ -19,6 +19,7 @@ const form = useForm({
     is_active: props.record?.is_active ?? props.resource !== 'products', accepts_preorder: props.record?.accepts_preorder ?? true, is_delivery_hub: props.record?.is_delivery_hub ?? false,
     is_hamper: props.record?.is_hamper ?? !!props.hamperMode, hamper_contents: props.record?.hamper_contents ?? '',
     sale_starts_on: props.record?.sale_starts_on ?? '', sale_ends_on: props.record?.sale_ends_on ?? '',
+    order_position: props.record?.order_position ?? 100,
     upload: null as File | null,
     outlet_prices: (props.record?.outlet_prices ?? []).map(p => ({ outlet_id: p.outlet_id as number | string, price: p.price as number | string })),
 });
@@ -58,6 +59,7 @@ function submit() {
             <Field id="address" label="Address" :error="form.errors.address"><template #default="{ describedBy }"><textarea id="address" v-model="form.address" rows="3" required maxlength="2000" :aria-describedby="describedBy" :aria-invalid="!!form.errors.address"></textarea></template></Field>
             <Field id="maps_url" label="Google Maps link (optional)" :error="form.errors.maps_url"><template #default="{ describedBy }"><input id="maps_url" v-model="form.maps_url" type="url" maxlength="1000" :aria-describedby="describedBy" :aria-invalid="!!form.errors.maps_url"></template></Field>
         </template>
+        <Field v-if="resource === 'categories'" id="order_position" label="Order on the order form" hint="Lower numbers come first in the category chips on /order, e.g. 1 for Brownies. Categories with the same number are sorted by name." :error="form.errors.order_position"><template #default="{ describedBy }"><input id="order_position" v-model.number="form.order_position" type="number" min="0" max="999" required class="max-w-32" :aria-describedby="describedBy"></template></Field>
         <ImageInput id="photo" :label="{ products: 'Product photo', outlets: 'Outlet photo', categories: 'Category photo' }[resource]" :current="record?.image ?? null" :error="form.errors.upload" @select="file => (form.upload = file)" />
         <fieldset class="space-y-3 rounded-xl border border-chocolate/15 p-4">
             <legend class="px-2 text-sm font-bold">Status</legend>

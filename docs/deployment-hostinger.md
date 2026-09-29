@@ -25,7 +25,7 @@ Create `.env` on the server from `.env.example`:
 - `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL=https://<domain>`, then `php artisan key:generate`
 - `DB_*` from Hostinger, `SESSION_SECURE_COOKIE=true`
 - `SITE_INDEXABLE=true` and `META_PIXEL_ENABLED=true` only after approval
-- `MIDTRANS_SERVER_KEY` (sandbox first, production key at launch), `MIDTRANS_IS_PRODUCTION`
+- `DOKU_CLIENT_ID`, `DOKU_SECRET_KEY` (sandbox first, production keys at launch), `DOKU_IS_PRODUCTION`
 - `ERZAP_*` stays disabled until the Erzap documentation arrives; `API_TOKENS` only if an integration needs it
 
 ## 4. First run (SSH or Hostinger terminal)
@@ -43,16 +43,16 @@ php artisan optimize
 cd /home/<user>/<project> && php artisan schedule:run >> /dev/null 2>&1
 ```
 
-This reconciles expired Midtrans links (every 10 minutes) and sends Erzap syncs (every 5 minutes).
+This reconciles expired DOKU links (every 10 minutes) and sends Erzap syncs (every 5 minutes).
 
-## 6. Midtrans
+## 6. DOKU
 
-In the Midtrans dashboard set **Payment Notification URL** to `https://<domain>/webhooks/midtrans`. Test one sandbox payment end to end before switching to production keys.
+In the DOKU Back Office set the **Notification URL** (and the Checkout expired notification) to `https://<domain>/webhooks/doku`. Test one sandbox payment end to end before switching to production keys. See [payments](payments-and-fulfillment.md).
 
 ## 7. Smoke test after each release
 
 - Homepage, About, Blog and `/order` load; place a test order and open WhatsApp.
-- Log in to `/admin`, open the order, confirm, and pay with the Midtrans simulator; the order turns **Lunas** within a minute.
+- Log in to `/admin`, open the order, confirm, and pay with the DOKU sandbox simulator; the order turns **Paid** within a minute.
 - Open **Laporan** and download PDF and Excel.
 - `php artisan schedule:list` shows both scheduled commands.
 

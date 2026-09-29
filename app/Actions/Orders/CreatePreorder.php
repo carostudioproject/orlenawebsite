@@ -5,6 +5,7 @@ namespace App\Actions\Orders;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Outlet;
+use App\Models\Product;
 use App\Services\Ordering\OrderPricing;
 use App\Support\Audit;
 use App\Support\PreorderDate;
@@ -66,6 +67,9 @@ class CreatePreorder
                 'requested_time' => $data['requested_time'] ?? null,
                 'delivery_address' => $data['fulfillment_method'] === 'delivery' ? $data['delivery_address'] : null,
                 'customer_note' => $data['customer_note'] ?? null,
+                // The greeting card only goes with hampers.
+                'card_message' => filled($data['card_message'] ?? null) && Product::whereIn('id', array_column($quote['items'], 'product_id'))->where('is_hamper', true)->exists()
+                    ? trim($data['card_message']) : null,
                 'subtotal' => $quote['subtotal'], 'delivery_fee' => $data['fulfillment_method'] === 'pickup' ? 0 : null,
                 'total' => $quote['subtotal'], 'order_status' => 'pending_review', 'payment_status' => 'not_created',
             ]);

@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\IntegrationController;
 use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\PaymentController;
 use App\Http\Controllers\Admin\PostController;
+use App\Http\Controllers\Admin\ProductImportController;
 use App\Http\Controllers\Admin\ProfileController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\ScheduleController;
@@ -16,7 +17,8 @@ use App\Http\Controllers\Auth\SessionController;
 use App\Http\Controllers\PublicPageController;
 use App\Http\Controllers\Shop\CheckoutController;
 use App\Http\Controllers\Shop\OrderAdditionController;
-use App\Http\Controllers\Webhooks\MidtransWebhookController;
+use App\Http\Controllers\Shop\OrderStatusController;
+use App\Http\Controllers\Webhooks\DokuWebhookController;
 use App\Http\Middleware\PrivateOrderResponse;
 use Illuminate\Support\Facades\Route;
 
@@ -41,9 +43,13 @@ Route::middleware(PrivateOrderResponse::class)->group(function () {
     Route::post('/order/tambah', [OrderAdditionController::class, 'verify'])->middleware('throttle:preorder-submit');
     Route::get('/orders/{code}/tambah', [OrderAdditionController::class, 'create'])->block(10, 10);
     Route::post('/orders/{code}/tambah', [OrderAdditionController::class, 'store'])->middleware('throttle:preorder-submit')->block(10, 10);
+    // Order tracking by Order Code only: status and items, no personal data.
+    Route::get('/cek-pesanan', [OrderStatusController::class, 'find']);
+    Route::post('/cek-pesanan', [OrderStatusController::class, 'lookup'])->middleware('throttle:order-track');
+    Route::get('/cek-pesanan/{code}', [OrderStatusController::class, 'show']);
 });
 
-Route::post('/webhooks/midtrans', MidtransWebhookController::class)->middleware('throttle:midtrans-webhook');
+Route::post('/webhooks/doku', DokuWebhookController::class)->middleware('throttle:payment-webhook');
 
 Route::middleware('guest')->group(function () {
     Route::get('/admin/login', [SessionController::class, 'create'])->name('login');
@@ -89,6 +95,14 @@ Route::middleware(['auth', 'active-staff'])->prefix('admin')->group(function () 
         Route::post('/status', [OrderController::class, 'advance']);
         Route::post('/cancel', [OrderController::class, 'cancel']);
     });
+    // Erzap product export import: preview first, then apply (photos and website settings are never changed).
+    Route::middleware('can:manage-catalog')->prefix('/products/import')->group(function () {
+        Route::get('/', [ProductImportController::class, 'show']);
+        Route::get('/template', [ProductImportController::class, 'template']);
+        Route::post('/', [ProductImportController::class, 'store'])->middleware('throttle:10,1');
+        Route::post('/mapping', [ProductImportController::class, 'mapping']);
+        Route::post('/apply', [ProductImportController::class, 'apply']);
+    });
     foreach (['products', 'outlets', 'categories'] as $resource) {
         Route::get('/'.$resource, [CatalogController::class, 'index'])->defaults('resource', $resource)->middleware('can:view-catalog');
         Route::middleware('can:manage-catalog')->group(function () use ($resource) {
@@ -97,6 +111,7 @@ Route::middleware(['auth', 'active-staff'])->prefix('admin')->group(function () 
             Route::get('/'.$resource.'/{id}/edit', [CatalogController::class, 'edit'])->whereNumber('id')->defaults('resource', $resource);
             Route::put('/'.$resource.'/{id}', [CatalogController::class, 'update'])->whereNumber('id')->defaults('resource', $resource);
             Route::post('/'.$resource.'/{id}/toggle', [CatalogController::class, 'toggle'])->whereNumber('id')->defaults('resource', $resource);
+            Route::post('/'.$resource.'/bulk-status', [CatalogController::class, 'bulkStatus'])->defaults('resource', $resource);
         });
     }
     Route::middleware('can:manage-content')->group(function () {

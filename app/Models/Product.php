@@ -17,8 +17,8 @@ class Product extends Model
     protected function casts(): array
     {
         return [
-            'is_active' => 'boolean', 'is_hamper' => 'boolean', 'price' => 'integer', 'reference_stock' => 'integer',
-            'sale_starts_on' => 'date:Y-m-d', 'sale_ends_on' => 'date:Y-m-d', 'reference_stock_at' => 'datetime',
+            'is_active' => 'boolean', 'is_hamper' => 'boolean', 'price' => 'integer',
+            'sale_starts_on' => 'date:Y-m-d', 'sale_ends_on' => 'date:Y-m-d',
         ];
     }
 

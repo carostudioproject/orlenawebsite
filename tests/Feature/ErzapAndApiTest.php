@@ -42,10 +42,10 @@ class ErzapAndApiTest extends TestCase
         $category = Category::create(['name' => 'Brownies', 'is_active' => true]);
         $this->product = Product::create(['category_id' => $category->id, 'variant' => 'Fullsize', 'sku' => 'B-F', 'name' => 'Berry', 'price' => 80000, 'is_active' => true]);
         $this->outlet = Outlet::create(['code' => 'O', 'name' => 'Test Outlet', 'address' => 'Jl', 'is_active' => true]);
-        config(['services.erzap' => [...config('services.erzap'), 'enabled' => false, 'base_url' => null, 'token' => null, 'webhook_token' => null], 'services.api.tokens' => []]);
+        config(['services.erzap' => [...config('services.erzap'), 'enabled' => false, 'base_url' => null, 'token' => null], 'services.api.tokens' => []]);
     }
 
-    /** A confirmed order with a pending link, then Midtrans settlement. */
+    /** A confirmed order with a pending link, then a DOKU SUCCESS notification. */
     private function paidOrder(): Order
     {
         $customer = Customer::create(['name' => 'Sinta', 'whatsapp' => '6281234567890', 'email' => 'sinta@example.test']);
@@ -59,7 +59,7 @@ class ErzapAndApiTest extends TestCase
             'sku_snapshot' => 'B-F', 'unit_price_snapshot' => 80000, 'quantity' => 2, 'subtotal' => 160000]);
         $payment = Payment::create(['order_id' => $order->id, 'attempt' => 1, 'provider_order_id' => $order->order_code.'-P1', 'open_order_id' => $order->id, 'amount' => 175000, 'status' => 'pending']);
         $this->assertSame('applied', app(ApplyPaymentStatus::class)->handle([
-            'order_id' => $payment->provider_order_id, 'transaction_status' => 'settlement', 'gross_amount' => '175000.00', 'status_code' => '200', 'transaction_id' => 'trx-1', 'payment_type' => 'qris',
+            'order_id' => $payment->provider_order_id, 'transaction_status' => 'SUCCESS', 'gross_amount' => 175000, 'payment_type' => 'QRIS', 'transaction_date' => '2030-01-01T04:00:00Z',
         ], 'webhook'));
 
         return $order->fresh();
@@ -116,7 +116,7 @@ class ErzapAndApiTest extends TestCase
                 && $cart['idoutlet_penerima_pesanan_online_erzap'] === 1 && $cart['iduser_sales_penerima_pesanan_online_erzap'] === 8
                 && $cart['total_pesanan'] === '160000.0' && $cart['ongkos_kirim'] === '15000.0' && $cart['total_pembayaran'] === '175000.0'
                 && $cart['nama'] === 'Sinta' && $cart['telepon'] === '6281234567890' && $cart['alamat_pengiriman'] === 'Secret address 1'
-                && $cart['pelanggan_ekspedisi'] === 'GOJEK/GRAB' && $cart['pelanggan_payment_channel'] === 'MIDTRANS-QRIS'
+                && $cart['pelanggan_ekspedisi'] === 'GOJEK/GRAB' && $cart['pelanggan_payment_channel'] === 'DOKU-QRIS'
                 && $cart['shopping_cart_details'] == [['harga_satuan' => 80000, 'jumlah' => 2, 'tgl_check_in' => null, 'barcode_produk' => '200207230802']];
         });
         $this->get('/admin/orders/'.$order->id)->assertInertia(fn (Assert $page) => $page->where('erzapSync.status', 'synced'));
@@ -132,29 +132,13 @@ class ErzapAndApiTest extends TestCase
         Http::fake(['erzap.test/*' => Http::response(['status' => '1', 'message ' => ''])]);
         config(['services.erzap.enabled' => true, 'services.erzap.base_url' => 'https://erzap.test', 'services.erzap.token' => 't', 'services.erzap.sales_user_id' => '8', 'services.erzap.default_outlet_id' => '5']);
         $this->product->update(['barcode' => '111']);
-        $this->paidOrder();
+        config(['services.erzap.send_order_code' => false]);
+        $order = $this->paidOrder();
         $this->artisan('erzap:sync')->assertSuccessful();
         $this->assertSame('synced', IntegrationSync::sole()->status);
-        Http::assertSent(fn (HttpRequest $request) => $request['shopping_carts']['idoutlet_penerima_pesanan_online_erzap'] === 5);
-    }
-
-    public function test_erzap_can_push_reference_stock_and_sync_results_with_its_token(): void
-    {
-        $this->product->update(['erzap_product_id' => 'P-77']);
-        $this->postJson('/api/v1/erzap/stock', ['items' => [['erzap_product_id' => 'P-77', 'stock' => 12]]])->assertStatus(503);
-        config(['services.erzap.webhook_token' => 'hook-secret']);
-        $this->postJson('/api/v1/erzap/stock', ['items' => [['erzap_product_id' => 'P-77', 'stock' => 12]]], ['Authorization' => 'Bearer wrong'])->assertUnauthorized();
-        $this->postJson('/api/v1/erzap/stock', ['items' => [['erzap_product_id' => 'P-77', 'stock' => 12], ['barcode' => 'nope', 'stock' => 1]]], ['Authorization' => 'Bearer hook-secret'])
-            ->assertOk()->assertJson(['updated' => 1, 'unmatched' => ['nope']]);
-        $this->assertSame(12, $this->product->fresh()->reference_stock);
-        // Reference stock never blocks ordering, even at zero.
-        $this->product->update(['reference_stock' => 0]);
-        $this->get('/order')->assertInertia(fn (Assert $page) => $page->has('products', 1));
-
-        $order = $this->paidOrder();
-        $this->postJson('/api/v1/erzap/sync-status', ['reference' => $order->order_code, 'status' => 'success', 'erzap_id' => 'ERZ-9'], ['Authorization' => 'Bearer hook-secret'])->assertOk()->assertJson(['status' => 'synced']);
-        $this->assertSame('ERZ-9', IntegrationSync::sole()->external_ref);
-        $this->postJson('/api/v1/erzap/sync-status', ['reference' => 'ORL-NOPE', 'status' => 'success'], ['Authorization' => 'Bearer hook-secret'])->assertNotFound();
+        // Without our code Erzap numbers the order itself; the Order Code stays readable in the note.
+        Http::assertSent(fn (HttpRequest $request) => $request['shopping_carts']['idoutlet_penerima_pesanan_online_erzap'] === 5
+            && $request['shopping_carts']['kode'] === null && str_starts_with($request['shopping_carts']['informasi_tambahan_text'], 'Website order '.$order->order_code));
     }
 
     public function test_rest_api_serves_public_catalog_and_token_protected_orders(): void

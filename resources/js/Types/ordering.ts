@@ -7,7 +7,7 @@ export interface Preorder {
     review_version: number;
     id: number; order_code: string; customer: { name: string; whatsapp: string; email: string | null };
     items: OrderItem[]; outlet_name_snapshot: string; fulfillment_method: 'pickup' | 'delivery'; requested_date: string;
-    requested_time: string | null; delivery_address: string | null; customer_note: string | null;
+    requested_time: string | null; delivery_address: string | null; customer_note: string | null; card_message?: string | null;
     subtotal: number; delivery_fee: number | null; total: number; order_status: OrderStatus; payment_status: PaymentStatus; created_at: string;
 }
 export interface PaymentAttempt {

@@ -29,14 +29,14 @@ const method = (type: string | null) => (type ? type.replace(/_/g, ' ') : '—')
 <template>
     <Head title="Payments · Orlena" />
     <h1 class="text-3xl font-bold">Payments</h1>
-    <p class="admin-muted mt-2 text-sm">All Midtrans payment links. New links and cancellations are handled on the order page.</p>
+    <p class="admin-muted mt-2 text-sm">All DOKU payment links. New links and cancellations are handled on the order page.</p>
     <ul class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <li class="admin-card"><p class="admin-muted m-0 text-sm">Received today</p><p class="m-0 mt-1 text-2xl font-bold tabular-nums">{{ rupiah(totals.paid_today) }}</p></li>
         <li class="admin-card"><p class="admin-muted m-0 text-sm">Awaiting payment</p><p class="m-0 mt-1 text-2xl font-bold tabular-nums">{{ totals.pending }} {{ totals.pending === 1 ? 'link' : 'links' }}</p><p class="admin-muted m-0 text-xs">{{ rupiah(totals.pending_amount) }}</p></li>
         <li class="admin-card"><p class="admin-muted m-0 text-sm">Failed (7 days)</p><p class="m-0 mt-1 text-2xl font-bold tabular-nums">{{ totals.failed_week }}</p></li>
     </ul>
     <form class="my-6 flex flex-wrap items-end gap-3" @submit.prevent="apply">
-        <SearchInput id="search" v-model="live.search" label="Order Code, name or Midtrans ID" :loading="loading" />
+        <SearchInput id="search" v-model="live.search" label="Order Code, name or DOKU ID" :loading="loading" />
         <div><label for="status" class="mb-2 block text-sm">Status</label><select id="status" v-model="live.status"><option value="">All</option><option v-for="status in statuses" :key="status" :value="status">{{ paymentStatusLabel(status) }}</option></select></div>
         <div><label for="from" class="mb-2 block text-sm">Created from</label><input id="from" v-model="live.from" type="date"></div>
         <div><label for="to" class="mb-2 block text-sm">To</label><input id="to" v-model="live.to" type="date" :min="live.from || undefined"></div>

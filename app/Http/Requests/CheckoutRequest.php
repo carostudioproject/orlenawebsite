@@ -39,6 +39,7 @@ class CheckoutRequest extends FormRequest
             'requested_time' => ['required', 'date_format:H:i'],
             'delivery_address' => ['exclude_unless:fulfillment_method,delivery', 'required', 'string', 'max:2000'],
             'customer_note' => ['nullable', 'string', 'max:2000'],
+            'card_message' => ['nullable', 'string', 'max:300'],
         ];
     }
 
@@ -55,6 +56,7 @@ class CheckoutRequest extends FormRequest
             'items.*.quantity.min' => 'Jumlah minimal 1.',
             'items.*.quantity.max' => 'Jumlah maksimal 99 per produk.',
             'requested_date.date_format' => 'Pilih tanggal PO yang valid.',
+            'card_message.max' => 'Pesan kartu ucapan maksimal 300 karakter.',
             'requested_time.date_format' => 'Pilih jam yang valid.',
         ];
     }

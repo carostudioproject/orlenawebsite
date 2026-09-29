@@ -123,9 +123,11 @@ class ErzapSync
         $address = $delivery ? (string) $order->delivery_address : '';
         $schedule = $order->requested_date->toDateString().($order->requested_time ? ' '.substr($order->requested_time, 0, 5) : '').' WITA';
         $note = implode(' | ', array_filter([
+            'Website order '.$order->order_code,
             ($delivery ? 'Delivery (Gojek/Grab)' : 'Pickup '.$order->outlet_name_snapshot).', '.$schedule,
-            'Paid via Midtrans'.($payment?->payment_type ? ' ('.$payment->payment_type.')' : ''),
+            'Paid via DOKU'.($payment?->payment_type ? ' ('.$payment->payment_type.')' : ''),
             $order->customer_note ? 'Note: '.$order->customer_note : null,
+            $order->card_message ? 'Greeting card: '.$order->card_message : null,
         ]));
 
         return [
@@ -134,9 +136,10 @@ class ErzapSync
             'created_at' => $order->created_at->setTimezone('Asia/Makassar')->toIso8601String(),
             'email' => (string) ($order->customer->email ?? ''),
             'is_drop_ship' => false,
-            'kode' => $order->order_code,
+            // Our Order Code, or null so Erzap numbers the order itself (ERZAP_SEND_ORDER_CODE=false). The code is always in the note.
+            'kode' => config('services.erzap.send_order_code', true) ? $order->order_code : null,
             'kode_pos' => '', 'kode_pos_pengiriman' => '',
-            'konfirmasi_dari_bank' => 'Midtrans',
+            'konfirmasi_dari_bank' => 'DOKU',
             'konfirmasi_nama_akun' => null, 'konfirmasi_no_rekening_akun' => null,
             'konfirmasi_tanggal_bayar' => ($payment?->paid_at ?? $order->updated_at)->setTimezone('Asia/Makassar')->toIso8601String(),
             'nama' => $order->customer->name, 'nama_penerima_pengiriman' => $order->customer->name,
@@ -148,7 +151,7 @@ class ErzapSync
             'total_pesanan' => $money($order->subtotal),
             'pelanggan_kecamatan' => '', 'pelanggan_kota' => '', 'pelanggan_country' => '', 'pelanggan_provinsi' => '',
             'pelanggan_kecamatan_pengiriman' => '', 'pelanggan_kota_pengiriman' => '', 'pelanggan_country_pengiriman' => '', 'pelanggan_provinsi_pengiriman' => '',
-            'pelanggan_payment_channel' => strtoupper('MIDTRANS'.($payment?->payment_type ? '-'.$payment->payment_type : '')),
+            'pelanggan_payment_channel' => strtoupper('DOKU'.($payment?->payment_type ? '-'.$payment->payment_type : '')),
             'pelanggan_ekspedisi' => $delivery ? 'GOJEK/GRAB' : 'PICKUP',
             'pelanggan_kode' => null,
             'idoutlet_penerima_pesanan_online_erzap' => $this->outletId($order),

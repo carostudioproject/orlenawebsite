@@ -39,6 +39,9 @@ class OrderWhatsApp
         if ($order->customer_note) {
             $lines[] = '*Catatan:* '.$order->customer_note;
         }
+        if ($order->card_message) {
+            $lines[] = '*Kartu ucapan:* '.$order->card_message;
+        }
 
         return implode("\n", [...$lines, '', 'Mohon dicek dan dikonfirmasi ya. Terima kasih.']);
     }

@@ -12,7 +12,7 @@ class Payment extends Model
 
     protected $guarded = ['id'];
 
-    protected $hidden = ['snap_token', 'open_order_id'];
+    protected $hidden = ['checkout_token', 'provider_request_id', 'open_order_id'];
 
     protected function casts(): array
     {

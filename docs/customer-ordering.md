@@ -50,7 +50,7 @@ Open `/order` or the **Pre-order** navigation link. The form uses the current ac
 
 Then select products and quantities, fill customer/date details and choose an outlet, all on the same form, and submit. The generated order appears under **Dashboard → Pesanan**. Actual complete order creation is covered by isolated test fixtures rather than activating live draft data.
 
-Still pending: final product corrections and images, variant/hamper requirements, fulfillment-hour rules, production QA, staff review/edit/cancel rules, shipping amount entry, payment policy, and Midtrans/Erzap integrations. No production deployment has occurred.
+Still pending: final product corrections and images, variant/hamper requirements, fulfillment-hour rules, production QA, staff review/edit/cancel rules, shipping amount entry, payment policy, and payment/Erzap integrations (payments now use DOKU). No production deployment has occurred.
 
 ## Staff review milestone (2026-09-23)
 
@@ -60,7 +60,7 @@ A locked transaction checks `review_version` to prevent overwriting a newer staf
 
 Migration `2026_09_23_000003_add_order_reviews` adds `orders.review_version` and `order_reviews`. No new environment variables or dependencies. Tests cover both authorized roles, guests, disabled staff, stale submissions, invalid fees, payment/status locks, history, totals, and internal-note privacy.
 
-Next milestone: Confirm & Create Payment with Midtrans sandbox. Full payment/deposit, expiry, cancellation/refund permissions, and sandbox credentials must be resolved before that workflow is activated.
+Next milestone: Confirm & Create Payment (built; now DOKU Checkout, see payments-and-fulfillment.md). Full payment/deposit, expiry, cancellation/refund permissions, and sandbox credentials must be resolved before that workflow is activated.
 
 ## Order form v2 (owner request)
 

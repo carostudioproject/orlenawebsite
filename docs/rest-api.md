@@ -24,12 +24,3 @@ Tokens come from `API_TOKENS` in `.env` (comma separated, use long random string
 | GET | `/reports/sales?from=&to=&outlet_id=&product_id=&status=` | Same figures as the dashboard report (top 50 products) |
 
 Order responses include the customer's name only. WhatsApp number, email and delivery address are never returned.
-
-## Erzap callbacks (`Authorization: Bearer <ERZAP_WEBHOOK_TOKEN>`)
-
-See [Erzap integration](erzap-integration.md).
-
-| Method | Path | Body |
-|---|---|---|
-| POST | `/erzap/stock` | `{"items": [{"erzap_product_id": "P-77", "stock": 12}, {"barcode": "899…", "stock": 0}]}` → `{"updated": n, "unmatched": [...]}` |
-| POST | `/erzap/sync-status` | `{"reference": "<order_code>", "type": "transaction.push", "status": "success"|"failed", "erzap_id": "…", "message": "…"}` |

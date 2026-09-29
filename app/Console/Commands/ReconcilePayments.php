@@ -4,14 +4,14 @@ namespace App\Console\Commands;
 
 use App\Actions\Payments\ReconcilePayment;
 use App\Models\Payment;
-use App\Services\Midtrans\MidtransException;
+use App\Services\Doku\DokuException;
 use Illuminate\Console\Command;
 
 class ReconcilePayments extends Command
 {
     protected $signature = 'payments:reconcile {--limit=50}';
 
-    protected $description = 'Check pending Midtrans payments whose link has expired and record their final status';
+    protected $description = 'Check pending DOKU payments whose link has expired and record their final status';
 
     public function handle(ReconcilePayment $reconcile): int
     {
@@ -20,7 +20,7 @@ class ReconcilePayments extends Command
         foreach ($payments as $payment) {
             try {
                 $this->line($payment->provider_order_id.': '.$reconcile->handle($payment));
-            } catch (MidtransException $e) {
+            } catch (DokuException $e) {
                 $this->warn($payment->provider_order_id.': '.$e->getMessage());
             }
         }

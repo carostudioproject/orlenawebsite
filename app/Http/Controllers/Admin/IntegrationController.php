@@ -47,7 +47,7 @@ class IntegrationController extends Controller
         $products = Product::with('category:id,name')
             ->when($filters['search'] ?? null, fn ($q, $search) => $q->where(fn ($q) => $q->where('name', 'like', '%'.$search.'%')->orWhere('sku', 'like', '%'.$search.'%')->orWhere('barcode', 'like', '%'.$search.'%')))
             ->when($filters['unmapped'] ?? null, fn ($q) => $q->where(fn ($q) => $q->whereNull('barcode')->orWhere('barcode', '')))
-            ->orderBy('name')->orderBy('variant')->paginate(10, ['id', 'category_id', 'name', 'variant', 'sku', 'is_active', 'erzap_product_id', 'erzap_variant_id', 'barcode', 'reference_stock', 'reference_stock_at'])->withQueryString();
+            ->orderBy('name')->orderBy('variant')->paginate(10, ['id', 'category_id', 'name', 'variant', 'sku', 'is_active', 'erzap_product_id', 'erzap_variant_id', 'barcode'])->withQueryString();
 
         return Inertia::render('Admin/Integrations/Mapping', [
             'outlets' => Outlet::orderBy('position')->orderBy('name')->get(['id', 'name', 'code', 'erzap_outlet_id']),

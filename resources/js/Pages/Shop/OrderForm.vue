@@ -27,12 +27,14 @@ const closedDateHint = computed(() => {
 const form = useForm({
     checkout_key: props.checkoutKey, items: [] as { product_id: number; quantity: number }[],
     name: '', whatsapp: '', email: '', fulfillment_method: 'pickup' as 'pickup' | 'delivery', outlet_id: '' as number | string,
-    requested_date: '', requested_time: '', delivery_address: '', customer_note: '',
+    requested_date: '', requested_time: '', delivery_address: '', customer_note: '', card_message: '',
 });
 watch(() => props.checkoutKey, key => { form.checkout_key = key; });
 
 // Step 1 lives in <ProductPicker>; this page owns the cart.
 const productById = computed(() => new Map(props.products.map(product => [product.id, product])));
+// The optional greeting card appears once a hampers product is in the cart.
+const hasHamper = computed(() => form.items.some(item => productById.value.get(item.product_id)?.is_hamper));
 const categoryName = (id: number) => props.categories.find(category => category.id === id)?.name ?? '';
 function addToCart(productId: number, quantity: number) {
     const existing = form.items.find(item => item.product_id === productId);
@@ -118,7 +120,8 @@ function scrollToCart() { document.getElementById('cart')?.scrollIntoView({ beha
                     <Field id="requested_date" label="Tanggal PO" :hint="`Paling awal ${earliestDate}. Batas pemesanan ${cutoffLabel}.`" :error="form.errors.requested_date ?? closedDateHint ?? undefined"><template #default="{ describedBy }"><input id="requested_date" v-model="form.requested_date" type="date" required :min="earliestDate" :aria-describedby="describedBy" :aria-invalid="!!form.errors.requested_date"></template></Field>
                     <Field id="requested_time" :label="form.fulfillment_method === 'delivery' ? 'Jam pengiriman (WITA)' : 'Jam pickup (WITA)'" hint="Jam akan dikonfirmasi admin sesuai kapasitas." :error="form.errors.requested_time"><template #default="{ describedBy }"><input id="requested_time" v-model="form.requested_time" type="time" required :aria-describedby="describedBy" :aria-invalid="!!form.errors.requested_time"></template></Field>
                 </div>
-                <Field id="customer_note" label="Catatan (opsional)" :error="form.errors.customer_note"><template #default="{ describedBy }"><textarea id="customer_note" v-model="form.customer_note" rows="3" maxlength="2000" placeholder="Misalnya tulisan ucapan atau permintaan khusus" :aria-describedby="describedBy"></textarea></template></Field>
+                <Field v-if="hasHamper" id="card_message" label="Kartu ucapan hampers (opsional)" :hint="`Ditulis di kartu yang disertakan bersama hampers. ${form.card_message.length}/300 karakter.`" :error="form.errors.card_message"><template #default="{ describedBy }"><textarea id="card_message" v-model="form.card_message" rows="3" maxlength="300" placeholder="Contoh: Selamat Hari Raya, semoga selalu diberi berkah. Dari keluarga Sinta." :aria-describedby="describedBy" :aria-invalid="!!form.errors.card_message"></textarea></template></Field>
+                <Field id="customer_note" label="Catatan (opsional)" :error="form.errors.customer_note"><template #default="{ describedBy }"><textarea id="customer_note" v-model="form.customer_note" rows="3" maxlength="2000" placeholder="Misalnya tulisan di kue atau permintaan khusus" :aria-describedby="describedBy"></textarea></template></Field>
             </section>
         </div>
 

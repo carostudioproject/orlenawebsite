@@ -15,7 +15,7 @@ class OrderCatalog
             ->orderBy('name')->orderByDesc('price')->get();
 
         return [
-            'categories' => $products->pluck('category')->unique('id')->sortBy([['position', 'asc'], ['name', 'asc']])->values()
+            'categories' => $products->pluck('category')->unique('id')->sortBy([['order_position', 'asc'], ['name', 'asc']])->values()
                 ->map(fn ($category) => ['id' => $category->id, 'name' => $category->name, 'image' => $category->image]),
             'products' => $products->map(fn (Product $product) => [
                 'id' => $product->id, 'name' => $product->name, 'category_id' => $product->category_id, 'description' => $product->description,

@@ -22,7 +22,9 @@ class PaymentFlowTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const KEY = 'SB-Mid-server-TEST';
+    private const KEY = 'SK-doku-secret-TEST';
+
+    private const CLIENT = 'BRN-0001-TEST';
 
     protected function beforeRefreshingDatabase(): void
     {
@@ -34,7 +36,7 @@ class PaymentFlowTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        config(['services.midtrans.server_key' => self::KEY, 'services.midtrans.is_production' => false]);
+        config(['services.doku.client_id' => self::CLIENT, 'services.doku.secret_key' => self::KEY, 'services.doku.is_production' => false]);
         $this->travelTo(CarbonImmutable::parse('2030-01-01 12:00:00', 'Asia/Makassar'));
     }
 
@@ -59,25 +61,45 @@ class PaymentFlowTest extends TestCase
         return $order;
     }
 
-    /** Queued responses are used first; afterwards Snap succeeds and Get Status reports no transaction. */
-    private function fakeMidtrans(array $snap = [], array $status = []): void
+    /** Queued responses are used first; afterwards Checkout succeeds and Check Status reports no transaction. */
+    private function fakeDoku(array $checkout = [], array $status = []): void
     {
-        $snapSequence = Http::sequence($snap)->whenEmpty(Http::response(['token' => 'snap-token', 'redirect_url' => 'https://app.sandbox.midtrans.com/snap/v4/redirection/snap-token'], 201));
-        $statusSequence = Http::sequence($status)->whenEmpty(Http::response(['status_code' => '404', 'status_message' => "Transaction doesn't exist."], 404));
+        $checkoutSequence = Http::sequence($checkout)->whenEmpty(Http::response(['message' => ['SUCCESS'], 'response' => [
+            'order' => ['session_id' => 'session-1'], 'payment' => ['token_id' => 'doku-token', 'url' => 'https://sandbox.doku.com/checkout-link-v2/doku-token'],
+        ]]));
+        $statusSequence = Http::sequence($status)->whenEmpty(Http::response(['error' => ['message' => 'Order not found']], 404));
         Http::fake([
-            '*/snap/v1/transactions/*/cancel' => Http::response(['canceled_at' => '2030-01-01T04:00:00Z']),
-            '*/snap/v1/transactions' => $snapSequence,
-            '*/status' => $statusSequence,
+            '*/checkout/v3/cancellations' => Http::response(['message' => ['SUCCESS']]),
+            '*/checkout/v1/payment' => $checkoutSequence,
+            '*/orders/v1/status/*' => $statusSequence,
         ]);
     }
 
-    private function notify(Payment $payment, string $status, array $extra = [])
+    /** A DOKU Checkout HTTP Notification for this payment. */
+    private function notify(Payment $payment, string $status, array $extra = [], ?string $signature = null)
     {
-        $data = ['order_id' => $payment->provider_order_id, 'status_code' => '200', 'gross_amount' => $payment->amount.'.00',
-            'transaction_status' => $status, 'transaction_id' => 'trx-'.$payment->id, 'payment_type' => 'qris', 'fraud_status' => 'accept', ...$extra];
-        $data['signature_key'] ??= hash('sha512', $data['order_id'].$data['status_code'].$data['gross_amount'].self::KEY);
+        $body = array_replace_recursive([
+            'service' => ['id' => 'QRIS'], 'acquirer' => ['id' => 'NOBU'], 'channel' => ['id' => 'QRIS'],
+            'order' => ['invoice_number' => $payment->provider_order_id, 'amount' => $payment->amount],
+            'transaction' => ['status' => $status, 'date' => '2030-01-01T04:00:00Z', 'original_request_id' => 'x'],
+        ], $extra);
 
-        return $this->postJson('/webhooks/midtrans', $data);
+        return $this->signedNotification(json_encode($body, JSON_UNESCAPED_SLASHES), $signature);
+    }
+
+    /** Signed the way DOKU signs notifications: HMAC-SHA256 over the headers, our path and the body digest. */
+    private function signedNotification(string $body, ?string $signature = null)
+    {
+        $requestId = (string) Str::uuid();
+        $timestamp = '2030-01-01T04:00:01Z';
+        $components = 'Client-Id:'.self::CLIENT."\nRequest-Id:".$requestId."\nRequest-Timestamp:".$timestamp
+            ."\nRequest-Target:/webhooks/doku\nDigest:".base64_encode(hash('sha256', $body, true));
+        $signature ??= 'HMACSHA256='.base64_encode(hash_hmac('sha256', $components, self::KEY, true));
+
+        return $this->call('POST', '/webhooks/doku', [], [], [], [
+            'CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json', 'HTTP_CLIENT_ID' => self::CLIENT,
+            'HTTP_REQUEST_ID' => $requestId, 'HTTP_REQUEST_TIMESTAMP' => $timestamp, 'HTTP_SIGNATURE' => $signature,
+        ], $body);
     }
 
     private function confirm(Order $order): void
@@ -85,9 +107,9 @@ class PaymentFlowTest extends TestCase
         $this->post('/admin/orders/'.$order->id.'/confirm', ['review_version' => $order->fresh()->review_version])->assertSessionHasNoErrors();
     }
 
-    public function test_confirmation_creates_one_midtrans_link_capped_by_twenty_four_hours(): void
+    public function test_confirmation_creates_one_signed_doku_link_capped_by_twenty_four_hours(): void
     {
-        $this->fakeMidtrans();
+        $this->fakeDoku();
         $order = $this->order();
         $staff = User::factory()->create();
         $this->post('/admin/orders/'.$order->id.'/confirm', ['review_version' => 0])->assertRedirect('/admin/login');
@@ -97,15 +119,21 @@ class PaymentFlowTest extends TestCase
         $order->refresh();
         $this->assertSame(['confirmed', 'pending'], [$order->order_status, $order->payment_status]);
         $payment = Payment::sole();
-        $this->assertSame([$order->order_code.'-P1', 'pending', 175000], [$payment->provider_order_id, $payment->status, $payment->amount]);
+        $this->assertSame([$order->order_code.'-P1', 'pending', 175000, 'doku'], [$payment->provider_order_id, $payment->status, $payment->amount, $payment->provider]);
+        $this->assertSame(['https://sandbox.doku.com/checkout-link-v2/doku-token', 'session-1'], [$payment->payment_url, $payment->transaction_id]);
         $this->assertSame('2030-01-02 12:00:00', $payment->expires_at->format('Y-m-d H:i:s'));
-        Http::assertSent(function (HttpRequest $request) use ($order) {
-            $items = collect($request['item_details']);
+        Http::assertSent(function (HttpRequest $request) use ($order, $payment) {
+            $items = collect($request['order']['line_items']);
+            $components = 'Client-Id:'.self::CLIENT."\nRequest-Id:".$payment->provider_request_id."\nRequest-Timestamp:2030-01-01T04:00:00Z"
+                ."\nRequest-Target:/checkout/v1/payment\nDigest:".base64_encode(hash('sha256', $request->body(), true));
 
-            return $request->url() === 'https://app.sandbox.midtrans.com/snap/v1/transactions'
-                && $request->hasHeader('Authorization', 'Basic '.base64_encode(self::KEY.':'))
-                && $request['transaction_details'] === ['order_id' => $order->order_code.'-P1', 'gross_amount' => 175000]
-                && $request['expiry'] === ['start_time' => '2030-01-01 11:00:00 +0700', 'unit' => 'minute', 'duration' => 1440]
+            return $request->url() === 'https://api-sandbox.doku.com/checkout/v1/payment'
+                && $request->header('Client-Id') === [self::CLIENT] && $request->header('Request-Id') === [$payment->provider_request_id]
+                && $request->header('Request-Timestamp') === ['2030-01-01T04:00:00Z']
+                && $request->header('Signature') === ['HMACSHA256='.base64_encode(hash_hmac('sha256', $components, self::KEY, true))]
+                && $request['order']['invoice_number'] === $order->order_code.'-P1' && $request['order']['amount'] === 175000
+                && $request['payment'] === ['payment_due_date' => 1440]
+                && $request['customer']['phone'] === '6281234567890'
                 && $items->sum(fn ($item) => $item['price'] * $item['quantity']) === 175000;
         });
 
@@ -113,17 +141,18 @@ class PaymentFlowTest extends TestCase
         $this->post('/admin/orders/'.$order->id.'/payments/retry')->assertSessionHasErrors('payment');
         $this->assertDatabaseCount('payments', 1);
         $this->get('/admin/orders/'.$order->id)->assertInertia(fn (Assert $page) => $page->has('payments', 1)
-            ->missing('payments.0.snap_token')->where('payments.0.payment_url', $payment->payment_url))->assertDontSee(self::KEY);
+            ->missing('payments.0.checkout_token')->missing('payments.0.provider_request_id')->where('payments.0.payment_url', $payment->payment_url))->assertDontSee(self::KEY);
         $this->assertDatabaseHas('order_status_histories', ['order_id' => $order->id, 'from_status' => 'pending_review', 'to_status' => 'confirmed', 'actor_id' => $staff->id]);
     }
 
     public function test_link_expiry_stops_at_cutoff_and_closed_dates_must_be_rescheduled(): void
     {
-        $this->fakeMidtrans();
+        $this->fakeDoku();
         $this->actingAs(User::factory()->create());
         $order = $this->order(['requested_date' => '2030-01-02']);
         $this->confirm($order);
         $this->assertSame('2030-01-01 18:00:00', Payment::sole()->expires_at->format('Y-m-d H:i:s'));
+        Http::assertSent(fn (HttpRequest $request) => $request['payment'] === ['payment_due_date' => 360]);
 
         $this->travelTo(CarbonImmutable::parse('2030-01-01 17:50:00', 'Asia/Makassar'));
         $late = $this->order(['requested_date' => '2030-01-02']);
@@ -136,57 +165,60 @@ class PaymentFlowTest extends TestCase
         $this->assertSame('pending', $late->fresh()->payment_status);
     }
 
-    public function test_midtrans_failure_keeps_order_confirmed_and_retry_creates_a_new_attempt(): void
+    public function test_doku_failure_keeps_order_confirmed_and_retry_creates_a_new_attempt(): void
     {
-        $this->fakeMidtrans([Http::response(['error_messages' => ['Access denied']], 401)]);
+        $this->fakeDoku([Http::response(['message' => ['Invalid Signature']], 401)]);
         $this->actingAs(User::factory()->create());
         $order = $this->order();
         $this->post('/admin/orders/'.$order->id.'/confirm', ['review_version' => 0])->assertSessionHasErrors('payment');
         $this->assertSame(['confirmed', 'not_created'], [$order->fresh()->order_status, $order->fresh()->payment_status]);
         $this->assertSame('creation_failed', Payment::sole()->status);
-        $this->assertStringNotContainsString(self::KEY, Payment::sole()->last_error);
+        $this->assertSame('DOKU rejected the payment (HTTP 401: Invalid Signature)', Payment::sole()->last_error);
 
         $this->post('/admin/orders/'.$order->id.'/payments/retry')->assertSessionHasNoErrors();
         $this->assertSame('pending', $order->fresh()->payment_status);
         $this->assertSame([1 => 'creation_failed', 2 => 'pending'], Payment::orderBy('attempt')->pluck('status', 'attempt')->all());
+        $this->assertNotSame(Payment::where('attempt', 1)->value('provider_request_id'), Payment::where('attempt', 2)->value('provider_request_id'));
     }
 
-    public function test_verified_webhooks_are_idempotent_and_never_regress_paid_orders(): void
+    public function test_verified_notifications_are_idempotent_and_never_regress_paid_orders(): void
     {
-        $this->fakeMidtrans();
+        $this->fakeDoku();
         $this->actingAs(User::factory()->create());
         $order = $this->order();
         $this->confirm($order);
         $payment = Payment::sole();
 
-        $this->notify($payment, 'settlement', ['signature_key' => 'forged'])->assertForbidden();
-        $this->notify($payment, 'settlement', ['gross_amount' => '1000.00'])->assertOk()->assertJson(['status' => 'amount_mismatch']);
+        $this->notify($payment, 'SUCCESS', [], 'HMACSHA256=forged')->assertUnauthorized();
+        $this->notify($payment, 'SUCCESS', ['order' => ['amount' => 1000]])->assertOk()->assertJson(['status' => 'amount_mismatch']);
         $this->assertSame('pending', $order->fresh()->payment_status);
-        $this->notify($payment, 'settlement')->assertOk()->assertJson(['status' => 'applied']);
-        $this->notify($payment, 'settlement')->assertOk()->assertJson(['status' => 'duplicate']);
-        $this->notify($payment, 'pending', ['status_code' => '201'])->assertOk()->assertJson(['status' => 'ignored']);
-        $this->notify($payment, 'expire', ['status_code' => '407'])->assertOk()->assertJson(['status' => 'ignored']);
+        // On DOKU Checkout a FAILED attempt keeps the link open: the customer may pick another method.
+        $this->notify($payment, 'FAILED', ['channel' => ['id' => 'EMONEY_OVO']])->assertOk()->assertJson(['status' => 'no_change']);
+        $this->notify($payment, 'SUCCESS')->assertOk()->assertJson(['status' => 'applied']);
+        $this->notify($payment, 'SUCCESS')->assertOk()->assertJson(['status' => 'duplicate']);
+        $this->notify($payment, 'PENDING', ['transaction' => ['date' => '2030-01-01T05:00:00Z']])->assertOk()->assertJson(['status' => 'ignored']);
+        $this->notify($payment, 'EXPIRED')->assertOk()->assertJson(['status' => 'ignored']);
 
         $this->assertSame(['paid', 'confirmed'], [$order->fresh()->payment_status, $order->fresh()->order_status]);
         $this->assertNull($payment->fresh()->open_order_id);
-        $this->assertSame('qris', $payment->fresh()->payment_type);
+        $this->assertSame('QRIS', $payment->fresh()->payment_type);
         $this->assertSame(1, DB::table('audit_logs')->where('action', 'payment.status_changed')->count());
-        // mismatch, settlement, late pending, late expire; the duplicate settlement is not stored twice.
-        $this->assertSame(4, DB::table('payment_events')->count());
-        $this->postJson('/webhooks/midtrans', ['order_id' => 'unknown', 'status_code' => '200', 'gross_amount' => '1.00', 'transaction_status' => 'settlement',
-            'signature_key' => hash('sha512', 'unknown2001.00'.self::KEY)])->assertOk()->assertJson(['status' => 'unknown_payment']);
+        // mismatch, failed attempt, success, late pending, late expire; the duplicate success is not stored twice.
+        $this->assertSame(5, DB::table('payment_events')->count());
+        $this->signedNotification(json_encode(['order' => ['invoice_number' => 'unknown', 'amount' => 1], 'transaction' => ['status' => 'SUCCESS']]))
+            ->assertOk()->assertJson(['status' => 'unknown_payment']);
         $this->post('/admin/orders/'.$order->id.'/review', ['review_version' => 0, 'delivery_fee' => 1, 'note' => 'Too late'])->assertSessionHasErrors('review');
     }
 
     public function test_expired_link_requires_reason_for_a_new_link_and_uses_latest_total(): void
     {
-        $this->fakeMidtrans();
+        $this->fakeDoku();
         $this->actingAs(User::factory()->create());
         $order = $this->order();
         $this->confirm($order);
         $this->post('/admin/orders/'.$order->id.'/payments/renew', ['reason' => 'Too early'])->assertSessionHasErrors('payment');
         $this->post('/admin/orders/'.$order->id.'/review', ['review_version' => 0, 'delivery_fee' => 1, 'note' => 'Locked'])->assertSessionHasErrors('review');
-        $this->notify(Payment::sole(), 'expire', ['status_code' => '407'])->assertJson(['status' => 'applied']);
+        $this->notify(Payment::sole(), 'EXPIRED')->assertJson(['status' => 'applied']);
         $this->assertSame('expired', $order->fresh()->payment_status);
 
         $this->post('/admin/orders/'.$order->id.'/review', ['review_version' => 0, 'delivery_fee' => 20000, 'note' => 'New courier quote'])->assertSessionHasNoErrors();
@@ -196,22 +228,22 @@ class PaymentFlowTest extends TestCase
         $this->assertSame([180000, 'pending', 'Customer asked again'], [$latest->amount, $latest->status, $latest->reason]);
         $this->assertSame('pending', $order->fresh()->payment_status);
         // A late event for the old link never overwrites the newest link's status.
-        $this->notify(Payment::where('attempt', 1)->sole(), 'cancel', ['status_code' => '202'])->assertJson(['status' => 'ignored']);
+        $this->notify(Payment::where('attempt', 1)->sole(), 'PENDING')->assertJson(['status' => 'ignored']);
         $this->assertSame('pending', $order->fresh()->payment_status);
     }
 
-    public function test_snap_links_without_a_transaction_expire_through_reconciliation(): void
+    public function test_checkout_links_without_a_transaction_expire_through_reconciliation(): void
     {
-        $notFound = fn () => Http::response(['status_code' => '404'], 404);
-        $this->fakeMidtrans([], [$notFound(), $notFound(), Http::response([
-            'order_id' => 'ORL-300101-OTHER00001-P1', 'status_code' => '200', 'gross_amount' => '175000.00',
-            'transaction_status' => 'settlement', 'transaction_id' => 'trx-x', 'fraud_status' => 'accept',
+        $notFound = fn () => Http::response(['error' => ['message' => 'Order not found']], 404);
+        $this->fakeDoku([], [$notFound(), $notFound(), Http::response([
+            'order' => ['invoice_number' => 'ORL-300101-OTHER00001-P1', 'amount' => '175000'], 'channel' => ['id' => 'VIRTUAL_ACCOUNT_BCA'],
+            'transaction' => ['status' => 'SUCCESS', 'date' => '2030-01-01T04:30:00Z'],
         ])]);
         $this->actingAs(User::factory()->create());
         $order = $this->order();
         $this->confirm($order);
         $payment = Payment::sole();
-        $this->post('/admin/orders/'.$order->id.'/payments/'.$payment->id.'/check')->assertSessionHas('success', 'The customer has not chosen a payment method in Midtrans yet.');
+        $this->post('/admin/orders/'.$order->id.'/payments/'.$payment->id.'/check')->assertSessionHas('success', 'The customer has not paid on the DOKU page yet.');
         $this->assertSame('pending', $payment->fresh()->status);
 
         $this->travelTo(CarbonImmutable::parse('2030-01-02 12:10:00', 'Asia/Makassar'));
@@ -222,20 +254,21 @@ class PaymentFlowTest extends TestCase
         $this->travelTo(CarbonImmutable::parse('2030-01-01 12:00:00', 'Asia/Makassar'));
         $this->confirm($other);
         $otherPayment = Payment::where('order_id', $other->id)->sole();
-        $this->post('/admin/orders/'.$other->id.'/payments/'.$otherPayment->id.'/check')->assertSessionHas('success', 'Payment status updated from Midtrans.');
-        $this->assertSame('paid', $other->fresh()->payment_status);
+        $this->post('/admin/orders/'.$other->id.'/payments/'.$otherPayment->id.'/check')->assertSessionHas('success', 'Payment status updated from DOKU.');
+        $this->assertSame(['paid', 'VIRTUAL_ACCOUNT_BCA'], [$other->fresh()->payment_status, $otherPayment->fresh()->payment_type]);
+        Http::assertSent(fn (HttpRequest $request) => $request->method() === 'GET' && $request->url() === 'https://api-sandbox.doku.com/orders/v1/status/ORL-300101-OTHER00001-P1');
         $this->post('/admin/orders/'.$order->id.'/payments/'.$otherPayment->id.'/check')->assertNotFound();
     }
 
     public function test_fulfillment_follows_payment_and_method_rules(): void
     {
-        $this->fakeMidtrans();
+        $this->fakeDoku();
         $this->actingAs(User::factory()->create());
         $order = $this->order(['fulfillment_method' => 'pickup', 'delivery_fee' => 0, 'total' => 160000, 'delivery_address' => null]);
         $this->confirm($order);
         $status = fn (string $from, string $to) => $this->post('/admin/orders/'.$order->id.'/status', ['from' => $from, 'to' => $to]);
         $status('confirmed', 'processing')->assertSessionHasErrors('status');
-        $this->notify(Payment::sole(), 'settlement');
+        $this->notify(Payment::sole(), 'SUCCESS');
         $status('confirmed', 'ready')->assertSessionHasErrors('status');
         $status('confirmed', 'processing')->assertSessionHasNoErrors();
         $status('confirmed', 'processing')->assertSessionHasErrors('status');
@@ -249,7 +282,7 @@ class PaymentFlowTest extends TestCase
 
     public function test_cancellation_closes_open_links_and_paid_orders_need_an_admin(): void
     {
-        $this->fakeMidtrans();
+        $this->fakeDoku();
         $staff = User::factory()->create();
         $this->actingAs($staff);
         $open = $this->order();
@@ -257,26 +290,40 @@ class PaymentFlowTest extends TestCase
         $this->post('/admin/orders/'.$open->id.'/cancel', ['from' => 'confirmed', 'cancel_reason' => ''])->assertSessionHasErrors('cancel_reason');
         $this->post('/admin/orders/'.$open->id.'/cancel', ['from' => 'confirmed', 'cancel_reason' => 'Customer changed mind'])->assertSessionHasNoErrors();
         $this->assertSame(['cancelled', 'cancelled'], [$open->fresh()->order_status, $open->fresh()->payment_status]);
-        Http::assertSent(fn (HttpRequest $request) => $request->url() === 'https://app.sandbox.midtrans.com/snap/v1/transactions/snap-token/cancel');
+        $openPayment = Payment::where('order_id', $open->id)->sole();
+        Http::assertSent(fn (HttpRequest $request) => $request->url() === 'https://api-sandbox.doku.com/checkout/v3/cancellations'
+            && $request['order'] === ['invoice_number' => $openPayment->provider_order_id] && $request['payment'] === ['original_request_id' => $openPayment->provider_request_id]);
         $this->assertDatabaseHas('order_status_histories', ['order_id' => $open->id, 'to_status' => 'cancelled', 'note' => 'Customer changed mind']);
         // Money received after cancellation is still recorded so staff can refund it.
-        $this->notify(Payment::where('order_id', $open->id)->sole(), 'settlement')->assertJson(['status' => 'applied']);
+        $this->notify($openPayment, 'SUCCESS')->assertJson(['status' => 'applied']);
         $this->assertSame('paid', $open->fresh()->payment_status);
 
         $paid = $this->order(['order_code' => 'ORL-300101-PAID000001']);
         $this->confirm($paid);
-        $this->notify(Payment::where('order_id', $paid->id)->sole(), 'settlement');
+        $this->notify(Payment::where('order_id', $paid->id)->sole(), 'SUCCESS');
         $this->post('/admin/orders/'.$paid->id.'/cancel', ['from' => 'confirmed', 'cancel_reason' => 'Out of stock'])->assertSessionHasErrors('status');
         $this->actingAs(User::factory()->create(['role' => 'admin']))
             ->post('/admin/orders/'.$paid->id.'/cancel', ['from' => 'confirmed', 'cancel_reason' => 'Out of stock'])->assertSessionHasNoErrors();
         $this->assertSame(['cancelled', 'paid'], [$paid->fresh()->order_status, $paid->fresh()->payment_status]);
-        $this->notify(Payment::where('order_id', $paid->id)->sole(), 'refund')->assertJson(['status' => 'applied']);
+        $this->notify(Payment::where('order_id', $paid->id)->sole(), 'REFUNDED')->assertJson(['status' => 'applied']);
         $this->assertSame('refunded', $paid->fresh()->payment_status);
+    }
+
+    public function test_cancel_that_doku_refuses_warns_staff(): void
+    {
+        // Registered first so it wins over the default cancellation stub.
+        Http::fake(['*/checkout/v3/cancellations' => Http::response(['message' => ['Order cannot be cancelled']], 400)]);
+        $this->fakeDoku();
+        $this->actingAs(User::factory()->create());
+        $order = $this->order();
+        $this->confirm($order);
+        $this->post('/admin/orders/'.$order->id.'/cancel', ['from' => 'confirmed', 'cancel_reason' => 'Customer changed mind'])->assertSessionHasErrors('payment');
+        $this->assertSame('cancelled', $order->fresh()->order_status);
     }
 
     public function test_disabled_staff_cannot_create_payments(): void
     {
-        $this->fakeMidtrans();
+        $this->fakeDoku();
         $order = $this->order();
         $this->actingAs(User::factory()->create(['is_active' => false]))->post('/admin/orders/'.$order->id.'/confirm', ['review_version' => 0])->assertRedirect('/admin/login');
         $this->assertDatabaseCount('payments', 0);

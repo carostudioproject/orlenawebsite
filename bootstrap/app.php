@@ -18,8 +18,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->redirectGuestsTo('/admin/login');
         $middleware->redirectUsersTo('/admin');
         $middleware->alias(['active-staff' => EnsureActiveStaff::class]);
-        // Midtrans authenticates notifications with a SHA-512 signature instead of a CSRF token.
-        $middleware->validateCsrfTokens(except: ['webhooks/midtrans']);
+        // DOKU authenticates notifications with an HMAC-SHA256 signature instead of a CSRF token.
+        $middleware->validateCsrfTokens(except: ['webhooks/doku']);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

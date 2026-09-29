@@ -8,7 +8,7 @@ import { useLiveFilters } from '../../../Composables/useLiveFilters';
 import type { Paginated } from '../../../Types/admin';
 defineOptions({ layout: AdminLayout });
 interface OutletRow { id: number; name: string; code: string; erzap_outlet_id: string | null }
-interface ProductRow { id: number; name: string; variant: string | null; sku: string; is_active: boolean; category: { name: string } | null; erzap_product_id: string | null; erzap_variant_id: string | null; barcode: string | null; reference_stock: number | null; reference_stock_at: string | null }
+interface ProductRow { id: number; name: string; variant: string | null; sku: string; is_active: boolean; category: { name: string } | null; erzap_product_id: string | null; erzap_variant_id: string | null; barcode: string | null }
 const props = defineProps<{ outlets: OutletRow[]; products: Paginated<ProductRow>; filters: { search?: string; unmapped?: string } }>();
 const { filters: live, loading, active, reset } = useLiveFilters(() => '/admin/integrations/mapping', { search: props.filters.search ?? '', unmapped: props.filters.unmapped ?? '' });
 

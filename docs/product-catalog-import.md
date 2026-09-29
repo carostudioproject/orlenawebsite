@@ -13,3 +13,7 @@ Names and descriptions are preserved verbatim after trimming table whitespace. I
 Products start inactive for PO until enabled by Admin. No outlet price overrides or stock values were invented. Existing marketing categories/outlets remain intact. The public website has not been changed by this import.
 
 `php artisan db:seed --class=ProductCatalogSeeder` imports atomically using stable SKU keys and records system-actor audit entries. Re-running it never overwrites later dashboard changes or duplicates products. New installs include it through DatabaseSeeder. Future price changes should be applied through the dashboard or an explicitly reviewed update migration; editing the JSON alone does not overwrite existing rows.
+
+## Updates from Erzap
+
+Later catalog updates come from Erzap: **Products → Import from Erzap** (see [Erzap integration](erzap-integration.md)). The first import matches these 36 products by name and size and fills their barcode and Erzap product code; photos and descriptions stay.

@@ -11,7 +11,7 @@ use App\Http\Requests\ReviewOrderRequest;
 use App\Models\IntegrationSync;
 use App\Models\Order;
 use App\Models\Payment;
-use App\Services\Midtrans\MidtransException;
+use App\Services\Doku\DokuException;
 use App\Support\PreorderDate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -97,15 +97,15 @@ class OrderController extends Controller
         abort_unless($payment->order_id === $order->id, 404);
         try {
             $result = $reconcile->handle($payment);
-        } catch (MidtransException $e) {
+        } catch (DokuException $e) {
             return back()->withErrors(['payment' => $e->getMessage().'. Try again in a moment.']);
         }
         $messages = [
-            'applied' => 'Payment status updated from Midtrans.', 'not_started' => 'The customer has not chosen a payment method in Midtrans yet.',
-            'amount_mismatch' => 'The Midtrans amount does not match. Check the transaction manually.',
+            'applied' => 'Payment status updated from DOKU.', 'not_started' => 'The customer has not paid on the DOKU page yet.',
+            'amount_mismatch' => 'The DOKU amount does not match. Check the transaction manually.',
         ];
 
-        return back()->with('success', $messages[$result] ?? 'Payment status already matches Midtrans.');
+        return back()->with('success', $messages[$result] ?? 'Payment status already matches DOKU.');
     }
 
     public function advance(Request $request, Order $order, ChangeOrderStatus $status)
@@ -125,7 +125,7 @@ class OrderController extends Controller
         $closed = $status->cancel($order, $data['from'], $data['cancel_reason'], $request->user());
 
         return $closed ? back()->with('success', 'Order cancelled.')
-            : back()->withErrors(['payment' => 'Order cancelled, but the Midtrans link could not be closed automatically. Watch for incoming payments; if the customer still pays, refund manually.']);
+            : back()->withErrors(['payment' => 'Order cancelled, but the DOKU link could not be closed automatically (DOKU only cancels unpaid bank transfer and QRIS checkouts). Watch for incoming payments; if the customer still pays, refund manually.']);
     }
 
     private function paymentResult(Order $order, Payment $payment, string $success)

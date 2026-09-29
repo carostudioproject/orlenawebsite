@@ -7,14 +7,14 @@ use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Bearer-token check for the REST API. `api` uses API_TOKENS; `erzap` uses ERZAP_WEBHOOK_TOKEN.
+ * Bearer-token check for the REST API. Tokens come from API_TOKENS.
  * With no token configured the endpoint stays closed (503), so nothing is exposed by default.
  */
 class RequireApiToken
 {
     public function handle(Request $request, Closure $next, string $scope = 'api'): Response
     {
-        $tokens = $scope === 'erzap' ? array_filter([config('services.erzap.webhook_token')]) : config('services.api.tokens', []);
+        $tokens = config('services.api.tokens', []);
         if ($tokens === []) {
             return response()->json(['message' => 'API belum diaktifkan.'], 503);
         }

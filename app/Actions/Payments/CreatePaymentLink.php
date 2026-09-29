@@ -4,13 +4,14 @@ namespace App\Actions\Payments;
 
 use App\Models\Order;
 use App\Models\Payment;
-use App\Services\Midtrans\MidtransClient;
-use App\Services\Midtrans\MidtransException;
+use App\Services\Doku\DokuClient;
+use App\Services\Doku\DokuException;
 use App\Support\Audit;
 use App\Support\OrderHistory;
 use App\Support\PreorderDate;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class CreatePaymentLink
@@ -22,7 +23,7 @@ class CreatePaymentLink
     /** A creation request with no recorded outcome after this long is treated as failed. */
     private const STALE_CREATING_MINUTES = 2;
 
-    public function __construct(private MidtransClient $midtrans, private PreorderDate $dates) {}
+    public function __construct(private DokuClient $doku, private PreorderDate $dates) {}
 
     public function confirm(Order $order, int $reviewVersion, int $actor): Payment
     {
@@ -66,7 +67,7 @@ class CreatePaymentLink
             $locked = Order::lockForUpdate()->findOrFail($order->id);
             Payment::where('open_order_id', $locked->id)->where('status', 'creating')
                 ->where('updated_at', '<', now()->subMinutes(self::STALE_CREATING_MINUTES))
-                ->update(['status' => 'creation_failed', 'open_order_id' => null, 'last_error' => 'No response recorded from Midtrans']);
+                ->update(['status' => 'creation_failed', 'open_order_id' => null, 'last_error' => 'No response recorded from DOKU']);
             if (Payment::where('open_order_id', $locked->id)->exists()) {
                 $this->fail('A payment link is being created or is still open. Wait a moment, then reload the page.');
             }
@@ -77,7 +78,7 @@ class CreatePaymentLink
             }
             $attempt = (int) Payment::where('order_id', $locked->id)->max('attempt') + 1;
             $payment = Payment::create([
-                'order_id' => $locked->id, 'attempt' => $attempt, 'provider_order_id' => $locked->order_code.'-P'.$attempt,
+                'order_id' => $locked->id, 'attempt' => $attempt, 'provider' => 'doku', 'provider_order_id' => $locked->order_code.'-P'.$attempt, 'provider_request_id' => (string) Str::uuid(),
                 'open_order_id' => $locked->id, 'amount' => $locked->total, 'status' => 'creating',
                 'expires_at' => $expiresAt, 'reason' => $reason, 'created_by' => $actor,
             ]);
@@ -92,8 +93,8 @@ class CreatePaymentLink
     private function request(Payment $payment, int $actor): Payment
     {
         try {
-            $snap = $this->midtrans->createSnap($this->payload($payment));
-        } catch (MidtransException $e) {
+            $checkout = $this->doku->createCheckout($this->payload($payment), $payment->provider_request_id);
+        } catch (DokuException $e) {
             DB::transaction(function () use ($payment, $actor, $e) {
                 $locked = Payment::lockForUpdate()->findOrFail($payment->id);
                 if ($locked->status === 'creating') {
@@ -105,21 +106,25 @@ class CreatePaymentLink
             return $payment->fresh();
         }
 
-        $stored = DB::transaction(function () use ($payment, $snap, $actor) {
+        $stored = DB::transaction(function () use ($payment, $checkout, $actor) {
             $order = Order::lockForUpdate()->findOrFail($payment->order_id);
             $locked = Payment::lockForUpdate()->findOrFail($payment->id);
-            // The order may have been cancelled while Midtrans was responding.
+            // The order may have been cancelled while DOKU was responding.
             if ($locked->status !== 'creating') {
                 return false;
             }
-            $locked->update(['status' => 'pending', 'snap_token' => $snap['token'], 'payment_url' => $snap['redirect_url'], 'last_error' => null]);
+            $locked->update([
+                'status' => 'pending', 'checkout_token' => mb_substr($checkout['token'], 0, 100), 'payment_url' => $checkout['url'],
+                // DOKU's checkout session id, shown to staff for support lookups.
+                'transaction_id' => is_string($checkout['session_id']) ? mb_substr($checkout['session_id'], 0, 80) : null, 'last_error' => null,
+            ]);
             $order->update(['payment_status' => 'pending']);
             Audit::record('payment.created', $locked, ['attempt' => $locked->attempt, 'expires_at' => $locked->expires_at?->toIso8601String()], $actor);
 
             return true;
         });
         if (! $stored) {
-            $this->midtrans->cancel($snap['token'], $payment->provider_order_id);
+            $this->doku->cancel($payment->provider_order_id, $payment->provider_request_id);
         }
 
         return $payment->fresh();
@@ -140,26 +145,30 @@ class CreatePaymentLink
     {
         $order = $payment->order()->with('items', 'customer')->firstOrFail();
         $items = $order->items->map(fn ($item) => [
-            'id' => mb_substr($item->sku_snapshot, 0, 50), 'price' => $item->unit_price_snapshot, 'quantity' => $item->quantity,
-            'name' => mb_substr($item->product_name_snapshot.' - '.($item->variant_snapshot ?? $item->category_snapshot), 0, 50),
+            'id' => mb_substr($item->sku_snapshot, 0, 64), 'sku' => mb_substr($item->sku_snapshot, 0, 64), 'price' => $item->unit_price_snapshot, 'quantity' => $item->quantity,
+            'name' => mb_substr($item->product_name_snapshot.' - '.($item->variant_snapshot ?? $item->category_snapshot), 0, 255),
         ]);
         if ($order->delivery_fee > 0) {
-            $items->push(['id' => 'DELIVERY', 'price' => $order->delivery_fee, 'quantity' => 1, 'name' => 'Ongkir']);
+            $items->push(['id' => 'DELIVERY', 'sku' => 'DELIVERY', 'price' => $order->delivery_fee, 'quantity' => 1, 'name' => 'Ongkir']);
         }
-        $start = CarbonImmutable::now('Asia/Jakarta')->startOfMinute();
-        $payload = [
-            'transaction_details' => ['order_id' => $payment->provider_order_id, 'gross_amount' => $payment->amount],
-            'customer_details' => array_filter([
-                'first_name' => mb_substr($order->customer->name, 0, 50), 'phone' => $order->customer->whatsapp, 'email' => $order->customer->email,
-            ]),
-            'expiry' => ['start_time' => $start->format('Y-m-d H:i:s O'), 'unit' => 'minute', 'duration' => max(1, (int) $start->diffInMinutes($payment->expires_at))],
+        $orderData = [
+            'amount' => $payment->amount, 'invoice_number' => $payment->provider_order_id, 'currency' => 'IDR', 'language' => 'ID',
+            // "Back to merchant" on the DOKU page; the result page stays on DOKU.
+            'callback_url' => url('/'), 'auto_redirect' => false,
         ];
-        // Midtrans rejects item details that do not add up exactly; the gross amount stays authoritative.
+        // DOKU requires line items to add up to the amount; the amount stays authoritative.
         if ($items->sum(fn ($item) => $item['price'] * $item['quantity']) === $payment->amount) {
-            $payload['item_details'] = $items->values()->all();
+            $orderData['line_items'] = $items->values()->all();
         }
 
-        return $payload;
+        return [
+            'order' => $orderData,
+            'payment' => ['payment_due_date' => max(1, (int) now()->startOfMinute()->diffInMinutes($payment->expires_at))],
+            'customer' => array_filter([
+                'id' => 'CUST-'.$order->customer->id, 'name' => mb_substr($order->customer->name, 0, 255),
+                'phone' => mb_substr($order->customer->whatsapp, 0, 16), 'email' => $order->customer->email,
+            ]),
+        ];
     }
 
     private function fail(string $message): never

@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Controllers\Api\CatalogApiController;
-use App\Http\Controllers\Api\ErzapWebhookController;
 use App\Http\Controllers\Api\OrderApiController;
 use App\Http\Middleware\RequireApiToken;
 use Illuminate\Support\Facades\Route;
@@ -20,8 +19,4 @@ Route::prefix('v1')->middleware('throttle:api')->group(function () {
         Route::get('/reports/sales', [OrderApiController::class, 'report']);
     });
 
-    Route::middleware(RequireApiToken::class.':erzap')->prefix('erzap')->group(function () {
-        Route::post('/stock', [ErzapWebhookController::class, 'stock']);
-        Route::post('/sync-status', [ErzapWebhookController::class, 'syncStatus']);
-    });
 });
