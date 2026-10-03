@@ -8,6 +8,8 @@ enum Role: string
     case Staff = 'staff';
     case Finance = 'finance';
     case ContentEditor = 'content_editor';
+    // Technical role: everything an Admin can do, plus Developer tools (integrations, API, logs).
+    case Developer = 'developer';
 
     public function label(): string
     {
@@ -16,6 +18,7 @@ enum Role: string
             self::Staff => 'Staff',
             self::Finance => 'Finance',
             self::ContentEditor => 'Content Editor',
+            self::Developer => 'Developer',
         };
     }
 }

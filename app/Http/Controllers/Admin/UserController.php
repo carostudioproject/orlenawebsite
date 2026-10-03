@@ -32,7 +32,7 @@ class UserController extends Controller
 
     public function edit(User $user)
     {
-        return Inertia::render('Admin/Users/Form', ['record' => $user->only('id', 'name', 'username', 'email', 'role', 'is_active')]);
+        return Inertia::render('Admin/Users/Form', ['record' => $user->only('id', 'name', 'username', 'email', 'role', 'is_active', 'erzap_sales_user_id')]);
     }
 
     public function store(UserRequest $request, SaveUser $action)

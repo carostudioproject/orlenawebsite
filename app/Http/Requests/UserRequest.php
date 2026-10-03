@@ -28,6 +28,8 @@ class UserRequest extends FormRequest
             'username' => AccountRules::username($id),
             'email' => AccountRules::email($id),
             'role' => ['required', Rule::enum(Role::class)], 'is_active' => ['required', 'boolean'],
+            // Optional: this person's user ID in Erzap (orders they confirm are sent under it).
+            'erzap_sales_user_id' => ['nullable', 'integer', 'min:1', 'max:99999999'],
             'password' => [$this->route('user') ? 'nullable' : 'required', 'confirmed', 'max:128', AccountRules::password()],
         ];
     }

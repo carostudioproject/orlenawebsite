@@ -28,7 +28,7 @@ class HandleInertiaRequests extends Middleware
                 'can' => [
                     'orders' => $can('view-orders'), 'review' => $can('review-orders'), 'catalog' => $can('view-catalog'),
                     'manageCatalog' => $can('manage-catalog'), 'users' => $can('manage-users'), 'content' => $can('manage-content'),
-                    'reports' => $can('view-reports'), 'schedule' => $can('manage-schedule'), 'integrations' => $can('manage-integrations'),
+                    'reports' => $can('view-reports'), 'schedule' => $can('manage-schedule'), 'integrations' => $can('manage-integrations'), 'system' => $can('manage-system'),
                 ],
             ],
             'poCutoff' => fn () => app(PreorderDate::class)->cutoffLabel(english: true),

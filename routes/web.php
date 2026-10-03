@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\ProductImportController;
 use App\Http\Controllers\Admin\ProfileController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\ScheduleController;
+use App\Http\Controllers\Admin\SystemController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Auth\SessionController;
 use App\Http\Controllers\PublicPageController;
@@ -86,6 +87,12 @@ Route::middleware(['auth', 'active-staff'])->prefix('admin')->group(function () 
         Route::put('/', [ScheduleController::class, 'update']);
         Route::post('/closed-dates', [ScheduleController::class, 'storeClosedDate']);
         Route::delete('/closed-dates/{closedDate}', [ScheduleController::class, 'destroyClosedDate']);
+    });
+    // Developer tools: integration status, API, logs and maintenance tasks.
+    Route::middleware('can:manage-system')->prefix('/system')->group(function () {
+        Route::get('/', [SystemController::class, 'show']);
+        Route::post('/run', [SystemController::class, 'run'])->middleware('throttle:payment-check');
+        Route::post('/snap-key', [SystemController::class, 'generateKey']);
     });
     Route::middleware('can:manage-integrations')->prefix('/integrations')->group(function () {
         Route::get('/', [IntegrationController::class, 'index']);

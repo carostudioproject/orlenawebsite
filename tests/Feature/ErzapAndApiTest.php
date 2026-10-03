@@ -15,6 +15,7 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as HttpRequest;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -139,6 +140,29 @@ class ErzapAndApiTest extends TestCase
         // Without our code Erzap numbers the order itself; the Order Code stays readable in the note.
         Http::assertSent(fn (HttpRequest $request) => $request['shopping_carts']['idoutlet_penerima_pesanan_online_erzap'] === 5
             && $request['shopping_carts']['kode'] === null && str_starts_with($request['shopping_carts']['informasi_tambahan_text'], 'Website order '.$order->order_code));
+    }
+
+    public function test_the_staff_who_confirmed_the_order_is_the_erzap_sales_user(): void
+    {
+        Http::fake(['erzap.test/*' => Http::response(['status' => '1', 'message ' => ''])]);
+        config(['services.erzap.enabled' => true, 'services.erzap.base_url' => 'https://erzap.test', 'services.erzap.token' => 't', 'services.erzap.sales_user_id' => '54', 'services.erzap.default_outlet_id' => '1']);
+        $this->product->update(['barcode' => '111']);
+
+        // Admin sets the staff member's Erzap user ID on their account.
+        $staff = User::factory()->create(['role' => 'staff']);
+        $this->actingAs(User::factory()->create(['role' => 'admin']))->put('/admin/users/'.$staff->id, [
+            'name' => $staff->name, 'username' => $staff->username, 'email' => $staff->email, 'role' => 'staff', 'is_active' => true, 'erzap_sales_user_id' => 77,
+        ])->assertSessionHasNoErrors();
+        $this->assertSame(77, $staff->fresh()->erzap_sales_user_id);
+
+        $order = $this->paidOrder();
+        DB::table('order_status_histories')->insert(['order_id' => $order->id, 'actor_id' => $staff->id, 'from_status' => 'pending_review', 'to_status' => 'confirmed', 'created_at' => now()]);
+        $other = $this->paidOrder();
+        $this->artisan('erzap:sync')->assertSuccessful();
+
+        Http::assertSent(fn (HttpRequest $request) => $request['shopping_carts']['kode'] === $order->order_code && $request['shopping_carts']['iduser_sales_penerima_pesanan_online_erzap'] === 77);
+        // Confirmed by nobody with an Erzap ID: the default sales user.
+        Http::assertSent(fn (HttpRequest $request) => $request['shopping_carts']['kode'] === $other->order_code && $request['shopping_carts']['iduser_sales_penerima_pesanan_online_erzap'] === 54);
     }
 
     public function test_rest_api_serves_public_catalog_and_token_protected_orders(): void

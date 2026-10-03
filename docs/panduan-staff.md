@@ -33,6 +33,7 @@ Pelanggan masih bisa **menambah produk** sendiri selama pesanan belum dikonfirma
 - **Varian**: produk dengan nama sama dalam satu kategori tampil sebagai satu produk dengan pilihan varian, misalnya Fullsize/Halfsize atau Box isi 6. Isi kolom *Variant* di setiap produk.
 - **Hampers**: dari menu **Hampers** klik **Add hampers** (centang *Hampers product* sudah aktif) lalu tulis isi paket, satu per baris. Buat kategori "Hampers" agar mudah ditemukan pelanggan. Menu **Hampers** menampilkan daftar hampers saja.
 - **Hampers per event**: biarkan hampers nonaktif di luar event. Saat event dibuka, aktifkan dan isi *On sale from/until*; setelah tanggal berakhir hampers otomatis hilang dari form order. Hampers juga bisa diimport dari file Excel (kolom *Hampers* = Ya dan *Isi Hampers*).
+- **Sales di Erzap**: di **Team accounts → Ubah**, isi *Erzap sales user ID* untuk setiap staff yang mengonfirmasi pesanan. Pesanan yang dikonfirmasi staff itu masuk ke Erzap atas namanya; tanpa isian dipakai sales default.
 - **Kartu ucapan**: bila keranjang berisi hampers, pelanggan dapat mengisi pesan kartu ucapan (opsional, maksimal 300 karakter). Pesan tampil di detail pesanan (*Greeting card*), pesan WhatsApp, dan catatan pesanan di Erzap.
 - **Periode penjualan**: isi *On sale from/until* untuk produk event. Di luar periode itu produk tidak tampil di form order.
 - Produk harus memiliki harga sebelum diaktifkan. Stok tidak dikelola di website (hanya di Erzap).

@@ -5,7 +5,7 @@ import Field from '../../../Components/Field.vue';
 import { roleOptions, type StaffRole, type StaffUser } from '../../../Types/admin';
 defineOptions({ layout: AdminLayout });
 const props = defineProps<{ record: StaffUser | null }>();
-const form = useForm({ name: props.record?.name ?? '', username: props.record?.username ?? '', email: props.record?.email ?? '', role: (props.record?.role ?? 'staff') as StaffRole, is_active: props.record?.is_active ?? true, password: '', password_confirmation: '' });
+const form = useForm({ name: props.record?.name ?? '', username: props.record?.username ?? '', email: props.record?.email ?? '', role: (props.record?.role ?? 'staff') as StaffRole, is_active: props.record?.is_active ?? true, erzap_sales_user_id: (props.record?.erzap_sales_user_id ?? '') as number | string, password: '', password_confirmation: '' });
 function submit() {
     const options = { onFinish: () => form.reset('password', 'password_confirmation') };
     if (props.record) form.put(`/admin/users/${props.record.id}`, options); else form.post('/admin/users', options);
@@ -19,6 +19,7 @@ function submit() {
     <Field id="password" :label="record ? 'New password (leave empty to keep it)' : 'Password'" :error="form.errors.password"><template #default="{ describedBy }"><input id="password" v-model="form.password" type="password" autocomplete="new-password" minlength="12" maxlength="128" :required="!record" :aria-describedby="describedBy" :aria-invalid="!!form.errors.password"></template></Field>
     <p class="text-xs text-chocolate/60">At least 12 characters, with letters and numbers.</p>
     <Field id="password_confirmation" label="Repeat password" :error="form.errors.password_confirmation"><template #default="{ describedBy }"><input id="password_confirmation" v-model="form.password_confirmation" type="password" autocomplete="new-password" :required="!!form.password" :aria-describedby="describedBy"></template></Field>
+    <Field id="erzap_sales_user_id" label="Erzap sales user ID (optional)" hint="Orders this person confirms are sent to Erzap under this sales user. In Erzap: Users list, hover Edit, the number in /users/54/edit. Empty uses the default sales user." :error="form.errors.erzap_sales_user_id"><template #default="{ describedBy }"><input id="erzap_sales_user_id" v-model="form.erzap_sales_user_id" type="number" min="1" inputmode="numeric" class="max-w-40" :aria-describedby="describedBy"></template></Field>
     <label class="flex items-center gap-3 text-sm"><input v-model="form.is_active" type="checkbox">Account active</label>
     <div class="flex gap-3"><button class="admin-primary" :disabled="form.processing"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>{{ form.processing ? 'Saving…' : 'Save account' }}</button><Link href="/admin/users" class="admin-secondary"><i class="fa-solid fa-xmark" aria-hidden="true"></i>Cancel</Link></div>
 </form></template>

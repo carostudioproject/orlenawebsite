@@ -4,6 +4,7 @@ namespace App\Actions\Integrations;
 
 use App\Models\IntegrationSync;
 use App\Models\Order;
+use App\Models\User;
 use App\Services\Erzap\ErzapClient;
 use App\Services\Erzap\ErzapException;
 use App\Support\Audit;
@@ -127,6 +128,15 @@ class ErzapSync
     }
 
     /** OLZAP "shopping_carts" (token added by the client). Amounts use Erzap's decimal-string style, e.g. "120000.0". */
+    /** Erzap sales user: the staff member who confirmed the order, if their Erzap ID is set; otherwise ERZAP_SALES_USER_ID. */
+    private function salesUserId(Order $order): int
+    {
+        $confirmedBy = DB::table('order_status_histories')->where('order_id', $order->id)->where('to_status', 'confirmed')->latest('id')->value('actor_id');
+        $own = $confirmedBy ? User::whereKey($confirmedBy)->value('erzap_sales_user_id') : null;
+
+        return (int) ($own ?: config('services.erzap.sales_user_id'));
+    }
+
     private function cart(Order $order): array
     {
         $money = fn (?int $amount) => number_format((float) ($amount ?? 0), 1, '.', '');
@@ -167,7 +177,7 @@ class ErzapSync
             'pelanggan_ekspedisi' => $delivery ? 'GOJEK/GRAB' : 'PICKUP',
             'pelanggan_kode' => null,
             'idoutlet_penerima_pesanan_online_erzap' => $this->outletId($order),
-            'iduser_sales_penerima_pesanan_online_erzap' => (int) config('services.erzap.sales_user_id'),
+            'iduser_sales_penerima_pesanan_online_erzap' => $this->salesUserId($order),
             'informasi_tambahan_text' => mb_substr($note, 0, 500),
             'kode_voucher_text' => '',
             'shopping_cart_details' => $order->items->map(fn ($item) => [

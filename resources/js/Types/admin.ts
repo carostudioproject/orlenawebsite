@@ -1,12 +1,13 @@
-export type StaffRole = 'admin' | 'staff' | 'finance' | 'content_editor';
-export interface StaffUser { id: number; name: string; username: string; email: string | null; role: StaffRole; role_label?: string; is_active: boolean }
-export interface Abilities { orders: boolean; review: boolean; catalog: boolean; manageCatalog: boolean; users: boolean; content: boolean; reports: boolean; schedule: boolean; integrations: boolean }
+export type StaffRole = 'admin' | 'staff' | 'finance' | 'content_editor' | 'developer';
+export interface StaffUser { id: number; name: string; username: string; email: string | null; role: StaffRole; role_label?: string; is_active: boolean; erzap_sales_user_id?: number | null }
+export interface Abilities { orders: boolean; review: boolean; catalog: boolean; manageCatalog: boolean; users: boolean; content: boolean; reports: boolean; schedule: boolean; integrations: boolean; system: boolean }
 export interface AdminProps { auth: { user: StaffUser; can_manage: boolean; can: Abilities }; flash: { success?: string }; poCutoff: string; [key: string]: unknown }
 export const roleOptions: { value: StaffRole; label: string; description: string }[] = [
-    { value: 'admin', label: 'Admin', description: 'Full access, including team accounts' },
+    { value: 'admin', label: 'Admin', description: 'Owner: full access, including team accounts' },
     { value: 'staff', label: 'Staff', description: 'Processes orders and views the catalog' },
     { value: 'finance', label: 'Finance', description: 'Views orders, payments and reports (read only)' },
     { value: 'content_editor', label: 'Content Editor', description: 'Manages homepage, About and blog content' },
+    { value: 'developer', label: 'Developer', description: 'Full access plus Developer tools: integrations, API, logs' },
 ];
 export interface PageLink { url: string | null; label: string; active: boolean }
 export interface Paginated<T> { data: T[]; links: PageLink[]; total: number; from: number | null; to: number | null }

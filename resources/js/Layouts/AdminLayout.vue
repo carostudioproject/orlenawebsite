@@ -29,6 +29,7 @@ const groups = computed(() => [
     { title: 'Settings', links: [
         { label: 'PO schedule', href: '/admin/schedule', icon: 'fa-calendar-days', visible: can.value.schedule },
         { label: 'Erzap integration', href: '/admin/integrations', icon: 'fa-plug', visible: can.value.integrations },
+        { label: 'Developer tools', href: '/admin/system', icon: 'fa-code', visible: can.value.system },
         { label: 'My profile', href: '/admin/profile', icon: 'fa-user-gear', visible: true },
         { label: 'Team accounts', href: '/admin/users', icon: 'fa-users', visible: can.value.users },
     ] },
