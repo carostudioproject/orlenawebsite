@@ -31,6 +31,18 @@ class ErzapSync
         ]);
     }
 
+    /**
+     * Sends the order's queued sync right away (after a payment). Returns the sync status, or null when nothing was queued.
+     * If it cannot be sent yet, the 5-minute schedule keeps retrying.
+     */
+    public function sendNow(Order $order, ?int $actor = null): ?string
+    {
+        $sync = IntegrationSync::where('provider', 'erzap')->where('subject_type', 'orders')->where('subject_id', $order->id)
+            ->where('status', 'pending')->latest('id')->first();
+
+        return $sync ? $this->run($sync, $actor) : null;
+    }
+
     /** Sends one sync. Returns its new status. */
     public function run(IntegrationSync $sync, ?int $actor = null): string
     {
@@ -125,7 +137,7 @@ class ErzapSync
         $note = implode(' | ', array_filter([
             'Website order '.$order->order_code,
             ($delivery ? 'Delivery (Gojek/Grab)' : 'Pickup '.$order->outlet_name_snapshot).', '.$schedule,
-            'Paid via DOKU'.($payment?->payment_type ? ' ('.$payment->payment_type.')' : ''),
+            'Paid via '.($payment?->provider === 'manual' ? 'manual payment' : 'DOKU').($payment?->payment_type ? ' ('.$payment->payment_type.')' : ''),
             $order->customer_note ? 'Note: '.$order->customer_note : null,
             $order->card_message ? 'Greeting card: '.$order->card_message : null,
         ]));
@@ -139,7 +151,7 @@ class ErzapSync
             // Our Order Code, or null so Erzap numbers the order itself (ERZAP_SEND_ORDER_CODE=false). The code is always in the note.
             'kode' => config('services.erzap.send_order_code', true) ? $order->order_code : null,
             'kode_pos' => '', 'kode_pos_pengiriman' => '',
-            'konfirmasi_dari_bank' => 'DOKU',
+            'konfirmasi_dari_bank' => $payment?->provider === 'manual' ? 'Manual' : 'DOKU',
             'konfirmasi_nama_akun' => null, 'konfirmasi_no_rekening_akun' => null,
             'konfirmasi_tanggal_bayar' => ($payment?->paid_at ?? $order->updated_at)->setTimezone('Asia/Makassar')->toIso8601String(),
             'nama' => $order->customer->name, 'nama_penerima_pengiriman' => $order->customer->name,
@@ -151,7 +163,7 @@ class ErzapSync
             'total_pesanan' => $money($order->subtotal),
             'pelanggan_kecamatan' => '', 'pelanggan_kota' => '', 'pelanggan_country' => '', 'pelanggan_provinsi' => '',
             'pelanggan_kecamatan_pengiriman' => '', 'pelanggan_kota_pengiriman' => '', 'pelanggan_country_pengiriman' => '', 'pelanggan_provinsi_pengiriman' => '',
-            'pelanggan_payment_channel' => strtoupper('DOKU'.($payment?->payment_type ? '-'.$payment->payment_type : '')),
+            'pelanggan_payment_channel' => strtoupper($payment?->provider === 'manual' ? (string) $payment->payment_type : 'DOKU'.($payment?->payment_type ? '-'.$payment->payment_type : '')),
             'pelanggan_ekspedisi' => $delivery ? 'GOJEK/GRAB' : 'PICKUP',
             'pelanggan_kode' => null,
             'idoutlet_penerima_pesanan_online_erzap' => $this->outletId($order),

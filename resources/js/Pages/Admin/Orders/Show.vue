@@ -3,7 +3,7 @@ import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import AdminLayout from '../../../Layouts/AdminLayout.vue';
 import OrderSummary from '../../../Components/OrderSummary.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import Field from '../../../Components/Admin/Field.vue';
+import Field from '../../../Components/Field.vue';
 import Pagination from '../../../Components/Admin/Pagination.vue';
 import StatusBadge from '../../../Components/Admin/StatusBadge.vue';
 import type { AdminProps } from '../../../Types/admin';
@@ -15,7 +15,7 @@ import type { PaymentAttempt, Preorder, StatusChange } from '../../../Types/orde
 defineOptions({ layout: AdminLayout });
 interface Review { id: number; actor_name: string | null; note: string; previous_delivery_fee: number | null; delivery_fee: number | null; previous_schedule: string | null; schedule: string | null; created_at: string }
 interface Addition { id: number; items: { name: string; variant: string | null; quantity: number; subtotal: number }[]; subtotal_added: number; previous_total: number; new_total: number; created_at: string }
-const props = defineProps<{ order: Preorder; reviews: Paginated<Review>; history: StatusChange[]; payments: PaymentAttempt[]; canCancelPaid: boolean; additions: Addition[];
+const props = defineProps<{ order: Preorder; reviews: Paginated<Review>; history: StatusChange[]; payments: PaymentAttempt[]; canCancelPaid: boolean; additions: Addition[]; dokuEnabled: boolean; manualMethods: Record<string, string>;
     dayLoad: { orders: number; capacity: number | null; closed: string | null };
     erzapSync: { id: number; type: string; status: string; attempts: number; last_error: string | null; synced_at: string | null; next_attempt_at: string | null; external_ref: string | null } | null;
 }>();
@@ -51,10 +51,23 @@ function act(url: string, data: Record<string, unknown> = {}, onSuccess?: () => 
 }
 async function confirmOrder() {
     const ok = await confirmDialog({
-        title: 'Confirm this order?', icon: 'fa-circle-check', confirmLabel: 'Confirm & Create Payment',
-        message: `A DOKU payment link for ${rupiah(props.order.total)} will be created for ${props.order.order_code}. Make sure the products, schedule and delivery fee are correct.`,
+        title: 'Confirm this order?', icon: 'fa-circle-check', confirmLabel: props.dokuEnabled ? 'Confirm & Create Payment' : 'Confirm order',
+        message: props.dokuEnabled
+            ? `A DOKU payment link for ${rupiah(props.order.total)} will be created for ${props.order.order_code}. Make sure the products, schedule and delivery fee are correct.`
+            : `${props.order.order_code} will be confirmed for ${rupiah(props.order.total)}. Online payment is off: ask the customer to pay by transfer, then mark the order as paid.`,
     });
     if (ok) act('/confirm', { review_version: props.order.review_version });
+}
+// Payments received outside DOKU (transfer, cash). Also the only way to pay while DOKU is off.
+const manualMethod = ref('transfer');
+const manualNote = ref('');
+const canMarkPaid = computed(() => can.value.review && props.order.order_status === 'confirmed' && !['paid', 'refunded'].includes(props.order.payment_status) && !openPayment.value);
+async function markPaid() {
+    const ok = await confirmDialog({
+        title: `Mark ${props.order.order_code} as paid?`, icon: 'fa-money-bill-wave', confirmLabel: 'Mark as paid',
+        message: `Only do this after ${rupiah(props.order.total)} has arrived (${props.manualMethods[manualMethod.value]}). The order becomes paid and is sent to Erzap.`,
+    });
+    if (ok) act('/payments/manual', { method: manualMethod.value, note: manualNote.value }, () => { manualNote.value = ''; });
 }
 const renewReason = ref('');
 function renew() { act('/payments/renew', { reason: renewReason.value }, () => { renewReason.value = ''; }); }
@@ -115,25 +128,35 @@ onBeforeUnmount(() => clearInterval(timer));
         <h2 class="mb-4 text-xl">Payment</h2>
         <p v-if="errors.payment" role="alert" class="admin-alert admin-alert-error mb-4">{{ errors.payment }}</p>
         <div v-if="can.review && order.order_status === 'pending_review'" class="space-y-3 text-sm">
-            <p>Check products, production capacity, schedule and delivery fee. Confirming creates a DOKU payment link for <strong>{{ rupiah(order.total) }}</strong>, valid for 24 hours (until {{ $page.props.poCutoff }} at the latest).</p>
+            <p v-if="dokuEnabled">Check products, production capacity, schedule and delivery fee. Confirming creates a DOKU payment link for <strong>{{ rupiah(order.total) }}</strong>, valid for 24 hours (until {{ $page.props.poCutoff }} at the latest).</p>
+            <p v-else>Check products, production capacity, schedule and delivery fee, then confirm. <strong>Online payment (DOKU) is off</strong>: ask the customer to pay {{ rupiah(order.total) }} by transfer and mark the order as paid when it arrives.</p>
             <p v-if="order.delivery_fee === null" class="admin-error-text">Set the delivery fee in the review form before confirming.</p>
-            <button class="admin-primary" :disabled="busy || order.delivery_fee === null" @click="confirmOrder"><i class="fa-solid fa-circle-check" aria-hidden="true"></i>{{ busy ? 'Processing…' : 'Confirm & Create Payment' }}</button>
+            <button class="admin-primary" :disabled="busy || order.delivery_fee === null" @click="confirmOrder"><i class="fa-solid fa-circle-check" aria-hidden="true"></i>{{ busy ? 'Processing…' : dokuEnabled ? 'Confirm & Create Payment' : 'Confirm order' }}</button>
         </div>
         <div v-if="current" class="space-y-3 text-sm" :class="{ 'mt-5 border-t border-chocolate/10 pt-5': order.order_status === 'pending_review' }">
-            <dl class="grid grid-cols-1 gap-3 sm:grid-cols-3"><div><dt class="font-bold">Link #{{ current.attempt }} status</dt><dd>{{ paymentStatusLabel(current.status) }}</dd></div><div><dt class="font-bold">Amount</dt><dd>{{ rupiah(current.amount) }}</dd></div><div><dt class="font-bold">{{ current.status === 'paid' ? 'Paid at' : 'Valid until' }}</dt><dd>{{ witaTime(current.status === 'paid' ? current.paid_at : current.expires_at) }}</dd></div></dl>
+            <dl class="grid grid-cols-1 gap-3 sm:grid-cols-3"><div><dt class="font-bold">{{ current.provider === 'manual' ? 'Manual payment' : 'Link' }} #{{ current.attempt }} status</dt><dd>{{ paymentStatusLabel(current.status) }}</dd></div><div><dt class="font-bold">Amount</dt><dd>{{ rupiah(current.amount) }}</dd></div><div><dt class="font-bold">{{ current.status === 'paid' ? 'Paid at' : 'Valid until' }}</dt><dd>{{ witaTime(current.status === 'paid' ? current.paid_at : current.expires_at) }}</dd></div></dl>
             <div v-if="current.status === 'pending' && current.payment_url" class="flex flex-wrap gap-3">
                 <button type="button" class="admin-primary" @click="copyLink(current.payment_url)"><i class="fa-solid fa-copy" aria-hidden="true"></i>{{ copied ? 'Link copied' : 'Copy payment link' }}</button>
                 <a v-if="whatsappLink" :href="whatsappLink" target="_blank" rel="noopener noreferrer" class="admin-secondary"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i>Send via WhatsApp</a>
-                <a :href="current.payment_url" target="_blank" rel="noopener noreferrer" class="admin-secondary"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i>Open DOKU page</a>
+                <a :href="current.payment_url" target="_blank" rel="noopener noreferrer" class="admin-secondary"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i>Open payment page</a>
             </div>
             <p v-if="current.status === 'creation_failed' && current.last_error" class="admin-error-text">{{ current.last_error }}</p>
-            <button v-if="can.review && ['pending', 'expired', 'failed', 'cancelled'].includes(current.status)" type="button" class="admin-secondary" :disabled="busy" @click="act(`/payments/${current.id}/check`)"><i class="fa-solid fa-rotate" aria-hidden="true"></i>Check status in DOKU</button>
+            <button v-if="!['manual', 'demo'].includes(current.provider ?? '') && can.review && ['pending', 'expired', 'failed', 'cancelled'].includes(current.status)" type="button" class="admin-secondary" :disabled="busy" @click="act(`/payments/${current.id}/check`)"><i class="fa-solid fa-rotate" aria-hidden="true"></i>Check status in DOKU</button>
             <p v-if="current.status === 'pending'" class="text-xs text-chocolate/65">The status updates automatically when DOKU sends a notification. This page refreshes every 15 seconds.</p>
         </div>
-        <div v-if="can.review && order.order_status === 'confirmed' && order.payment_status === 'not_created' && !openPayment" class="mt-4">
+        <form v-if="canMarkPaid" class="mt-5 space-y-3 rounded-xl border border-chocolate/15 p-4 text-sm" @submit.prevent="markPaid">
+            <p class="m-0 font-bold"><i class="fa-solid fa-money-bill-wave" aria-hidden="true"></i> Record a payment received outside DOKU</p>
+            <p class="admin-muted m-0 text-xs">Use this after the customer paid {{ rupiah(order.total) }} by transfer or at the outlet. The order becomes paid and is sent to Erzap.</p>
+            <div class="flex flex-wrap items-end gap-3">
+                <div><label for="manual_method" class="mb-1 block text-xs font-bold">Method</label><select id="manual_method" v-model="manualMethod"><option v-for="(label, value) in manualMethods" :key="value" :value="value">{{ label }}</option></select></div>
+                <div class="min-w-48 flex-1"><label for="manual_note" class="mb-1 block text-xs font-bold">Note (optional)</label><input id="manual_note" v-model="manualNote" maxlength="500" placeholder="E.g. BCA transfer from Sinta, 3 Oct 10:15"></div>
+                <button class="admin-primary" :disabled="busy"><i class="fa-solid fa-check" aria-hidden="true"></i>Mark as paid</button>
+            </div>
+        </form>
+        <div v-if="dokuEnabled && can.review && order.order_status === 'confirmed' && order.payment_status === 'not_created' && !openPayment" class="mt-4">
             <button type="button" class="admin-primary" :disabled="busy" @click="act('/payments/retry')"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i>Try creating the link again</button>
         </div>
-        <form v-if="can.review && order.order_status === 'confirmed' && ['failed', 'expired', 'cancelled'].includes(order.payment_status) && !openPayment" class="mt-5 space-y-3" @submit.prevent="renew">
+        <form v-if="dokuEnabled && can.review && order.order_status === 'confirmed' && ['failed', 'expired', 'cancelled'].includes(order.payment_status) && !openPayment" class="mt-5 space-y-3" @submit.prevent="renew">
             <Field id="renew_reason" label="Reason for a new link" :error="errors.reason"><template #default="{ describedBy }"><textarea id="renew_reason" v-model="renewReason" required maxlength="500" rows="2" :aria-describedby="describedBy" :disabled="busy" placeholder="E.g. the customer asked for a new link after it expired"></textarea></template></Field>
             <p class="text-xs text-chocolate/65">Update the delivery fee and schedule in the review form first if anything changed. The new link uses the latest total.</p>
             <button class="admin-primary" :disabled="busy"><i class="fa-solid fa-link" aria-hidden="true"></i>Create new payment link</button>

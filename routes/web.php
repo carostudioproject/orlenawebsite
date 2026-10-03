@@ -18,6 +18,8 @@ use App\Http\Controllers\PublicPageController;
 use App\Http\Controllers\Shop\CheckoutController;
 use App\Http\Controllers\Shop\OrderAdditionController;
 use App\Http\Controllers\Shop\OrderStatusController;
+use App\Http\Controllers\Shop\PaymentPageController;
+use App\Http\Controllers\Webhooks\DokuQrisWebhookController;
 use App\Http\Controllers\Webhooks\DokuWebhookController;
 use App\Http\Middleware\PrivateOrderResponse;
 use Illuminate\Support\Facades\Route;
@@ -47,9 +49,14 @@ Route::middleware(PrivateOrderResponse::class)->group(function () {
     Route::get('/cek-pesanan', [OrderStatusController::class, 'find']);
     Route::post('/cek-pesanan', [OrderStatusController::class, 'lookup'])->middleware('throttle:order-track');
     Route::get('/cek-pesanan/{code}', [OrderStatusController::class, 'show']);
+    // Orlena's own QRIS payment page and its status polling.
+    Route::get('/bayar/{code}', [PaymentPageController::class, 'show'])->block(10, 10);
+    Route::get('/bayar/{code}/status', [PaymentPageController::class, 'status'])->middleware('throttle:payment-status');
+    Route::post('/bayar/{code}/simulasi', [PaymentPageController::class, 'simulate'])->middleware('throttle:preorder-submit');
 });
 
 Route::post('/webhooks/doku', DokuWebhookController::class)->middleware('throttle:payment-webhook');
+Route::post('/webhooks/doku-qris', DokuQrisWebhookController::class)->middleware('throttle:payment-webhook');
 
 Route::middleware('guest')->group(function () {
     Route::get('/admin/login', [SessionController::class, 'create'])->name('login');
@@ -90,6 +97,7 @@ Route::middleware(['auth', 'active-staff'])->prefix('admin')->group(function () 
         Route::post('/review', [OrderController::class, 'review']);
         Route::post('/confirm', [OrderController::class, 'confirm']);
         Route::post('/payments/retry', [OrderController::class, 'retryPayment']);
+        Route::post('/payments/manual', [OrderController::class, 'markPaid']);
         Route::post('/payments/renew', [OrderController::class, 'renewPayment']);
         Route::post('/payments/{payment}/check', [OrderController::class, 'checkPayment'])->whereNumber('payment')->middleware('throttle:payment-check');
         Route::post('/status', [OrderController::class, 'advance']);

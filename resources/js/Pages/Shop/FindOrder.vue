@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Link, useForm } from '@inertiajs/vue3';
 import ShopLayout from '../../Layouts/ShopLayout.vue';
-import Field from '../../Components/Admin/Field.vue';
+import Field from '../../Components/Field.vue';
 defineOptions({ layout: ShopLayout });
 const props = defineProps<{ code: string }>();
 const form = useForm({ order_code: props.code, whatsapp: '' });

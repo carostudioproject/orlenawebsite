@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
-import Field from '../../Components/Admin/Field.vue';
+import Field from '../../Components/Field.vue';
 const form = useForm({ username: '', password: '' });
 function submit() { form.post('/admin/login', { onFinish: () => form.reset('password') }); }
 </script>

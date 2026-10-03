@@ -21,7 +21,8 @@ Login di `/admin/login` dengan **username** dan kata sandi. Ganti nama, username
 2. **Periksa** produk, tanggal, ketersediaan, dan kapasitas produksi. Bila tanggal PO penuh atau tutup, muncul peringatan merah di atas pesanan.
 3. **Delivery**: isi ongkir Gojek/Grab di form pemeriksaan. Jadwal bisa diubah bila sudah disepakati dengan pelanggan.
 4. Klik **Confirm & Create Payment**. Link pembayaran DOKU dibuat (berlaku 24 jam, paling lambat batas pemesanan H-1). Kirim link ke pelanggan dengan tombol **Send via WhatsApp** atau **Copy payment link**.
-5. Setelah pelanggan membayar, status berubah otomatis menjadi **Paid**. Bila belum berubah, klik **Check status in DOKU**.
+5. Setelah pelanggan membayar, status berubah otomatis menjadi **Paid**.
+   *Selama DOKU belum diaktifkan (`DOKU_ENABLED=false`)*: tombolnya bernama **Confirm order** dan tidak membuat link. Minta pelanggan transfer, lalu di bagian Payment pilih metode (Bank transfer, Cash, QRIS outlet), isi catatan, dan klik **Mark as paid**. Pesanan menjadi Paid dan otomatis dikirim ke Erzap. Bila belum berubah, klik **Check status in DOKU**.
 6. Lanjutkan **Start processing → Mark as ready → Mark as out for delivery / completed**.
 7. Link kedaluwarsa atau gagal? Buat link baru dengan alasan. Batal? Isi alasan pembatalan. Pesanan yang sudah dibayar hanya bisa dibatalkan Admin, dan refund dilakukan manual di DOKU Back Office. Membatalkan pesanan juga menutup link DOKU untuk transfer bank (VA) dan QRIS; untuk metode lain, pantau apakah pelanggan tetap membayar.
 

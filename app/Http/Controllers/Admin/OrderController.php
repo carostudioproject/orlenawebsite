@@ -2,19 +2,23 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Actions\Integrations\ErzapSync;
 use App\Actions\Orders\ChangeOrderStatus;
 use App\Actions\Orders\ReviewOrder;
 use App\Actions\Payments\CreatePaymentLink;
 use App\Actions\Payments\ReconcilePayment;
+use App\Actions\Payments\RecordManualPayment;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ReviewOrderRequest;
 use App\Models\IntegrationSync;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Services\Doku\DokuException;
+use App\Services\Payments\PaymentGateways;
 use App\Support\PreorderDate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class OrderController extends Controller
@@ -56,6 +60,7 @@ class OrderController extends Controller
             'order' => $order->load('customer', 'items'), 'reviews' => $reviews, 'history' => $history, 'payments' => $payments,
             'additions' => $order->additions()->latest('id')->get(['id', 'items', 'subtotal_added', 'previous_total', 'new_total', 'created_at']),
             'canCancelPaid' => request()->user()->can('cancel-paid-orders'),
+            'dokuEnabled' => PaymentGateways::enabled(), 'manualMethods' => RecordManualPayment::METHODS,
             // Staff check capacity by hand; this only warns when the date is busy or closed.
             'dayLoad' => [
                 'orders' => Order::whereDate('requested_date', $order->requested_date)->where('order_status', '!=', 'cancelled')->count(),
@@ -77,7 +82,30 @@ class OrderController extends Controller
     {
         $data = $request->validate(['review_version' => ['required', 'integer', 'min:0']]);
 
-        return $this->paymentResult($order, $links->confirm($order, (int) $data['review_version'], $request->user()->id), 'Order confirmed and the payment link is ready to send.');
+        $payment = $links->confirm($order, (int) $data['review_version'], $request->user()->id);
+        if (! $payment) {
+            return redirect('/admin/orders/'.$order->id)->with('success', 'Order confirmed. Online payment (DOKU) is off: send the bank details to the customer and press "Mark as paid" once the money arrives.');
+        }
+
+        return $this->paymentResult($order, $payment, 'Order confirmed and the payment link is ready to send.');
+    }
+
+    public function markPaid(Request $request, Order $order, RecordManualPayment $record, ErzapSync $erzap)
+    {
+        $data = $request->validate(['method' => ['required', Rule::in(array_keys(RecordManualPayment::METHODS))], 'note' => ['nullable', 'string', 'max:500']]);
+        $record->handle($order, $data['method'], $data['note'] ?? null, $request->user()->id);
+
+        // Send to Erzap right away; if that is not possible yet, the 5-minute schedule keeps retrying.
+        $status = $erzap->sendNow($order, $request->user()->id);
+        $message = match ($status) {
+            'synced' => 'Payment recorded. The order is paid and was sent to Erzap.',
+            'failed' => 'Payment recorded. Sending to Erzap failed ('.IntegrationSync::where('subject_type', 'orders')->where('subject_id', $order->id)->latest('id')->value('last_error').'); it will retry automatically, or use Resend.',
+            'needs_mapping' => 'Payment recorded. Not sent to Erzap yet: complete the barcode/outlet mapping.',
+            'waiting_config' => 'Payment recorded. Not sent to Erzap yet: the Erzap settings are not complete.',
+            default => 'Payment recorded. The order is paid.',
+        };
+
+        return redirect('/admin/orders/'.$order->id)->with('success', $message);
     }
 
     public function retryPayment(Request $request, Order $order, CreatePaymentLink $links)

@@ -2,7 +2,7 @@
 import { Head, useForm, usePage } from '@inertiajs/vue3';
 import { computed, watch } from 'vue';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
-import Field from '../../Components/Admin/Field.vue';
+import Field from '../../Components/Field.vue';
 import type { AdminProps } from '../../Types/admin';
 defineOptions({ layout: AdminLayout });
 const props = defineProps<{ profile: { name: string; username: string; email: string | null; role: string } }>();

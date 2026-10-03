@@ -2,7 +2,7 @@
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { watch } from 'vue';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
-import Field from '../../Components/Admin/Field.vue';
+import Field from '../../Components/Field.vue';
 import { confirmDialog } from '../../Support/dialog';
 defineOptions({ layout: AdminLayout });
 interface Settings { cutoff_time: string; closed_weekdays: number[]; daily_capacity: number | null }

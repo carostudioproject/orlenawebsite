@@ -30,10 +30,22 @@ return [
 
     // DOKU Checkout (non-SNAP). Client ID and Secret Key from DOKU Back Office > Integration > API Keys.
     'doku' => [
+        // false: no payment links; staff confirm orders and record payments manually (transfer, cash).
+        'enabled' => (bool) env('DOKU_ENABLED', false),
         'client_id' => env('DOKU_CLIENT_ID'),
         'secret_key' => env('DOKU_SECRET_KEY'),
         'is_production' => (bool) env('DOKU_IS_PRODUCTION', false),
         'timeout' => (int) env('DOKU_TIMEOUT', 20),
+        // qris: our own payment page with a QRIS from the DOKU QRIS Direct API (SNAP). checkout: DOKU's hosted Checkout page.
+        // demo: the same payment page with a sample QR and a "simulate payment" button (no DOKU; for demos only, never on the live site).
+        'mode' => env('DOKU_MODE', 'qris'),
+        'qris_merchant_id' => env('DOKU_QRIS_MERCHANT_ID'),
+        'qris_terminal_id' => env('DOKU_QRIS_TERMINAL_ID'),
+        'qris_postal_code' => env('DOKU_QRIS_POSTAL_CODE', '80361'),
+        // SNAP: our RSA private key (its public key is uploaded to DOKU) and, if DOKU issues a separate one, the SNAP client secret.
+        'snap_private_key_path' => env('DOKU_SNAP_PRIVATE_KEY_PATH') ?: storage_path('app/private/doku-snap-private.pem'),
+        'snap_client_secret' => env('DOKU_SNAP_CLIENT_SECRET'),
+        'snap_token_path' => env('DOKU_SNAP_TOKEN_PATH', '/authorization/v1/access-token/b2b'),
     ],
 
     // Filled in once Erzap sends API documentation and sandbox credentials. Paths are placeholders until then.

@@ -11,7 +11,7 @@ export interface Preorder {
     subtotal: number; delivery_fee: number | null; total: number; order_status: OrderStatus; payment_status: PaymentStatus; created_at: string;
 }
 export interface PaymentAttempt {
-    id: number; attempt: number; status: PaymentStatus | 'creating' | 'creation_failed'; amount: number; payment_url: string | null;
+    id: number; attempt: number; provider?: string; status: PaymentStatus | 'creating' | 'creation_failed'; amount: number; payment_url: string | null;
     payment_type: string | null; expires_at: string | null; paid_at: string | null; reason: string | null; last_error: string | null;
     created_at: string; creator: { id: number; name: string } | null;
 }

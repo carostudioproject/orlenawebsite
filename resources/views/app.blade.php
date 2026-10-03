@@ -22,6 +22,7 @@
     @inertiaHead
 </head>
 <body>
+    @include('partials.page-loader', ['label' => $shop ? 'Memuat…' : 'Loading…'])
     @if ($shop)
         <a href="#main-content" class="skip-link">Skip to content</a>
         @include('partials.site-header')

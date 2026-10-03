@@ -97,38 +97,6 @@ a.admin-kpi:hover { border-color: #3b030433; box-shadow: 0 6px 20px -12px #3b030
 .admin-kpi-value { margin: .15rem 0 0; font-family: 'neueRegredeBold', sans-serif; font-size: 1.9rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .admin-kpi-value.is-small { font-size: 1.5rem; }
 
-/* Order form: category tabs, product cards, size pills, quantity steppers, and fulfillment choices. */
-.order-step { display: inline-flex; align-items: center; justify-content: center; width: 1.75rem; height: 1.75rem; margin-right: .6rem; border-radius: 999px; background: var(--admin-chocolate); color: var(--admin-cream); font-size: .85rem; vertical-align: .15em; }
-.order-category { display: inline-flex; flex-shrink: 0; align-items: center; gap: .6rem; border: 1px solid #3b030429; border-radius: 999px; background: white; padding: .3rem 1rem .3rem .3rem; font-size: .875rem; font-weight: 700; white-space: nowrap; transition: background-color .15s, border-color .15s; }
-.order-category:hover { border-color: var(--admin-almond); background: #fff5f0; }
-.order-category[aria-pressed='true'] { border-color: var(--admin-chocolate); background: var(--admin-chocolate); color: var(--admin-cream); }
-.order-category-count { min-width: 1.4rem; border-radius: 999px; background: var(--admin-cream); padding: .05rem .4rem; font-size: .7rem; text-align: center; font-variant-numeric: tabular-nums; }
-.order-category[aria-pressed='true'] .order-category-count { background: #ffffff26; color: inherit; }
-.order-categories { scrollbar-width: none; scroll-snap-type: x proximity; }
-.order-categories::-webkit-scrollbar { display: none; }
-.order-categories .order-category { scroll-snap-align: start; }
-/* Phones: compact text chips without the image. */
-@media (max-width: 639px) { .order-category { gap: .45rem; padding: .5rem .5rem .5rem .9rem; } }
-.order-product { display: flex; flex-direction: column; gap: .75rem; border: 1px solid var(--admin-line); border-radius: 1rem; padding: .85rem; transition: border-color .15s, box-shadow .15s; }
-.order-product:hover { border-color: #3b030429; box-shadow: 0 6px 20px -14px #3b030466; }
-.order-size span { display: inline-block; cursor: pointer; border: 1px solid #3b030429; border-radius: 999px; padding: .35rem .8rem; font-size: .8rem; font-weight: 700; transition: background-color .15s, border-color .15s; }
-.order-size input:checked + span { border-color: var(--admin-chocolate); background: var(--admin-almond); }
-.order-size input:focus-visible + span { outline: 2px solid var(--admin-chocolate); outline-offset: 2px; }
-.order-stepper { display: inline-flex; align-items: center; overflow: hidden; border: 1px solid #3b030429; border-radius: 999px; background: white; }
-.order-stepper button { display: inline-flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.4rem; font-size: .75rem; transition: background-color .15s; }
-.order-stepper button:hover:not(:disabled) { background: var(--admin-almond); }
-.order-stepper button:disabled { opacity: .35; cursor: not-allowed; }
-.order-stepper .order-qty { width: 2.75rem; border: 0; border-radius: 0; padding: 0; text-align: center; font-weight: 700; -moz-appearance: textfield; }
-.order-stepper input::-webkit-inner-spin-button, .order-stepper input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-.order-stepper.is-small button { width: 1.9rem; height: 2rem; }
-.order-stepper.is-small .order-qty { width: 2.25rem; }
-.order-method span { display: grid; grid-template-columns: auto 1fr; column-gap: .75rem; height: 100%; cursor: pointer; border: 1px solid #3b030429; border-radius: 1rem; padding: 1rem; transition: background-color .15s, border-color .15s; }
-.order-method i { grid-row: span 2; align-self: center; font-size: 1.2rem; }
-.order-method small { color: #3b0304a6; font-size: .78rem; }
-.order-method input:checked + span { border-color: var(--admin-chocolate); background: #fff5f0; box-shadow: inset 0 0 0 1px var(--admin-chocolate); }
-.order-method input:focus-visible + span { outline: 2px solid var(--admin-chocolate); outline-offset: 2px; }
-.order-method.is-disabled span { cursor: not-allowed; opacity: .5; }
-
 /* Custom dialogs (replacing window.confirm/alert/prompt) and success toasts. */
 .app-dialog { width: min(28rem, calc(100vw - 2rem)); max-width: none; margin: auto; border: 0; border-radius: 1.25rem; padding: 0; background: white; color: var(--admin-chocolate); box-shadow: 0 30px 80px -20px #3b030466; }
 .app-dialog::backdrop { background: #3b030459; backdrop-filter: blur(2px); }
@@ -173,3 +141,20 @@ a.admin-kpi:hover { border-color: #3b030433; box-shadow: 0 6px 20px -12px #3b030
 .admin-segment button:hover { background: #fff; }
 .admin-segment button[aria-pressed='true'] { background: var(--admin-chocolate); color: var(--admin-cream); }
 .admin-segment button:focus-visible { outline: 2px solid var(--admin-chocolate); outline-offset: 2px; }
+
+/* Loading: first paint until Vue mounts, and an overlay for slow page changes (resources/js/app.ts). */
+.page-loader-spinner { width: 2.25rem; height: 2.25rem; border-radius: 999px; border: 3px solid #3b030420; border-top-color: #3b0304; animation: page-spin .8s linear infinite; }
+.nav-loader { position: fixed; inset: 0; z-index: 9998; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.5rem; background: #fffaf6; opacity: 0; pointer-events: none; transition: opacity .2s; }
+.nav-loader.is-visible { opacity: 1; pointer-events: auto; }
+.nav-loader-logo { width: min(52vw, 220px); height: auto; animation: nav-loader-pulse 1.6s ease-in-out infinite; }
+.nav-loader-bar { width: min(40vw, 160px); height: 3px; border-radius: 999px; background: #3b030418; overflow: hidden; }
+.nav-loader-bar::after { content: ''; display: block; width: 40%; height: 100%; border-radius: inherit; background: #3b0304; animation: nav-loader-slide 1.1s ease-in-out infinite; }
+@keyframes nav-loader-pulse { 50% { opacity: .55; transform: scale(.97); } }
+@keyframes nav-loader-slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+@media (prefers-reduced-motion: reduce) { .nav-loader-logo, .nav-loader-bar::after { animation: none; } }
+@keyframes page-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .page-loader-spinner { animation-duration: 2.4s; } }
+
+/* iOS Safari gives date/time inputs an intrinsic width wider than small screens; keep them inside their field. */
+.admin-shell input[type='date'], .admin-shell input[type='time'] { -webkit-appearance: none; appearance: none; display: block; min-width: 0; max-width: 100%; min-height: 2.9rem; text-align: left; }
+.admin-shell input[type='date']::-webkit-date-and-time-value, .admin-shell input[type='time']::-webkit-date-and-time-value { text-align: left; }

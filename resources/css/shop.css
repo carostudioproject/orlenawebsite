@@ -1,0 +1,32 @@
+/* Customer order pages (/order, /orders/{code}/tambah): category chips, product cards, size pills, quantity steppers, fulfillment choices.
+   Customer pages share the form, card and button styles in admin.css. */
+.order-step { display: inline-flex; align-items: center; justify-content: center; width: 1.75rem; height: 1.75rem; margin-right: .6rem; border-radius: 999px; background: var(--admin-chocolate); color: var(--admin-cream); font-size: .85rem; vertical-align: .15em; }
+.order-category { display: inline-flex; flex-shrink: 0; align-items: center; gap: .6rem; border: 1px solid #3b030429; border-radius: 999px; background: white; padding: .3rem 1rem .3rem .3rem; font-size: .875rem; font-weight: 700; white-space: nowrap; transition: background-color .15s, border-color .15s; }
+.order-category:hover { border-color: var(--admin-almond); background: #fff5f0; }
+.order-category[aria-pressed='true'] { border-color: var(--admin-chocolate); background: var(--admin-chocolate); color: var(--admin-cream); }
+.order-category-count { min-width: 1.4rem; border-radius: 999px; background: var(--admin-cream); padding: .05rem .4rem; font-size: .7rem; text-align: center; font-variant-numeric: tabular-nums; }
+.order-category[aria-pressed='true'] .order-category-count { background: #ffffff26; color: inherit; }
+.order-categories { scrollbar-width: none; scroll-snap-type: x proximity; }
+.order-categories::-webkit-scrollbar { display: none; }
+.order-categories .order-category { scroll-snap-align: start; }
+/* Phones: compact text chips without the image. */
+@media (max-width: 639px) { .order-category { gap: .45rem; padding: .5rem .5rem .5rem .9rem; } }
+.order-product { display: flex; flex-direction: column; gap: .75rem; border: 1px solid var(--admin-line); border-radius: 1rem; padding: .85rem; transition: border-color .15s, box-shadow .15s; }
+.order-product:hover { border-color: #3b030429; box-shadow: 0 6px 20px -14px #3b030466; }
+.order-size span { display: inline-block; cursor: pointer; border: 1px solid #3b030429; border-radius: 999px; padding: .35rem .8rem; font-size: .8rem; font-weight: 700; transition: background-color .15s, border-color .15s; }
+.order-size input:checked + span { border-color: var(--admin-chocolate); background: var(--admin-almond); }
+.order-size input:focus-visible + span { outline: 2px solid var(--admin-chocolate); outline-offset: 2px; }
+.order-stepper { display: inline-flex; align-items: center; overflow: hidden; border: 1px solid #3b030429; border-radius: 999px; background: white; }
+.order-stepper button { display: inline-flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.4rem; font-size: .75rem; transition: background-color .15s; }
+.order-stepper button:hover:not(:disabled) { background: var(--admin-almond); }
+.order-stepper button:disabled { opacity: .35; cursor: not-allowed; }
+.order-stepper .order-qty { width: 2.75rem; border: 0; border-radius: 0; padding: 0; text-align: center; font-weight: 700; -moz-appearance: textfield; }
+.order-stepper input::-webkit-inner-spin-button, .order-stepper input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.order-stepper.is-small button { width: 1.9rem; height: 2rem; }
+.order-stepper.is-small .order-qty { width: 2.25rem; }
+.order-method span { display: grid; grid-template-columns: auto 1fr; column-gap: .75rem; height: 100%; cursor: pointer; border: 1px solid #3b030429; border-radius: 1rem; padding: 1rem; transition: background-color .15s, border-color .15s; }
+.order-method i { grid-row: span 2; align-self: center; font-size: 1.2rem; }
+.order-method small { color: #3b0304a6; font-size: .78rem; }
+.order-method input:checked + span { border-color: var(--admin-chocolate); background: #fff5f0; box-shadow: inset 0 0 0 1px var(--admin-chocolate); }
+.order-method input:focus-visible + span { outline: 2px solid var(--admin-chocolate); outline-offset: 2px; }
+.order-method.is-disabled span { cursor: not-allowed; opacity: .5; }

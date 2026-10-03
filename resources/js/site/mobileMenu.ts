@@ -11,8 +11,12 @@ export function initMobileMenu() {
         document.body.style.overflow = '';
         trigger.focus();
     };
+    // showModal() focuses the first link (the logo), which iOS outlines; start focus on the dialog itself instead.
+    dialog.tabIndex = -1;
+    dialog.style.outline = 'none';
     trigger.addEventListener('click', () => {
         dialog.showModal();
+        dialog.focus({ preventScroll: true });
         trigger.setAttribute('aria-expanded', 'true');
         document.body.style.overflow = 'hidden';
     });

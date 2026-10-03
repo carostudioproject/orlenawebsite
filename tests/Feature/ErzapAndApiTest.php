@@ -42,7 +42,7 @@ class ErzapAndApiTest extends TestCase
         $category = Category::create(['name' => 'Brownies', 'is_active' => true]);
         $this->product = Product::create(['category_id' => $category->id, 'variant' => 'Fullsize', 'sku' => 'B-F', 'name' => 'Berry', 'price' => 80000, 'is_active' => true]);
         $this->outlet = Outlet::create(['code' => 'O', 'name' => 'Test Outlet', 'address' => 'Jl', 'is_active' => true]);
-        config(['services.erzap' => [...config('services.erzap'), 'enabled' => false, 'base_url' => null, 'token' => null], 'services.api.tokens' => []]);
+        config(['services.erzap' => [...config('services.erzap'), 'enabled' => false, 'base_url' => null, 'token' => null, 'default_outlet_id' => null, 'sales_user_id' => null, 'send_order_code' => true], 'services.api.tokens' => []]);
     }
 
     /** A confirmed order with a pending link, then a DOKU SUCCESS notification. */

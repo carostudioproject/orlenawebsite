@@ -5,7 +5,7 @@ namespace App\Actions\Orders;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
-use App\Services\Doku\DokuClient;
+use App\Services\Payments\PaymentGateways;
 use App\Support\Audit;
 use App\Support\OrderHistory;
 use Illuminate\Support\Facades\DB;
@@ -20,7 +20,7 @@ class ChangeOrderStatus
         'delivering' => ['completed'],
     ];
 
-    public function __construct(private DokuClient $doku) {}
+    public function __construct(private PaymentGateways $gateways) {}
 
     public function advance(Order $order, string $from, string $to, User $actor): void
     {
@@ -61,10 +61,11 @@ class ChangeOrderStatus
             OrderHistory::record($locked, $from, 'cancelled', $actor->id, $reason);
             Audit::record('order.cancelled', $locked, ['from' => $from, 'payment_status' => $locked->payment_status], $actor->id);
 
-            return $open->filter(fn ($payment) => $payment->checkout_token !== null && $payment->provider_request_id !== null);
+            return $open;
         }, 3);
 
-        return $closing->map(fn ($payment) => $this->doku->cancel($payment->provider_order_id, $payment->provider_request_id))->every(fn ($closed) => $closed);
+        // Each open link is closed by the gateway that created it; manual payments have none.
+        return $closing->every(fn ($payment) => $this->gateways->for($payment)?->cancel($payment) ?? true);
     }
 
     private function lock(Order $order, string $from): Order

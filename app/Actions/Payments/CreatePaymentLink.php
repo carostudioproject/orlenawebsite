@@ -4,8 +4,8 @@ namespace App\Actions\Payments;
 
 use App\Models\Order;
 use App\Models\Payment;
-use App\Services\Doku\DokuClient;
 use App\Services\Doku\DokuException;
+use App\Services\Payments\PaymentGateways;
 use App\Support\Audit;
 use App\Support\OrderHistory;
 use App\Support\PreorderDate;
@@ -23,11 +23,12 @@ class CreatePaymentLink
     /** A creation request with no recorded outcome after this long is treated as failed. */
     private const STALE_CREATING_MINUTES = 2;
 
-    public function __construct(private DokuClient $doku, private PreorderDate $dates) {}
+    public function __construct(private PaymentGateways $gateways, private PreorderDate $dates) {}
 
-    public function confirm(Order $order, int $reviewVersion, int $actor): Payment
+    /** Confirms the order and, when DOKU is on, creates its payment link. Returns null when DOKU is off. */
+    public function confirm(Order $order, int $reviewVersion, int $actor): ?Payment
     {
-        return $this->open($order, $actor, null, function (Order $locked) use ($reviewVersion, $actor) {
+        $guard = function (Order $locked) use ($reviewVersion, $actor) {
             if ($locked->order_status !== 'pending_review' || $locked->payment_status !== 'not_created') {
                 $this->fail('This order is already confirmed or no longer awaiting review.');
             }
@@ -40,7 +41,14 @@ class CreatePaymentLink
             $locked->update(['order_status' => 'confirmed']);
             OrderHistory::record($locked, 'pending_review', 'confirmed', $actor);
             Audit::record('order.confirmed', $locked, ['order_status' => 'confirmed', 'total' => $locked->total], $actor);
-        });
+        };
+        if (! PaymentGateways::enabled()) {
+            DB::transaction(fn () => $guard(Order::lockForUpdate()->findOrFail($order->id)), 3);
+
+            return null;
+        }
+
+        return $this->open($order, $actor, null, $guard);
     }
 
     public function retry(Order $order, int $actor): Payment
@@ -78,7 +86,7 @@ class CreatePaymentLink
             }
             $attempt = (int) Payment::where('order_id', $locked->id)->max('attempt') + 1;
             $payment = Payment::create([
-                'order_id' => $locked->id, 'attempt' => $attempt, 'provider' => 'doku', 'provider_order_id' => $locked->order_code.'-P'.$attempt, 'provider_request_id' => (string) Str::uuid(),
+                'order_id' => $locked->id, 'attempt' => $attempt, 'provider' => $this->gateways->current()->name(), 'provider_order_id' => $locked->order_code.'-P'.$attempt, 'provider_request_id' => (string) Str::uuid(),
                 'open_order_id' => $locked->id, 'amount' => $locked->total, 'status' => 'creating',
                 'expires_at' => $expiresAt, 'reason' => $reason, 'created_by' => $actor,
             ]);
@@ -92,8 +100,9 @@ class CreatePaymentLink
 
     private function request(Payment $payment, int $actor): Payment
     {
+        $gateway = $this->gateways->for($payment);
         try {
-            $checkout = $this->doku->createCheckout($this->payload($payment), $payment->provider_request_id);
+            $checkout = $gateway->create($payment);
         } catch (DokuException $e) {
             DB::transaction(function () use ($payment, $actor, $e) {
                 $locked = Payment::lockForUpdate()->findOrFail($payment->id);
@@ -114,9 +123,10 @@ class CreatePaymentLink
                 return false;
             }
             $locked->update([
-                'status' => 'pending', 'checkout_token' => mb_substr($checkout['token'], 0, 100), 'payment_url' => $checkout['url'],
-                // DOKU's checkout session id, shown to staff for support lookups.
-                'transaction_id' => is_string($checkout['session_id']) ? mb_substr($checkout['session_id'], 0, 80) : null, 'last_error' => null,
+                'status' => 'pending', 'checkout_token' => mb_substr((string) ($checkout['token'] ?? ''), 0, 100), 'payment_url' => $checkout['url'], 'qr_content' => $checkout['qr'] ?? null,
+                'provider_request_id' => $checkout['reference'] ?? $locked->provider_request_id,
+                // The provider's session/reference, shown to staff for support lookups.
+                'transaction_id' => is_string($checkout['session_id'] ?? null) ? mb_substr($checkout['session_id'], 0, 80) : null, 'last_error' => null,
             ]);
             $order->update(['payment_status' => 'pending']);
             Audit::record('payment.created', $locked, ['attempt' => $locked->attempt, 'expires_at' => $locked->expires_at?->toIso8601String()], $actor);
@@ -124,7 +134,7 @@ class CreatePaymentLink
             return true;
         });
         if (! $stored) {
-            $this->doku->cancel($payment->provider_order_id, $payment->provider_request_id);
+            $gateway->cancel($payment->fresh()->fill(['provider_request_id' => $checkout['reference'] ?? $payment->provider_request_id]));
         }
 
         return $payment->fresh();
@@ -139,36 +149,6 @@ class CreatePaymentLink
         }
 
         return $expiresAt;
-    }
-
-    private function payload(Payment $payment): array
-    {
-        $order = $payment->order()->with('items', 'customer')->firstOrFail();
-        $items = $order->items->map(fn ($item) => [
-            'id' => mb_substr($item->sku_snapshot, 0, 64), 'sku' => mb_substr($item->sku_snapshot, 0, 64), 'price' => $item->unit_price_snapshot, 'quantity' => $item->quantity,
-            'name' => mb_substr($item->product_name_snapshot.' - '.($item->variant_snapshot ?? $item->category_snapshot), 0, 255),
-        ]);
-        if ($order->delivery_fee > 0) {
-            $items->push(['id' => 'DELIVERY', 'sku' => 'DELIVERY', 'price' => $order->delivery_fee, 'quantity' => 1, 'name' => 'Ongkir']);
-        }
-        $orderData = [
-            'amount' => $payment->amount, 'invoice_number' => $payment->provider_order_id, 'currency' => 'IDR', 'language' => 'ID',
-            // "Back to merchant" on the DOKU page; the result page stays on DOKU.
-            'callback_url' => url('/'), 'auto_redirect' => false,
-        ];
-        // DOKU requires line items to add up to the amount; the amount stays authoritative.
-        if ($items->sum(fn ($item) => $item['price'] * $item['quantity']) === $payment->amount) {
-            $orderData['line_items'] = $items->values()->all();
-        }
-
-        return [
-            'order' => $orderData,
-            'payment' => ['payment_due_date' => max(1, (int) now()->startOfMinute()->diffInMinutes($payment->expires_at))],
-            'customer' => array_filter([
-                'id' => 'CUST-'.$order->customer->id, 'name' => mb_substr($order->customer->name, 0, 255),
-                'phone' => mb_substr($order->customer->whatsapp, 0, 16), 'email' => $order->customer->email,
-            ]),
-        ];
     }
 
     private function fail(string $message): never

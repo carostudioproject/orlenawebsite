@@ -2,6 +2,7 @@
 @import './brand.css';
 @import './header.css';
 @import './admin.css';
+@import './shop.css';
 @import './motion.css';
 @source '../**/*.vue';
 @source '../**/*.blade.php';

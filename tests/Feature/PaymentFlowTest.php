@@ -36,7 +36,7 @@ class PaymentFlowTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        config(['services.doku.client_id' => self::CLIENT, 'services.doku.secret_key' => self::KEY, 'services.doku.is_production' => false]);
+        config(['services.doku.enabled' => true, 'services.doku.mode' => 'checkout', 'services.doku.client_id' => self::CLIENT, 'services.doku.secret_key' => self::KEY, 'services.doku.is_production' => false]);
         $this->travelTo(CarbonImmutable::parse('2030-01-01 12:00:00', 'Asia/Makassar'));
     }
 
@@ -319,6 +319,47 @@ class PaymentFlowTest extends TestCase
         $this->confirm($order);
         $this->post('/admin/orders/'.$order->id.'/cancel', ['from' => 'confirmed', 'cancel_reason' => 'Customer changed mind'])->assertSessionHasErrors('payment');
         $this->assertSame('cancelled', $order->fresh()->order_status);
+    }
+
+    public function test_without_doku_staff_confirm_and_record_manual_payments(): void
+    {
+        config(['services.doku.enabled' => false, 'services.erzap.enabled' => false]);
+        Http::fake();
+        $this->actingAs(User::factory()->create());
+        $order = $this->order();
+        $this->get('/admin/orders/'.$order->id)->assertInertia(fn (Assert $page) => $page->where('dokuEnabled', false)->has('manualMethods'));
+
+        // Confirming does not call DOKU and creates no payment link.
+        $this->confirm($order);
+        $this->assertSame(['confirmed', 'not_created'], [$order->fresh()->order_status, $order->fresh()->payment_status]);
+        $this->assertDatabaseCount('payments', 0);
+        Http::assertNothingSent();
+
+        $this->post('/admin/orders/'.$order->id.'/payments/manual', ['method' => 'crypto'])->assertSessionHasErrors('method');
+        $this->post('/admin/orders/'.$order->id.'/payments/manual', ['method' => 'transfer', 'note' => 'BCA 10:15'])
+            ->assertSessionHas('success', 'Payment recorded. Not sent to Erzap yet: the Erzap settings are not complete.');
+        $payment = Payment::sole();
+        $this->assertSame(['manual', 'paid', 175000, 'MANUAL-TRANSFER', 'BCA 10:15'], [$payment->provider, $payment->status, $payment->amount, $payment->payment_type, $payment->reason]);
+        $this->assertSame('paid', $order->fresh()->payment_status);
+        // Tried right away; it waits for the Erzap settings and the schedule retries it later.
+        $this->assertDatabaseHas('integration_syncs', ['provider' => 'erzap', 'subject_id' => $order->id, 'status' => 'waiting_config']);
+        // Paid orders cannot be marked twice, and fulfillment can start.
+        $this->post('/admin/orders/'.$order->id.'/payments/manual', ['method' => 'cash'])->assertSessionHasErrors('payment');
+        $this->post('/admin/orders/'.$order->id.'/status', ['from' => 'confirmed', 'to' => 'processing'])->assertSessionHasNoErrors();
+    }
+
+    public function test_mark_as_paid_sends_to_erzap_immediately(): void
+    {
+        config(['services.doku.enabled' => false, 'services.erzap' => [...config('services.erzap'), 'enabled' => true, 'base_url' => 'https://erzap.test:4443',
+            'token' => 't', 'sales_user_id' => '54', 'default_outlet_id' => '1', 'send_order_code' => true]]);
+        Http::fake(['erzap.test:4443/*' => Http::response(['status' => '1', 'message ' => ''])]);
+        $this->actingAs(User::factory()->create());
+        $order = $this->order();
+        $order->items()->first()->product->update(['barcode' => '260810111525']);
+        $this->confirm($order);
+        $this->post('/admin/orders/'.$order->id.'/payments/manual', ['method' => 'cash'])->assertSessionHas('success', 'Payment recorded. The order is paid and was sent to Erzap.');
+        $this->assertDatabaseHas('integration_syncs', ['subject_id' => $order->id, 'status' => 'synced']);
+        Http::assertSent(fn (HttpRequest $request) => $request['shopping_carts']['pelanggan_payment_channel'] === 'MANUAL-CASH' && $request['shopping_carts']['konfirmasi_dari_bank'] === 'Manual');
     }
 
     public function test_disabled_staff_cannot_create_payments(): void

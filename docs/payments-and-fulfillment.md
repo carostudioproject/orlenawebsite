@@ -39,3 +39,18 @@ The review form stays editable while the order is `pending_review` or `confirmed
 
 - Customer-facing payment page or automatic WhatsApp sending; staff still send the link manually.
 - Partial refunds and chargebacks are recorded as `needs_review` events only.
+
+## Without DOKU (`DOKU_ENABLED=false`, the default)
+
+Until DOKU is configured, **Confirm order** only confirms the order (no payment link, no call to DOKU). Staff ask the customer to pay by transfer or at the outlet, then use **Mark as paid** on the order (method: bank transfer, cash, QRIS at the outlet, other; optional note). This records a `payments` row with `provider = manual` and goes through the same status handling as a DOKU SUCCESS, so the order becomes paid and is queued for Erzap. **Mark as paid** stays available after DOKU is turned on, for payments received outside DOKU.
+
+## QRIS on Orlena's own payment page (`DOKU_MODE=qris`, the default)
+
+With DOKU enabled, **Confirm & Create Payment** asks the DOKU QRIS Direct API (SNAP) for a QRIS and the payment link becomes `{APP_URL}/bayar/{order code}`: Orlena's page with the order summary, the QR (drawn in the browser), the deadline and a "Simpan QR" button. It shows no name, phone number or address. Cek Pesanan's "Bayar sekarang" and the staff WhatsApp message open the same page.
+
+- Auth: a B2B access token (`/authorization/v1/access-token/b2b`, SHA256withRSA over `clientId|timestamp` with our private key) cached for 10 minutes; QRIS calls are signed with HMAC-SHA512 over `POST:path:token:sha256(body):timestamp`.
+- Payment detection: the page polls `/bayar/{code}/status` every 5 s, which asks DOKU (QRIS query, at most every 5 s per payment). `/webhooks/doku-qris` only triggers the same query, so a forged notification cannot mark an order paid. `payments:reconcile` also checks and expires old links.
+- Cancelling an order expires its QRIS (`qr-expire`).
+- `DOKU_MODE=checkout` switches back to the hosted DOKU Checkout page.
+
+Setup (sandbox first): ask DOKU to activate **QRIS** and send the **Merchant ID (mall ID)** and **Terminal ID**; generate an RSA key pair on the server (`openssl genrsa -out storage/app/private/doku-snap-private.pem 2048`, then `openssl rsa -in … -pubout`) and upload the public key in the DOKU dashboard; set the QRIS Notification URL to `{APP_URL}/webhooks/doku-qris`; fill `DOKU_ENABLED=true`, `DOKU_CLIENT_ID`, `DOKU_SECRET_KEY` (or `DOKU_SNAP_CLIENT_SECRET`), `DOKU_QRIS_MERCHANT_ID`, `DOKU_QRIS_TERMINAL_ID`, `DOKU_QRIS_POSTAL_CODE`. Test with the DOKU QRIS simulator: https://sandbox.doku.com/qris-simulator/

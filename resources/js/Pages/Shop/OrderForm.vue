@@ -2,7 +2,7 @@
 import { router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, nextTick, ref, watch } from 'vue';
 import ShopLayout from '../../Layouts/ShopLayout.vue';
-import Field from '../../Components/Admin/Field.vue';
+import Field from '../../Components/Field.vue';
 import ProductPicker from '../../Components/Shop/ProductPicker.vue';
 import type { OrderCategory, OrderProduct } from '../../Types/ordering';
 import { rupiah } from '../../Support/money';
@@ -18,6 +18,7 @@ const cutoffLabel = computed(() => (usePage().props.poCutoff as string) ?? 'H-1 
 const weekdayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const closedDateHint = computed(() => {
     if (!form.requested_date) return null;
+    if (form.requested_date < props.earliestDate) return `Tanggal ini sudah ditutup. Pilih tanggal ${props.earliestDate} atau setelahnya.`;
     const weekday = new Date(`${form.requested_date}T00:00:00Z`).getUTCDay();
     if (props.closedWeekdays.includes(weekday)) return `Orlena tidak menerima PO untuk hari ${weekdayNames[weekday]}. Pilih tanggal lain.`;
     const closed = props.closedDates.find(item => item.date === form.requested_date);
@@ -67,9 +68,36 @@ const pickupOutlet = computed(() => props.outlets.find(outlet => outlet.id === N
 const errorSummary = ref<HTMLElement | null>(null);
 const errors = computed(() => form.errors as Record<string, string>);
 const itemError = (index: number) => errors.value[`items.${index}.product_id`] ?? errors.value[`items.${index}.quantity`];
-const canSubmit = computed(() => !form.processing && pricesReady.value && form.items.length > 0 && cart.value.every(row => row.product) && !closedDateHint.value);
-function submit() {
+const canSubmit = computed(() => !form.processing && pricesReady.value && form.items.length > 0 && cart.value.every(row => row.product));
+// A field's message disappears as soon as the customer changes it.
+for (const field of ['name', 'whatsapp', 'outlet_id', 'delivery_address', 'requested_date', 'requested_time'] as const) {
+    watch(() => form[field], () => { if (form.errors[field]) form.clearErrors(field); });
+}
+// Checked here with visible messages: iOS Safari ignores the date's min and often blocks "required" fields silently.
+function clientErrors(): Record<string, string> {
+    const found: Record<string, string> = {};
+    if (!form.name.trim()) found.name = 'Nama lengkap wajib diisi.';
+    if (!/^[0-9+\s()-]{8,}$/.test(form.whatsapp.trim())) found.whatsapp = 'Masukkan nomor WhatsApp yang valid, misalnya 081234567890.';
+    if (form.fulfillment_method === 'pickup' && !form.outlet_id) found.outlet_id = 'Pilih outlet pickup.';
+    if (form.fulfillment_method === 'delivery' && !form.delivery_address.trim()) found.delivery_address = 'Alamat pengiriman wajib diisi.';
+    if (!form.requested_date) found.requested_date = 'Pilih tanggal PO.';
+    else if (form.requested_date < props.earliestDate) found.requested_date = `Tanggal ini sudah ditutup. Pilih tanggal ${props.earliestDate} atau setelahnya (batas pemesanan ${cutoffLabel.value}).`;
+    else if (closedDateHint.value) found.requested_date = closedDateHint.value;
+    if (!form.requested_time) found.requested_time = form.fulfillment_method === 'delivery' ? 'Pilih jam pengiriman.' : 'Pilih jam pickup.';
+    return found;
+}
+async function submit() {
     if (!canSubmit.value) return;
+    const found = clientErrors();
+    if (Object.keys(found).length) {
+        form.clearErrors();
+        form.setError(found);
+        await nextTick();
+        const first = document.getElementById(Object.keys(found)[0]);
+        first?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        first?.focus({ preventScroll: true });
+        return;
+    }
     form.transform(data => ({
         ...data, outlet_id: effectiveOutlet.value,
         items: data.items.map(item => ({ ...item, quoted_price: productById.value.get(item.product_id)?.price ?? 0 })),
@@ -83,7 +111,7 @@ function scrollToCart() { document.getElementById('cart')?.scrollIntoView({ beha
     <p class="mt-3 text-sm"><a href="/order/tambah" class="font-bold underline"><i class="fa-solid fa-cart-plus" aria-hidden="true"></i> Sudah punya Order Code? Tambah ke pesanan yang belum dibayar</a></p>
     <div v-if="!products.length || (!outlets.length && !deliveryOutlet)" role="status" class="my-8 rounded-2xl bg-cream p-6"><h2 class="text-xl">Pemesanan belum tersedia</h2><p class="mt-2 text-sm">Produk dan outlet sedang disiapkan. Form dapat digunakan setelah pilihan tersedia.</p></div>
 
-    <form class="mt-8 grid items-start gap-7 pb-24 lg:grid-cols-[minmax(0,1fr)_360px] lg:pb-0" @submit.prevent="submit">
+    <form class="mt-8 grid items-start gap-7 pb-24 lg:grid-cols-[minmax(0,1fr)_360px] lg:pb-0" novalidate @submit.prevent="submit">
         <div class="min-w-0 space-y-6">
             <div v-if="form.hasErrors" ref="errorSummary" tabindex="-1" role="alert" class="admin-alert admin-alert-error"><p class="font-bold">Pesanan belum terkirim. Periksa kembali:</p><ul class="list-disc pl-5"><li v-for="(error, key) in form.errors" :key="key">{{ error }}</li></ul><button type="button" class="mt-2 underline" :disabled="quoting || form.processing" @click="refreshQuote">Muat ulang harga</button></div>
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import AdminLayout from '../../../Layouts/AdminLayout.vue';
-import Field from '../../../Components/Admin/Field.vue';
+import Field from '../../../Components/Field.vue';
 import { roleOptions, type StaffRole, type StaffUser } from '../../../Types/admin';
 defineOptions({ layout: AdminLayout });
 const props = defineProps<{ record: StaffUser | null }>();

@@ -43,6 +43,8 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('staff-login', fn (Request $request) => Limit::perMinute(20)->by($request->ip()));
         RateLimiter::for('api', fn (Request $request) => Limit::perMinute(60)->by($request->bearerToken() ? hash('sha256', $request->bearerToken()) : $request->ip()));
         RateLimiter::for('preorder-submit', fn (Request $request) => Limit::perMinute(5)->by($request->ip()));
+        // The payment page polls every few seconds while a QRIS is open.
+        RateLimiter::for('payment-status', fn (Request $request) => Limit::perMinute(40)->by($request->ip()));
         // Order tracking: a burst limit here; failed codes are also limited in OrderStatusController.
         RateLimiter::for('order-track', fn (Request $request) => Limit::perMinute(20)->by($request->ip()));
     }

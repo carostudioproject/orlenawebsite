@@ -38,7 +38,7 @@ const nextHint = computed(() => {
     if (cancelled.value) return 'Pesanan ini dibatalkan. Hubungi Orlena bila ada pertanyaan.';
     if (props.order.order_status === 'pending_review') return 'Tim Orlena sedang memeriksa produk, jadwal, dan ongkir. Link pembayaran akan dikirim melalui WhatsApp.';
     if (props.payment) return 'Pesanan sudah dikonfirmasi. Silakan selesaikan pembayaran sebelum batas waktu.';
-    if (!paid.value) return 'Link pembayaran belum tersedia atau sudah kedaluwarsa. Hubungi Orlena untuk link baru.';
+    if (!paid.value) return 'Pesanan sudah dikonfirmasi. Silakan lakukan pembayaran sesuai instruksi dari Orlena melalui WhatsApp.';
     if (props.order.order_status === 'completed') return 'Pesanan selesai. Terima kasih sudah memesan di Orlena!';
     return 'Pembayaran diterima. Pesanan Anda sedang disiapkan sesuai jadwal.';
 });
