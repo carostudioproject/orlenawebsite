@@ -43,6 +43,13 @@ class DeveloperToolsTest extends TestCase
         foreach (['/admin/orders', '/admin/products', '/admin/content', '/admin/users', '/admin/reports', '/admin/integrations', '/admin/schedule'] as $path) {
             $this->get($path)->assertOk();
         }
+        // Developers see orders but only the owner (Admin) and Staff handle them.
+        $this->get('/admin/orders')->assertInertia(fn (Assert $page) => $page->where('auth.can.orders', true)->where('auth.can.review', false));
+        $this->assertFalse($developer->can('review-orders'));
+        $this->assertFalse($developer->can('cancel-paid-orders'));
+        $this->assertTrue(User::factory()->create(['role' => 'staff'])->can('review-orders'));
+        $this->assertTrue(User::factory()->create(['role' => 'admin'])->can('review-orders'));
+        $this->assertFalse(User::factory()->create(['role' => 'finance'])->can('review-orders'));
         $this->post('/admin/system/run', ['task' => 'erzap-sync'])->assertSessionHas('success');
         $this->post('/admin/system/run', ['task' => 'rm -rf'])->assertSessionHasErrors('task');
         $this->assertDatabaseHas('audit_logs', ['action' => 'system.task_run', 'actor_id' => $developer->id]);

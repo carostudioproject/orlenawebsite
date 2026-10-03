@@ -33,8 +33,9 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('view-catalog', $roles(Role::Staff, ...$full));
         // Finance reads orders and payments but cannot change them.
         Gate::define('view-orders', $roles(Role::Staff, Role::Finance, ...$full));
-        Gate::define('review-orders', $roles(Role::Staff, ...$full));
-        Gate::define('cancel-paid-orders', $roles(...$full));
+        // Only the owner (Admin) and Staff handle orders: confirm, payments, status and cancellation.
+        Gate::define('review-orders', $roles(Role::Admin, Role::Staff));
+        Gate::define('cancel-paid-orders', $roles(Role::Admin));
         Gate::define('manage-content', $roles(Role::ContentEditor, ...$full));
         Gate::define('view-reports', $roles(Role::Finance, ...$full));
         Gate::define('manage-schedule', $roles(Role::Staff, ...$full));
