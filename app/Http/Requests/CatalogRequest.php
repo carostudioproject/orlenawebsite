@@ -16,7 +16,7 @@ class CatalogRequest extends FormRequest
 
     public function messages(): array
     {
-        return ['variant.unique' => 'A product with this name and variant already exists in that category.', 'hamper_contents.required' => 'List the hampers contents, one item per line.', 'content_ids.required' => 'Choose at least one product the customer can pick as contents.', 'content_ids.min' => 'Choose at least one product the customer can pick as contents.', 'sale_ends_on.after_or_equal' => 'The sale end date must be on or after the start date.', 'upload.image' => 'The photo must be a JPG, PNG or WebP image.', 'upload.mimes' => 'The photo must be a JPG, PNG or WebP image.', 'upload.max' => 'The photo may be at most 4 MB.'];
+        return ['variant.unique' => 'A product with this name and variant already exists in that category.', 'barcode.unique' => 'Another product already uses this barcode.', 'barcode.regex' => 'The barcode cannot contain spaces.', 'hamper_contents.required' => 'List the hampers contents, one item per line.', 'content_ids.required' => 'Choose at least one product the customer can pick as contents.', 'content_ids.min' => 'Choose at least one product the customer can pick as contents.', 'sale_ends_on.after_or_equal' => 'The sale end date must be on or after the start date.', 'upload.image' => 'The photo must be a JPG, PNG or WebP image.', 'upload.mimes' => 'The photo must be a JPG, PNG or WebP image.', 'upload.max' => 'The photo may be at most 4 MB.'];
     }
 
     public function rules(): array
@@ -43,6 +43,8 @@ class CatalogRequest extends FormRequest
             'products' => [
                 'name' => ['required', 'string', 'max:160'],
                 'sku' => ['required', 'alpha_dash:ascii', 'max:80', Rule::unique('products')->ignore($id)],
+                // Erzap matches order items by barcode, so it must be the same as in Erzap and unique.
+                'barcode' => ['nullable', 'string', 'max:80', 'regex:/^\S+$/', Rule::unique('products')->ignore($id)],
                 'category_id' => ['required', 'integer', 'exists:categories,id'],
                 // Products with the same name in a category are one item with variant choices on the order form.
                 'variant' => ['nullable', 'string', 'max:40', Rule::unique('products')->ignore($id)

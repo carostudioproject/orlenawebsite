@@ -164,6 +164,19 @@ class HampersAndBoxTest extends TestCase
         $this->assertSame([null, null, 0], [$created->fresh()->content_type, $created->fresh()->content_count, $created->contentOptions()->count()]);
     }
 
+    public function test_staff_enter_the_erzap_barcode_in_the_product_form(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $base = ['name' => 'Lotus Cheese', 'sku' => 'BR0099', 'category_id' => $this->berry->category_id, 'variant' => 'Fullsize', 'price' => 90000, 'is_active' => false];
+        $this->actingAs($admin)->post('/admin/products', [...$base, 'barcode' => 'BC-BR0005'])->assertSessionHasErrors('barcode');
+        $this->post('/admin/products', [...$base, 'barcode' => '1785 484'])->assertSessionHasErrors('barcode');
+        $this->post('/admin/products', [...$base, 'barcode' => '1785484844999'])->assertSessionHasNoErrors();
+        $product = Product::where('sku', 'BR0099')->sole();
+        $this->assertSame('1785484844999', $product->barcode);
+        $this->put('/admin/products/'.$product->id, [...$base, 'barcode' => ''])->assertSessionHasNoErrors();
+        $this->assertNull($product->fresh()->barcode);
+    }
+
     public function test_the_excel_import_sets_types_and_contents_by_code(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
