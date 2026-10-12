@@ -127,7 +127,6 @@ class ErzapSync
         return filled($id) && is_numeric($id) ? (int) $id : null;
     }
 
-    /** OLZAP "shopping_carts" (token added by the client). Amounts use Erzap's decimal-string style, e.g. "120000.0". */
     /** Erzap sales user: the staff member who confirmed the order, if their Erzap ID is set; otherwise ERZAP_SALES_USER_ID. */
     private function salesUserId(Order $order): int
     {
@@ -137,9 +136,13 @@ class ErzapSync
         return (int) ($own ?: config('services.erzap.sales_user_id'));
     }
 
+    /**
+     * OLZAP "shopping_carts" as in the Erzap API v1.2 document (token added by the client).
+     * Numbers are decimal strings ("120000.0"), the payment date is a date only ("2026-08-27").
+     */
     private function cart(Order $order): array
     {
-        $money = fn (?int $amount) => number_format((float) ($amount ?? 0), 1, '.', '');
+        $money = fn (int|float|null $amount) => number_format((float) ($amount ?? 0), 1, '.', '');
         $payment = $order->payments->where('status', 'paid')->sortByDesc('attempt')->first();
         $delivery = $order->fulfillment_method === 'delivery';
         $address = $delivery ? (string) $order->delivery_address : '';
@@ -154,7 +157,7 @@ class ErzapSync
 
         return [
             'alamat' => $address, 'alamat_pengiriman' => $address,
-            'biaya_admin' => 0.0,
+            'biaya_admin' => '0.0',
             'created_at' => $order->created_at->setTimezone('Asia/Makassar')->toIso8601String(),
             'email' => (string) ($order->customer->email ?? ''),
             'is_drop_ship' => false,
@@ -163,10 +166,10 @@ class ErzapSync
             'kode_pos' => '', 'kode_pos_pengiriman' => '',
             'konfirmasi_dari_bank' => $payment?->provider === 'manual' ? 'Manual' : 'DOKU',
             'konfirmasi_nama_akun' => null, 'konfirmasi_no_rekening_akun' => null,
-            'konfirmasi_tanggal_bayar' => ($payment?->paid_at ?? $order->updated_at)->setTimezone('Asia/Makassar')->toIso8601String(),
+            'konfirmasi_tanggal_bayar' => ($payment?->paid_at ?? $order->updated_at)->setTimezone('Asia/Makassar')->toDateString(),
             'nama' => $order->customer->name, 'nama_penerima_pengiriman' => $order->customer->name,
             'nominal_voucher' => '0.0',
-            'ongkos_kirim' => $delivery ? $money($order->delivery_fee) : null,
+            'ongkos_kirim' => $money($delivery ? $order->delivery_fee : 0), 'nominal_gratis_ongkir' => '0.0',
             'telepon' => $order->customer->whatsapp, 'telepon_pengiriman' => $order->customer->whatsapp,
             'tempat_penjemputan' => $delivery ? null : $order->outlet_name_snapshot,
             'total_pembayaran' => $money($payment?->amount ?? $order->total),
@@ -181,7 +184,7 @@ class ErzapSync
             'informasi_tambahan_text' => mb_substr($note, 0, 500),
             'kode_voucher_text' => '',
             'shopping_cart_details' => $order->items->map(fn ($item) => [
-                'harga_satuan' => (float) $item->unit_price_snapshot, 'jumlah' => $item->quantity, 'tgl_check_in' => null, 'barcode_produk' => $item->product->barcode,
+                'harga_satuan' => $money($item->unit_price_snapshot), 'jumlah' => $money($item->quantity), 'tgl_check_in' => null, 'barcode_produk' => $item->product->barcode,
             ])->values()->all(),
         ];
     }

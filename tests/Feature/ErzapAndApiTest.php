@@ -118,7 +118,8 @@ class ErzapAndApiTest extends TestCase
                 && $cart['total_pesanan'] === '160000.0' && $cart['ongkos_kirim'] === '15000.0' && $cart['total_pembayaran'] === '175000.0'
                 && $cart['nama'] === 'Sinta' && $cart['telepon'] === '6281234567890' && $cart['alamat_pengiriman'] === 'Secret address 1'
                 && $cart['pelanggan_ekspedisi'] === 'GOJEK/GRAB' && $cart['pelanggan_payment_channel'] === 'DOKU-QRIS'
-                && $cart['shopping_cart_details'] == [['harga_satuan' => 80000, 'jumlah' => 2, 'tgl_check_in' => null, 'barcode_produk' => '200207230802']];
+                && $cart['shopping_cart_details'] === [['harga_satuan' => '80000.0', 'jumlah' => '2.0', 'tgl_check_in' => null, 'barcode_produk' => '200207230802']]
+                && $cart['nominal_gratis_ongkir'] === '0.0' && $cart['biaya_admin'] === '0.0' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $cart['konfirmasi_tanggal_bayar']) === 1;
         });
         $this->get('/admin/orders/'.$order->id)->assertInertia(fn (Assert $page) => $page->where('erzapSync.status', 'synced'));
         $this->get('/admin/integrations?status=synced')->assertInertia(fn (Assert $page) => $page->has('syncs.data', 1)->where('syncs.data.0.order_code', $order->order_code)->where('configured', true)->where('missingSettings', []));

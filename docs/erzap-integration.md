@@ -35,15 +35,15 @@ check the preview, then **Apply**.
 | `alamat`, `alamat_pengiriman` | Delivery address (empty for pickup) |
 | `tempat_penjemputan` | Pickup outlet name (pickup only) |
 | `pelanggan_ekspedisi` | `GOJEK/GRAB` or `PICKUP` |
-| `ongkos_kirim` | Delivery fee (delivery only) |
+| `ongkos_kirim`, `nominal_gratis_ongkir` | Delivery fee (`"0.0"` for pickup); no free-shipping discount (`"0.0"`) |
 | `total_pesanan` | Product subtotal |
 | `total_pembayaran` | Amount paid via DOKU |
-| `konfirmasi_dari_bank`, `konfirmasi_tanggal_bayar`, `pelanggan_payment_channel` | `DOKU`, paid time (WITA), e.g. `DOKU-QRIS` or `DOKU-VIRTUAL_ACCOUNT_BCA` |
+| `konfirmasi_dari_bank`, `konfirmasi_tanggal_bayar`, `pelanggan_payment_channel` | `DOKU`, payment date (WITA, `YYYY-MM-DD`), e.g. `DOKU-QRIS` or `DOKU-VIRTUAL_ACCOUNT_BCA` |
 | `informasi_tambahan_text` | "Website order {Order Code}", pickup/delivery, PO date and time, payment method, customer note |
 | `idoutlet_penerima_pesanan_online_erzap` | Outlet's Erzap outlet ID (Mapping), else `ERZAP_DEFAULT_OUTLET_ID` |
 | `iduser_sales_penerima_pesanan_online_erzap` | `ERZAP_SALES_USER_ID` |
 | `token_erzap` | `ERZAP_TOKEN` (added when sending, never stored in the log) |
-| `shopping_cart_details[]` | `barcode_produk` (product barcode), `harga_satuan`, `jumlah` |
+| `shopping_cart_details[]` | `barcode_produk` (product barcode), `harga_satuan`, `jumlah` (decimal strings, e.g. `"2.0"`) |
 
 ## Setup
 
