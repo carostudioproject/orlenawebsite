@@ -17,6 +17,7 @@ defineProps<{
     erzap: {
         enabled: boolean; baseUrl: string | null; token: boolean; defaultOutlet: string | null; salesUser: string | null; missing: string[];
         counts: Record<string, number>; lastSent: string | null; recentFailures: Failure[];
+        inboundToken: boolean; inbound: { url: string; last: { at: string } | null }[];
     };
     api: { tokens: number; base: string };
     cron: string;
@@ -109,6 +110,12 @@ const check = (ok: boolean) => (ok ? 'fa-circle-check text-matcha' : 'fa-circle-
                 <dt class="font-bold">Queue</dt><dd class="flex flex-wrap gap-1.5"><span v-for="(total, status) in erzap.counts" :key="status" class="inline-flex items-center gap-1"><StatusBadge :status="String(status)" kind="sync" /> {{ total }}</span><span v-if="!Object.keys(erzap.counts).length">Empty</span></dd>
                 <dt class="font-bold">Last sent</dt><dd>{{ witaTime(erzap.lastSent) }}</dd>
             </dl>
+            <div>
+                <p class="m-0 mb-1 font-bold">URLs Erzap calls <span class="font-normal">(X-Erzap-Token <i class="fa-solid" :class="check(erzap.inboundToken)" aria-hidden="true"></i> {{ erzap.inboundToken ? 'set' : 'not set: every call gets 401' }})</span></p>
+                <ul class="m-0 list-none space-y-1 p-0 text-xs">
+                    <li v-for="endpoint in erzap.inbound" :key="endpoint.url" class="break-all"><code>{{ endpoint.url }}</code> · <span :class="{ 'admin-muted': !endpoint.last }">{{ endpoint.last ? `last call ${witaTime(endpoint.last.at)}` : 'no call yet' }}</span></li>
+                </ul>
+            </div>
             <div v-if="erzap.recentFailures.length">
                 <p class="m-0 mb-1 font-bold">Needs attention</p>
                 <ul class="m-0 list-none space-y-1 p-0 text-xs"><li v-for="(failure, index) in erzap.recentFailures" :key="index"><Link :href="`/admin/orders/${failure.subject_id}`" class="font-bold underline">Order #{{ failure.subject_id }}</Link> ({{ failure.status }}, {{ failure.attempts }}×): {{ failure.last_error }}</li></ul>

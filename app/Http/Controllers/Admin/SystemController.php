@@ -10,6 +10,7 @@ use App\Services\Payments\PaymentGateways;
 use App\Support\Audit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -54,6 +55,10 @@ class SystemController extends Controller
                 'lastSent' => IntegrationSync::where('provider', 'erzap')->max('synced_at'),
                 'recentFailures' => IntegrationSync::where('provider', 'erzap')->whereIn('status', ['failed', 'needs_mapping', 'waiting_config'])
                     ->latest('updated_at')->limit(5)->get(['subject_id', 'status', 'attempts', 'last_error', 'updated_at']),
+                // URLs Erzap calls on this site, with the last call received (routes/erzap.php).
+                'inboundToken' => filled(config('services.erzap.inbound_token')),
+                'inbound' => collect(['products' => 'import_produk_json', 'prices' => 'sinkronisasi_harga', 'stock' => 'sinkronisasi_stok', 'orders' => 'check_pesanan', 'order_status' => 'update_status_pesanan', 'images' => 'sinkronisasi_gambar'])
+                    ->map(fn ($path, $key) => ['url' => url('/web_service/'.$path.'/new'), 'last' => Cache::get('erzap-inbound:'.$key)])->values(),
             ],
             'api' => ['tokens' => count(config('services.api.tokens', [])), 'base' => url('/api/v1')],
             'cron' => 'cd '.base_path().' && php artisan schedule:run >> /dev/null 2>&1',

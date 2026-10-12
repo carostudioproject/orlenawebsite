@@ -283,7 +283,7 @@ class ProductImport
         return mb_substr(trim(preg_replace('/[^A-Za-z0-9_-]+/', '-', $value), '-'), 0, 80) ?: 'ERZ';
     }
 
-    private function uniqueSku(string $value): string
+    public function uniqueSku(string $value): string
     {
         $base = $this->sku($value);
         $sku = $base;

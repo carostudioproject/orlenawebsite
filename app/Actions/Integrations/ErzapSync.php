@@ -136,6 +136,12 @@ class ErzapSync
         return (int) ($own ?: config('services.erzap.sales_user_id'));
     }
 
+    /** The same order for Erzap's check_pesanan pull: always with our Order Code, Erzap's duplicate key and the code it reports back. */
+    public function pullCart(Order $order): array
+    {
+        return [...$this->cart($order), 'kode' => $order->order_code];
+    }
+
     /**
      * OLZAP "shopping_carts" as in the Erzap API v1.2 document (token added by the client).
      * Numbers are decimal strings ("120000.0"), the payment date is a date only ("2026-08-27").

@@ -74,6 +74,8 @@ return [
         'timeout' => (int) env('ERZAP_TIMEOUT', 20),
         // false sends "kode": null so Erzap uses its own order numbering.
         'send_order_code' => (bool) env('ERZAP_SEND_ORDER_CODE', true),
+        // Token Erzap sends in X-Erzap-Token when it calls /web_service/... (the account token unless Erzap gives another one).
+        'inbound_token' => env('ERZAP_INBOUND_TOKEN') ?: env('ERZAP_TOKEN'),
     ],
 
     // Bearer tokens for the read-only REST API (comma separated). Empty means the protected endpoints are closed.
