@@ -28,6 +28,21 @@ class Order extends Model
         return $this->hasMany(OrderItem::class);
     }
 
+    /** Stores a priced line (OrderPricing::quote item) and its chosen contents as lines under it. */
+    public function addLine(array $item): OrderItem
+    {
+        $snapshot = fn (array $line) => [
+            'product_id' => $line['product_id'], 'product_name_snapshot' => $line['name'], 'category_snapshot' => $line['category'], 'variant_snapshot' => $line['variant'],
+            'sku_snapshot' => $line['sku'], 'unit_price_snapshot' => $line['unit_price'], 'quantity' => $line['quantity'], 'subtotal' => $line['subtotal'],
+        ];
+        $parent = $this->items()->create($snapshot($item));
+        foreach ($item['contents'] ?? [] as $content) {
+            $this->items()->create([...$snapshot($content), 'parent_item_id' => $parent->id]);
+        }
+
+        return $parent;
+    }
+
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);

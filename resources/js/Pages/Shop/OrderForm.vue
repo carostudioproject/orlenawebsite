@@ -6,6 +6,7 @@ import Field from '../../Components/Field.vue';
 import ProductPicker from '../../Components/Shop/ProductPicker.vue';
 import type { OrderCategory, OrderProduct } from '../../Types/ordering';
 import { rupiah } from '../../Support/money';
+import { addLine, clampQuantity as clamp, contentsLabel, toRequest, unitPrice, type CartLine } from '../../Support/cart';
 defineOptions({ layout: ShopLayout });
 interface OutletOption { id: number; name: string; address: string }
 const props = defineProps<{
@@ -26,7 +27,7 @@ const closedDateHint = computed(() => {
 });
 
 const form = useForm({
-    checkout_key: props.checkoutKey, items: [] as { product_id: number; quantity: number }[],
+    checkout_key: props.checkoutKey, items: [] as CartLine[],
     name: '', whatsapp: '', email: '', fulfillment_method: 'pickup' as 'pickup' | 'delivery', outlet_id: '' as number | string,
     requested_date: '', requested_time: '', delivery_address: '', customer_note: '', card_message: '',
 });
@@ -37,16 +38,16 @@ const productById = computed(() => new Map(props.products.map(product => [produc
 // The optional greeting card appears once a hampers product is in the cart.
 const hasHamper = computed(() => form.items.some(item => productById.value.get(item.product_id)?.is_hamper));
 const categoryName = (id: number) => props.categories.find(category => category.id === id)?.name ?? '';
-function addToCart(productId: number, quantity: number) {
-    const existing = form.items.find(item => item.product_id === productId);
-    if (existing) existing.quantity = Math.min(99, existing.quantity + quantity);
-    else if (form.items.length < 50) form.items.push({ product_id: productId, quantity });
+function addToCart(productId: number, quantity: number, contents: number[]) {
+    addLine(form.items, productId, quantity, contents);
     form.clearErrors();
 }
-const clamp = (value: number) => Math.min(99, Math.max(1, Math.round(value) || 1));
-const cart = computed(() => form.items.map((item, index) => ({ ...item, index, product: productById.value.get(item.product_id) })));
+const cart = computed(() => form.items.map((item, index) => {
+    const product = productById.value.get(item.product_id);
+    return { ...item, index, product, unit: unitPrice(product, item.contents), contentsText: contentsLabel(product, item.contents) };
+}));
 const cartCount = computed(() => form.items.reduce((sum, item) => sum + item.quantity, 0));
-const subtotal = computed(() => cart.value.reduce((sum, row) => sum + (row.product?.price ?? 0) * row.quantity, 0));
+const subtotal = computed(() => cart.value.reduce((sum, row) => sum + row.unit * row.quantity, 0));
 
 // Prices follow the outlet that fulfils the order: the chosen pickup outlet or the delivery outlet.
 const effectiveOutlet = computed(() => (form.fulfillment_method === 'delivery' ? props.deliveryOutlet?.id ?? null : Number(form.outlet_id) || null));
@@ -67,7 +68,7 @@ const pickupOutlet = computed(() => props.outlets.find(outlet => outlet.id === N
 
 const errorSummary = ref<HTMLElement | null>(null);
 const errors = computed(() => form.errors as Record<string, string>);
-const itemError = (index: number) => errors.value[`items.${index}.product_id`] ?? errors.value[`items.${index}.quantity`];
+const itemError = (index: number) => errors.value[`items.${index}.product_id`] ?? errors.value[`items.${index}.contents`] ?? errors.value[`items.${index}.quantity`];
 const canSubmit = computed(() => !form.processing && pricesReady.value && form.items.length > 0 && cart.value.every(row => row.product));
 // A field's message disappears as soon as the customer changes it.
 for (const field of ['name', 'whatsapp', 'outlet_id', 'delivery_address', 'requested_date', 'requested_time'] as const) {
@@ -100,7 +101,7 @@ async function submit() {
     }
     form.transform(data => ({
         ...data, outlet_id: effectiveOutlet.value,
-        items: data.items.map(item => ({ ...item, quoted_price: productById.value.get(item.product_id)?.price ?? 0 })),
+        items: toRequest(data.items, productById.value),
     })).post('/order', { preserveScroll: true, onError: async () => { await nextTick(); errorSummary.value?.focus(); } });
 }
 function scrollToCart() { document.getElementById('cart')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
@@ -157,8 +158,8 @@ function scrollToCart() { document.getElementById('cart')?.scrollIntoView({ beha
             <h2 id="cart-title" class="flex items-center justify-between text-xl">Keranjang <span class="rounded-full bg-almond px-3 py-0.5 text-sm">{{ cartCount }}</span></h2>
             <p v-if="!cart.length" class="admin-muted py-4 text-center text-sm"><i class="fa-solid fa-basket-shopping mb-2 block text-2xl text-chocolate/25" aria-hidden="true"></i>Keranjang masih kosong. Pilih produk lalu tekan Tambah.</p>
             <ul v-else class="divide-y divide-chocolate/10">
-                <li v-for="row in cart" :key="row.product_id" class="space-y-2 py-3 text-sm">
-                    <div class="flex justify-between gap-3"><div class="min-w-0"><p class="m-0 font-bold">{{ row.product?.name ?? 'Produk tidak tersedia' }}</p><p class="m-0 text-xs text-matcha">{{ row.product ? categoryName(row.product.category_id) : '' }}{{ row.product?.variant ? ` · ${row.product.variant}` : '' }}</p></div><span class="shrink-0 font-bold tabular-nums">{{ rupiah((row.product?.price ?? 0) * row.quantity) }}</span></div>
+                <li v-for="row in cart" :key="`${row.product_id}:${row.contents.join(',')}`" class="space-y-2 py-3 text-sm">
+                    <div class="flex justify-between gap-3"><div class="min-w-0"><p class="m-0 font-bold">{{ row.product?.name ?? 'Produk tidak tersedia' }}</p><p class="m-0 text-xs text-matcha">{{ row.product ? categoryName(row.product.category_id) : '' }}{{ row.product?.variant ? ` · ${row.product.variant}` : '' }}</p><p v-if="row.contentsText" class="m-0 mt-0.5 text-xs text-chocolate/75"><i class="fa-solid fa-gift" aria-hidden="true"></i> Isi: {{ row.contentsText }}</p></div><span class="shrink-0 font-bold tabular-nums">{{ rupiah(row.unit * row.quantity) }}</span></div>
                     <div class="flex items-center justify-between gap-2">
                         <div class="order-stepper is-small" role="group" :aria-label="`Jumlah ${row.product?.name}`"><button type="button" aria-label="Kurangi" :disabled="row.quantity <= 1 || form.processing" @click="form.items[row.index].quantity--"><i class="fa-solid fa-minus" aria-hidden="true"></i></button><input v-model.number="form.items[row.index].quantity" class="order-qty" type="number" min="1" max="99" inputmode="numeric" :aria-label="`Jumlah ${row.product?.name}`" @change="form.items[row.index].quantity = clamp(form.items[row.index].quantity)"><button type="button" aria-label="Tambah" :disabled="row.quantity >= 99 || form.processing" @click="form.items[row.index].quantity++"><i class="fa-solid fa-plus" aria-hidden="true"></i></button></div>
                         <button type="button" class="admin-action-icon admin-danger" :aria-label="`Hapus ${row.product?.name} dari keranjang`" title="Hapus" :disabled="form.processing" @click="form.items.splice(row.index, 1); form.clearErrors()"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>

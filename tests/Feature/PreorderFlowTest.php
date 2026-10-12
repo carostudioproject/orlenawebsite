@@ -66,8 +66,8 @@ class PreorderFlowTest extends TestCase
             $this->post('/order', $payload)->assertSessionHasErrors('items.0.quantity');
         }
         $payload['items'][0]['quantity'] = 1;
-        $payload['items'][] = $payload['items'][0];
-        $this->post('/order', $payload)->assertSessionHasErrors('items.0.product_id');
+        // A regular product has no contents to choose.
+        $this->post('/order', [...$payload, 'items' => [[...$payload['items'][0], 'contents' => [$product->id]]]])->assertSessionHasErrors('items.0.contents');
         $this->post('/order', [...$payload, 'items' => []])->assertSessionHasErrors('items');
         $product->update(['is_active' => false]);
         $this->get('/order')->assertInertia(fn (Assert $page) => $page->has('products', 0));

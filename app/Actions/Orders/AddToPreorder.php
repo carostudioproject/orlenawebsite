@@ -12,7 +12,8 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Adds customer-chosen items to their own order before any payment exists. Prices come from the database
- * for the order's outlet; the same product at the same price is merged into its existing line.
+ * for the order's outlet; the same product at the same price is merged into its existing line. Hampers and boxes with
+ * chosen contents always get a new line.
  */
 class AddToPreorder
 {
@@ -38,7 +39,7 @@ class AddToPreorder
             }
             $quote = $this->pricing->quote($data['items'], $outlet);
 
-            $lines = $locked->items()->lockForUpdate()->get();
+            $lines = $locked->items()->whereNull('parent_item_id')->lockForUpdate()->get();
             if ($lines->count() + collect($quote['items'])->filter(fn ($item) => ! $lines->contains(fn ($line) => $this->sameLine($line, $item)))->count() > 50) {
                 throw ValidationException::withMessages(['items' => 'Satu pesanan maksimal berisi 50 produk berbeda.']);
             }
@@ -50,11 +51,7 @@ class AddToPreorder
                 if ($line) {
                     $line->update(['quantity' => $line->quantity + $item['quantity'], 'subtotal' => $line->subtotal + $item['subtotal']]);
                 } else {
-                    $locked->items()->create([
-                        'product_id' => $item['product_id'], 'product_name_snapshot' => $item['name'], 'category_snapshot' => $item['category'],
-                        'variant_snapshot' => $item['variant'], 'sku_snapshot' => $item['sku'], 'unit_price_snapshot' => $item['unit_price'],
-                        'quantity' => $item['quantity'], 'subtotal' => $item['subtotal'],
-                    ]);
+                    $locked->addLine($item);
                 }
             }
 
@@ -65,7 +62,9 @@ class AddToPreorder
             $addition = $locked->additions()->create([
                 'add_key' => $data['add_key'], 'subtotal_added' => $quote['subtotal'], 'previous_total' => $previousTotal, 'new_total' => $locked->total,
                 'items' => collect($quote['items'])->map(fn ($item) => [
-                    'name' => $item['name'], 'variant' => $item['variant'], 'quantity' => $item['quantity'], 'unit_price' => $item['unit_price'], 'subtotal' => $item['subtotal'],
+                    'name' => $item['name'], 'variant' => $item['variant'], 'quantity' => $item['quantity'], 'unit_price' => $item['unit_price'],
+                    'subtotal' => $item['subtotal'] + array_sum(array_column($item['contents'], 'subtotal')),
+                    'contents' => array_map(fn ($content) => $content['quantity'].'x '.$content['name'].($content['variant'] ? ' ('.$content['variant'].')' : ''), $item['contents']),
                 ])->all(),
             ]);
             Audit::record('order.items_added', $locked, ['addition_id' => $addition->id, 'subtotal_added' => $quote['subtotal'], 'total' => $locked->total], null);
@@ -76,6 +75,7 @@ class AddToPreorder
 
     private function sameLine($line, array $item): bool
     {
-        return $line->product_id === $item['product_id'] && $line->unit_price_snapshot === $item['unit_price'];
+        return ! $item['contents'] && $line->product_id === $item['product_id'] && $line->unit_price_snapshot === $item['unit_price']
+            && ! $line->contents()->exists();
     }
 }

@@ -1,6 +1,11 @@
-export interface OrderItem { id: number; product_name_snapshot: string; category_snapshot: string; variant_snapshot: string | null; quantity: number; unit_price_snapshot: number; subtotal: number }
+export interface OrderItem { id: number; parent_item_id?: number | null; product_name_snapshot: string; category_snapshot: string; variant_snapshot: string | null; quantity: number; unit_price_snapshot: number; subtotal: number }
 export interface OrderCategory { id: number; name: string; image: string | null }
-export interface OrderProduct { id: number; name: string; category_id: number; description: string | null; image: string | null; variant: string | null; is_hamper: boolean; hamper_items: string[]; sale_ends_on: string | null; price: number }
+/** A content the customer can choose for a hampers/box; price is what it adds per unit (0 in a box). */
+export interface ContentOption { id: number; name: string; variant: string | null; price: number }
+export interface OrderProduct {
+    id: number; name: string; category_id: number; description: string | null; image: string | null; variant: string | null; is_hamper: boolean; hamper_items: string[]; sale_ends_on: string | null; price: number;
+    content_type: 'hampers' | 'box' | null; content_count: number | null; contents: ContentOption[];
+}
 export type OrderStatus = 'pending_review' | 'confirmed' | 'processing' | 'ready' | 'delivering' | 'completed' | 'cancelled';
 export type PaymentStatus = 'not_created' | 'pending' | 'paid' | 'failed' | 'expired' | 'cancelled' | 'refunded';
 export interface Preorder {

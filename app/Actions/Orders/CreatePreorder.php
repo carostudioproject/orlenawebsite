@@ -68,16 +68,14 @@ class CreatePreorder
                 'delivery_address' => $data['fulfillment_method'] === 'delivery' ? $data['delivery_address'] : null,
                 'customer_note' => $data['customer_note'] ?? null,
                 // The greeting card only goes with hampers.
-                'card_message' => filled($data['card_message'] ?? null) && Product::whereIn('id', array_column($quote['items'], 'product_id'))->where('is_hamper', true)->exists()
+                'card_message' => filled($data['card_message'] ?? null) && Product::whereIn('id', array_column($quote['items'], 'product_id'))
+                    ->where(fn ($query) => $query->where('is_hamper', true)->orWhere('content_type', 'hampers'))->exists()
                     ? trim($data['card_message']) : null,
                 'subtotal' => $quote['subtotal'], 'delivery_fee' => $data['fulfillment_method'] === 'pickup' ? 0 : null,
                 'total' => $quote['subtotal'], 'order_status' => 'pending_review', 'payment_status' => 'not_created',
             ]);
             foreach ($quote['items'] as $item) {
-                $order->items()->create([
-                    'product_id' => $item['product_id'], 'product_name_snapshot' => $item['name'], 'category_snapshot' => $item['category'], 'variant_snapshot' => $item['variant'],
-                    'sku_snapshot' => $item['sku'], 'unit_price_snapshot' => $item['unit_price'], 'quantity' => $item['quantity'], 'subtotal' => $item['subtotal'],
-                ]);
+                $order->addLine($item);
             }
             DB::table('order_status_histories')->insert(['order_id' => $order->id, 'actor_id' => null, 'from_status' => null, 'to_status' => 'pending_review', 'created_at' => now()]);
             Audit::record('order.created', $order, ['order_code' => $order->order_code, 'order_status' => 'pending_review']);

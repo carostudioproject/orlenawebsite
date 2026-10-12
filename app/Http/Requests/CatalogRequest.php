@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Product;
 use App\Support\ContentImage;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -15,7 +16,7 @@ class CatalogRequest extends FormRequest
 
     public function messages(): array
     {
-        return ['variant.unique' => 'A product with this name and variant already exists in that category.', 'hamper_contents.required' => 'List the hampers contents, one item per line.', 'sale_ends_on.after_or_equal' => 'The sale end date must be on or after the start date.', 'upload.image' => 'The photo must be a JPG, PNG or WebP image.', 'upload.mimes' => 'The photo must be a JPG, PNG or WebP image.', 'upload.max' => 'The photo may be at most 4 MB.'];
+        return ['variant.unique' => 'A product with this name and variant already exists in that category.', 'hamper_contents.required' => 'List the hampers contents, one item per line.', 'content_ids.required' => 'Choose at least one product the customer can pick as contents.', 'content_ids.min' => 'Choose at least one product the customer can pick as contents.', 'sale_ends_on.after_or_equal' => 'The sale end date must be on or after the start date.', 'upload.image' => 'The photo must be a JPG, PNG or WebP image.', 'upload.mimes' => 'The photo must be a JPG, PNG or WebP image.', 'upload.max' => 'The photo may be at most 4 MB.'];
     }
 
     public function rules(): array
@@ -47,7 +48,13 @@ class CatalogRequest extends FormRequest
                 'variant' => ['nullable', 'string', 'max:40', Rule::unique('products')->ignore($id)
                     ->where(fn ($query) => $query->where('category_id', $this->input('category_id'))->where('name', $this->input('name')))],
                 'is_hamper' => ['sometimes', 'boolean'],
-                'hamper_contents' => [Rule::requiredIf($this->boolean('is_hamper')), 'nullable', 'string', 'max:3000'],
+                'hamper_contents' => [Rule::requiredIf($this->boolean('is_hamper') && ! $this->filled('content_type')), 'nullable', 'string', 'max:3000'],
+                // Contents chosen by the customer: hampers (1 item, price added) or box (N items, priced per box).
+                'content_type' => ['nullable', Rule::in(array_keys(Product::CONTENT_TYPES))],
+                'content_count' => [Rule::excludeIf(! $this->filled('content_type')), 'required', 'integer', 'min:1', 'max:50'],
+                'content_pricing' => [Rule::excludeIf(! $this->filled('content_type')), 'required', Rule::in(array_keys(Product::CONTENT_PRICING))],
+                'content_ids' => [Rule::excludeIf(! $this->filled('content_type')), 'required', 'array', 'min:1', 'max:500'],
+                'content_ids.*' => ['integer', 'distinct', Rule::exists('products', 'id')->whereNull('content_type')],
                 'sale_starts_on' => ['nullable', 'date_format:Y-m-d'],
                 'sale_ends_on' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:sale_starts_on'],
                 'description' => ['nullable', 'string', 'max:5000'],

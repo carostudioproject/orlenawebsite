@@ -16,6 +16,12 @@
 .order-size span { display: inline-block; cursor: pointer; border: 1px solid #3b030429; border-radius: 999px; padding: .35rem .8rem; font-size: .8rem; font-weight: 700; transition: background-color .15s, border-color .15s; }
 .order-size input:checked + span { border-color: var(--admin-chocolate); background: var(--admin-almond); }
 .order-size input:focus-visible + span { outline: 2px solid var(--admin-chocolate); outline-offset: 2px; }
+/* One choosable hampers/box content: radio or stepper row. */
+.order-content-option { display: flex; align-items: center; gap: .6rem; border: 1px solid #3b030420; border-radius: .75rem; background: white; padding: .45rem .7rem; font-size: .8rem; }
+label.order-content-option { cursor: pointer; }
+label.order-content-option:has(input:checked) { border-color: var(--admin-chocolate); background: #fff5f0; }
+.order-content-option input[type="radio"] { accent-color: var(--admin-chocolate); }
+.order-stepper span.order-qty { display: inline-block; line-height: 2rem; }
 .order-stepper { display: inline-flex; align-items: center; overflow: hidden; border: 1px solid #3b030429; border-radius: 999px; background: white; }
 .order-stepper button { display: inline-flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.4rem; font-size: .75rem; transition: background-color .15s; }
 .order-stepper button:hover:not(:disabled) { background: var(--admin-almond); }

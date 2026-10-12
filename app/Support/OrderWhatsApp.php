@@ -15,8 +15,13 @@ class OrderWhatsApp
     {
         $order->loadMissing('items', 'customer');
         $rupiah = fn (int $amount) => 'Rp '.number_format($amount, 0, ',', '.');
-        $items = $order->items->map(fn ($item) => '- '.$item->quantity.'x '.$item->product_name_snapshot
-            .($item->variant_snapshot ? ' ('.$item->variant_snapshot.')' : '').' = '.$rupiah($item->subtotal));
+        $label = fn ($item) => $item->quantity.'x '.$item->product_name_snapshot.($item->variant_snapshot ? ' ('.$item->variant_snapshot.')' : '');
+        // Hampers/box contents follow their line; the line total includes them.
+        $contents = $order->items->whereNotNull('parent_item_id')->groupBy('parent_item_id');
+        $items = $order->items->whereNull('parent_item_id')->flatMap(fn ($item) => [
+            '- '.$label($item).' = '.$rupiah($item->subtotal + (int) $contents->get($item->id)?->sum('subtotal')),
+            ...($contents->get($item->id)?->map(fn ($content) => '   isi: '.$label($content))->all() ?? []),
+        ]);
         $delivery = $order->fulfillment_method === 'delivery';
         $schedule = $order->requested_date->locale('id')->translatedFormat('l, j F Y')
             .($order->requested_time ? ', '.substr($order->requested_time, 0, 5).' WITA' : '');
@@ -50,8 +55,10 @@ class OrderWhatsApp
     public static function additionMessage(Order $order, OrderAddition $addition): string
     {
         $rupiah = fn (int $amount) => 'Rp '.number_format($amount, 0, ',', '.');
-        $items = collect($addition->items)->map(fn ($item) => '- '.$item['quantity'].'x '.$item['name']
-            .(! empty($item['variant']) ? ' ('.$item['variant'].')' : '').' = '.$rupiah($item['subtotal']));
+        $items = collect($addition->items)->flatMap(fn ($item) => [
+            '- '.$item['quantity'].'x '.$item['name'].(! empty($item['variant']) ? ' ('.$item['variant'].')' : '').' = '.$rupiah($item['subtotal']),
+            ...array_map(fn ($content) => '   isi: '.$content, $item['contents'] ?? []),
+        ]);
 
         return implode("\n", [
             'Halo Orlena,',

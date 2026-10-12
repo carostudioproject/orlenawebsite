@@ -189,9 +189,12 @@ class ErzapSync
             'iduser_sales_penerima_pesanan_online_erzap' => $this->salesUserId($order),
             'informasi_tambahan_text' => mb_substr($note, 0, 500),
             'kode_voucher_text' => '',
-            'shopping_cart_details' => $order->items->map(fn ($item) => [
-                'harga_satuan' => $money($item->unit_price_snapshot), 'jumlah' => $money($item->quantity), 'tgl_check_in' => null, 'barcode_produk' => $item->product->barcode,
-            ])->values()->all(),
+            // Hampers/box lines and their chosen contents are separate Erzap products; the same barcode at the same price is one line.
+            'shopping_cart_details' => $order->items->groupBy(fn ($item) => $item->product->barcode.'|'.$item->unit_price_snapshot)
+                ->map(fn ($lines) => [
+                    'harga_satuan' => $money($lines->first()->unit_price_snapshot), 'jumlah' => $money($lines->sum('quantity')), 'tgl_check_in' => null,
+                    'barcode_produk' => $lines->first()->product->barcode,
+                ])->values()->all(),
         ];
     }
 }

@@ -58,14 +58,19 @@ class CatalogController extends Controller
         $record = $id ? self::MODELS[$resource]::findOrFail($id) : null;
         if ($record instanceof Product) {
             $record->load('outletPrices');
+            $record->setAttribute('content_ids', $record->contentOptions()->pluck('products.id'));
         }
 
         return Inertia::render('Admin/Catalog/Form', [
             'resource' => $resource, 'record' => $record,
             // Opened from the Hampers list, or editing a hamper: the form, title, and menu follow Hampers.
-            'hamperMode' => $resource === 'products' && ($record ? $record->is_hamper : $request->query('type') === 'hampers'),
+            'hamperMode' => $resource === 'products' && ($record ? $record->is_hamper || $record->content_type === 'hampers' : $request->query('type') === 'hampers'),
             'categories' => $resource === 'products' ? Category::orderBy('name')->get(['id', 'name']) : [],
             'outlets' => $resource === 'products' ? Outlet::orderBy('name')->get(['id', 'name']) : [],
+            // Products that can be chosen as hampers/box contents ("Isi Dari").
+            'contentCandidates' => $resource === 'products' ? Product::with('category:id,name')->whereNull('content_type')->when($record, fn ($query) => $query->whereKeyNot($record->id))
+                ->orderBy('name')->orderBy('variant')->get(['id', 'name', 'variant', 'sku', 'price', 'is_active', 'category_id'])
+                ->map(fn (Product $product) => [...$product->only('id', 'name', 'variant', 'sku', 'price', 'is_active'), 'category' => $product->category?->name]) : [],
         ]);
     }
 
@@ -86,9 +91,16 @@ class CatalogController extends Controller
             $record = $id ? self::MODELS[$resource]::lockForUpdate()->findOrFail($id) : new (self::MODELS[$resource]);
             $data = $request->validated();
             $prices = $data['outlet_prices'] ?? [];
-            unset($data['outlet_prices'], $data['upload']);
+            $contentIds = $data['content_ids'] ?? [];
+            unset($data['outlet_prices'], $data['upload'], $data['content_ids']);
+            if (($data['content_type'] ?? null) === 'hampers') {
+                $data['content_count'] = 1;
+            }
             if ($resource === 'products' && empty($data['is_hamper'])) {
                 $data['hamper_contents'] = null;
+            }
+            if ($resource === 'products' && empty($data['content_type'])) {
+                [$data['content_type'], $data['content_count'], $data['content_pricing'], $contentIds] = [null, null, null, []];
             }
             if ($request->hasFile('upload')) {
                 $data['image'] = ContentImage::resolve($request->file('upload'), null);
@@ -104,13 +116,17 @@ class CatalogController extends Controller
                 $record->outletPrices()->delete();
                 $record->outletPrices()->createMany($prices);
                 $changes['outlet_prices'] = $prices;
+                $synced = $record->contentOptions()->sync(array_values(array_diff(array_map('intval', $contentIds), [$record->id])));
+                if (array_filter($synced)) {
+                    $changes['content_ids'] = $record->contentOptions()->pluck('products.id')->all();
+                }
             }
             Audit::record($id ? 'catalog.updated' : 'catalog.created', $record, $changes);
 
             return $record;
         });
 
-        return redirect('/admin/'.$resource.($record instanceof Product && $record->is_hamper ? '?type=hampers' : ''))->with('success', 'Saved.');
+        return redirect('/admin/'.$resource.($record instanceof Product && ($record->is_hamper || $record->content_type === 'hampers') ? '?type=hampers' : ''))->with('success', 'Saved.');
     }
 
     /** Quick activate/deactivate from the list for products and outlets. */
@@ -188,7 +204,8 @@ class CatalogController extends Controller
             $query->where('is_active', $filters['status'] === 'active');
         }
         if ($resource === 'products' && ! empty($filters['type'])) {
-            $query->where('is_hamper', $filters['type'] === 'hampers');
+            $hampers = fn ($q) => $q->where('is_hamper', true)->orWhere('content_type', 'hampers');
+            $filters['type'] === 'hampers' ? $query->where($hampers) : $query->whereNot($hampers);
         }
 
         return $query;

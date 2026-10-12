@@ -9,7 +9,7 @@ defineOptions({ layout: ShopLayout });
 interface TrackedOrder {
     order_code: string; order_status: Status; payment_status: PaymentStatus; fulfillment_method: 'pickup' | 'delivery'; outlet_name_snapshot: string;
     requested_date: string; requested_time: string | null; subtotal: number; delivery_fee: number | null; total: number; created_at: string;
-    items: Pick<OrderItem, 'id' | 'product_name_snapshot' | 'category_snapshot' | 'variant_snapshot' | 'quantity' | 'subtotal'>[];
+    items: Pick<OrderItem, 'id' | 'parent_item_id' | 'product_name_snapshot' | 'category_snapshot' | 'variant_snapshot' | 'quantity' | 'subtotal'>[];
 }
 const props = defineProps<{ order: TrackedOrder; payment: { url: string; expires_at: string | null } | null; whatsappUrl: string | null }>();
 

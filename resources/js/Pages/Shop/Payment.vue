@@ -10,7 +10,7 @@ defineOptions({ layout: ShopLayout });
 interface PayOrder {
     order_code: string; order_status: OrderStatus; payment_status: PaymentStatus; fulfillment_method: 'pickup' | 'delivery'; outlet_name_snapshot: string;
     requested_date: string; requested_time: string | null; subtotal: number; delivery_fee: number | null; total: number;
-    items: Pick<OrderItem, 'id' | 'product_name_snapshot' | 'category_snapshot' | 'variant_snapshot' | 'quantity' | 'subtotal'>[];
+    items: Pick<OrderItem, 'id' | 'parent_item_id' | 'product_name_snapshot' | 'category_snapshot' | 'variant_snapshot' | 'quantity' | 'subtotal'>[];
 }
 type Method = 'va_bca' | 'qris';
 interface OpenPayment { qr: string | null; va: string | null; method: Method | 'checkout'; amount: number; expires_at: string | null; demo?: boolean; checkout_url?: string | null }

@@ -20,15 +20,28 @@ class CheckoutRequest extends FormRequest
         $this->merge(['whatsapp' => $phone, 'email' => $this->filled('email') ? strtolower(trim($this->input('email'))) : null]);
     }
 
+    /**
+     * Cart lines, shared with "Tambah pesanan". The same hampers or box may appear on several lines with different contents;
+     * contents are the product IDs chosen for one unit (repeats allowed, checked against the product in OrderPricing).
+     */
+    public static function itemRules(): array
+    {
+        return [
+            'items' => ['required', 'array', 'min:1', 'max:50'],
+            'items.*' => ['array:product_id,quantity,quoted_price,contents'],
+            'items.*.product_id' => ['required', 'integer', 'min:1'],
+            'items.*.quantity' => ['required', 'integer', 'min:1', 'max:99'],
+            'items.*.quoted_price' => ['required', 'integer', 'min:1', 'max:999999999'],
+            'items.*.contents' => ['sometimes', 'array', 'max:50'],
+            'items.*.contents.*' => ['integer', 'min:1'],
+        ];
+    }
+
     public function rules(): array
     {
         return [
             'checkout_key' => ['required', 'uuid'],
-            'items' => ['required', 'array', 'min:1', 'max:50'],
-            'items.*' => ['array:product_id,quantity,quoted_price'],
-            'items.*.product_id' => ['required', 'integer', 'min:1', 'distinct'],
-            'items.*.quantity' => ['required', 'integer', 'min:1', 'max:99'],
-            'items.*.quoted_price' => ['required', 'integer', 'min:1', 'max:999999999'],
+            ...self::itemRules(),
             'name' => ['required', 'string', 'max:120'],
             'whatsapp' => ['required', 'regex:/^[1-9][0-9]{7,14}$/'],
             'email' => ['nullable', 'email', 'max:254'],
@@ -51,7 +64,6 @@ class CheckoutRequest extends FormRequest
             'whatsapp.regex' => 'Masukkan nomor WhatsApp yang valid, misalnya 081234567890.',
             'items.min' => 'Pilih minimal satu produk.',
             'items.max' => 'Maksimal 50 produk dalam satu pesanan.',
-            'items.*.product_id.distinct' => 'Produk sudah dipilih. Ubah jumlah pada baris yang sama.',
             'items.*.quantity.integer' => 'Jumlah harus berupa bilangan bulat.',
             'items.*.quantity.min' => 'Jumlah minimal 1.',
             'items.*.quantity.max' => 'Jumlah maksimal 99 per produk.',

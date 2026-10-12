@@ -5,19 +5,26 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Product extends Model
 {
+    /** Products whose contents the customer chooses: hampers (one item, its price added) or box (N items, priced per box). */
+    public const CONTENT_TYPES = ['hampers' => 'Hampers', 'box' => 'Box'];
+
+    /** added: each content costs its normal price on top; included: contents are Rp 0 (the box price covers them). */
+    public const CONTENT_PRICING = ['added' => 'Ditambah', 'included' => 'Termasuk'];
+
     protected $fillable = [
         'category_id', 'variant', 'sku', 'name', 'description', 'image', 'price', 'is_active',
-        'is_hamper', 'hamper_contents', 'sale_starts_on', 'sale_ends_on', 'erzap_product_id', 'erzap_variant_id', 'barcode',
+        'is_hamper', 'hamper_contents', 'content_type', 'content_count', 'content_pricing', 'sale_starts_on', 'sale_ends_on', 'erzap_product_id', 'erzap_variant_id', 'barcode',
     ];
 
     protected function casts(): array
     {
         return [
-            'is_active' => 'boolean', 'is_hamper' => 'boolean', 'price' => 'integer',
+            'is_active' => 'boolean', 'is_hamper' => 'boolean', 'price' => 'integer', 'content_count' => 'integer',
             'sale_starts_on' => 'date:Y-m-d', 'sale_ends_on' => 'date:Y-m-d',
         ];
     }
@@ -48,6 +55,37 @@ class Product extends Model
         $today = now('Asia/Makassar')->toDateString();
         $query->where(fn ($q) => $q->whereNull('sale_starts_on')->orWhere('sale_starts_on', '<=', $today))
             ->where(fn ($q) => $q->whereNull('sale_ends_on')->orWhere('sale_ends_on', '>=', $today));
+    }
+
+    /** Whether the customer chooses this product's contents. */
+    public function hasChoice(): bool
+    {
+        return isset(self::CONTENT_TYPES[$this->content_type]) && $this->content_count > 0;
+    }
+
+    /** Products allowed as contents ("Isi Dari"). */
+    public function contentOptions(): BelongsToMany
+    {
+        return $this->belongsToMany(Product::class, 'product_contents', 'product_id', 'content_product_id');
+    }
+
+    /** Hampers and boxes that allow this product as contents. */
+    public function containers(): BelongsToMany
+    {
+        return $this->belongsToMany(Product::class, 'product_contents', 'content_product_id', 'product_id');
+    }
+
+    /**
+     * Whether this product can be chosen as contents of $parent right now. Box contents (Rp 0) may be hidden from the
+     * menu, e.g. Mini Size flavours; contents with their own price must be orderable on their own.
+     */
+    public function availableAsContentOf(Product $parent): bool
+    {
+        if ($parent->content_pricing === 'included') {
+            return true;
+        }
+
+        return $this->is_active && $this->price > 0 && (bool) $this->category?->is_active && $this->onSale();
     }
 
     public function category(): BelongsTo
