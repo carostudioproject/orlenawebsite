@@ -177,7 +177,7 @@ class QrisPaymentTest extends TestCase
     public function test_demo_mode_shows_a_sample_qr_and_simulates_payment_without_doku(): void
     {
         Http::fake();
-        config(['services.doku.enabled' => false, 'services.doku.mode' => 'demo']);
+        config(['services.doku.enabled' => false, 'services.doku.mode' => 'demo', 'services.doku.methods' => ['qris']]);
         $order = $this->order();
         $this->actingAs(User::factory()->create())->get('/admin/orders/'.$order->id)->assertInertia(fn (Assert $page) => $page->where('dokuEnabled', true));
         $payment = $this->confirm($order);

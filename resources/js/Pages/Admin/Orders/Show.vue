@@ -15,7 +15,7 @@ import type { PaymentAttempt, Preorder, StatusChange } from '../../../Types/orde
 defineOptions({ layout: AdminLayout });
 interface Review { id: number; actor_name: string | null; note: string; previous_delivery_fee: number | null; delivery_fee: number | null; previous_schedule: string | null; schedule: string | null; created_at: string }
 interface Addition { id: number; items: { name: string; variant: string | null; quantity: number; subtotal: number }[]; subtotal_added: number; previous_total: number; new_total: number; created_at: string }
-const props = defineProps<{ order: Preorder; reviews: Paginated<Review>; history: StatusChange[]; payments: PaymentAttempt[]; canCancelPaid: boolean; additions: Addition[]; dokuEnabled: boolean; paymentMode: string; manualMethods: Record<string, string>;
+const props = defineProps<{ order: Preorder; reviews: Paginated<Review>; history: StatusChange[]; payments: PaymentAttempt[]; canCancelPaid: boolean; additions: Addition[]; dokuEnabled: boolean; paymentMode: string; customerChooses: boolean; manualMethods: Record<string, string>;
     dayLoad: { orders: number; capacity: number | null; closed: string | null };
     erzapSync: { id: number; type: string; status: string; attempts: number; last_error: string | null; synced_at: string | null; next_attempt_at: string | null; external_ref: string | null } | null;
 }>();
@@ -49,8 +49,9 @@ const busy = ref(false);
 function act(url: string, data: Record<string, unknown> = {}, onSuccess?: () => void) {
     router.post(`/admin/orders/${props.order.id}${url}`, data as never, { preserveScroll: true, onStart: () => { busy.value = true; }, onFinish: () => { busy.value = false; }, onSuccess });
 }
-const linkKind = computed(() => ({ va: 'DOKU virtual account (VA) payment link', qris: 'QRIS payment page', demo: 'demo payment page', checkout: 'DOKU payment link' } as Record<string, string>)[props.paymentMode] ?? 'payment link');
-const confirmPaymentLabel = computed(() => (props.paymentMode === 'va' ? 'Confirm & Create VA Payment' : props.paymentMode === 'qris' ? 'Confirm & Create QRIS' : 'Confirm & Create Payment'));
+const linkKind = computed(() => ({ va: 'DOKU virtual account (VA) payment link', qris: 'QRIS payment page', direct: 'payment page (customer chooses VA BCA or QRIS)', demo: 'demo payment page', checkout: 'DOKU payment link' } as Record<string, string>)[props.paymentMode] ?? 'payment link');
+const confirmPaymentLabel = computed(() => (props.customerChooses ? 'Confirm order' : props.paymentMode === 'va' ? 'Confirm & Create VA Payment' : props.paymentMode === 'qris' ? 'Confirm & Create QRIS' : 'Confirm & Create Payment'));
+const methodLabel = (method?: string | null) => (method ? ({ va_bca: 'VA BCA', qris: 'QRIS' } as Record<string, string>)[method] ?? null : null);
 async function confirmOrder() {
     const ok = await confirmDialog({
         title: 'Confirm this order?', icon: 'fa-circle-check', confirmLabel: props.dokuEnabled ? confirmPaymentLabel.value : 'Confirm order',
@@ -99,10 +100,14 @@ const copied = ref(false);
 async function copyLink(url: string) {
     try { await navigator.clipboard.writeText(url); copied.value = true; setTimeout(() => { copied.value = false; }, 2000); } catch { alertDialog({ title: 'Copy payment link', icon: 'fa-link', message: 'Your browser blocked automatic copying. Copy the link below manually.', copyText: url }); }
 }
+// Customer chooses VA BCA or QRIS: no link exists yet, staff send our payment page until the deadline.
+const choicePage = computed(() => (props.order.order_status === 'confirmed' && props.order.payment_status === 'not_created' && props.order.payment_due_at && !openPayment.value
+    ? { url: `${window.location.origin}/bayar/${props.order.order_code}`, expired: new Date(props.order.payment_due_at).getTime() < Date.now() } : null));
 const whatsappLink = computed(() => {
-    const payment = current.value;
-    if (!payment?.payment_url || payment.status !== 'pending') return null;
-    const text = `Halo ${props.order.customer.name}, pesanan ${props.order.order_code} sudah kami konfirmasi.\n\nTotal: ${rupiah(payment.amount)}\nLink pembayaran: ${payment.payment_url}\nBerlaku sampai: ${witaTime(payment.expires_at)}\n\nCek status pesanan kapan saja: ${window.location.origin}/cek-pesanan?code=${props.order.order_code}\n\nTerima kasih.`;
+    const payment = current.value?.status === 'pending' && current.value.payment_url ? { url: current.value.payment_url, expires: current.value.expires_at }
+        : choicePage.value && !choicePage.value.expired ? { url: choicePage.value.url, expires: props.order.payment_due_at ?? null } : null;
+    if (!payment) return null;
+    const text = `Halo ${props.order.customer.name}, pesanan ${props.order.order_code} sudah kami konfirmasi.\n\nTotal: ${rupiah(props.order.total)}\nLink pembayaran: ${payment.url}\nBerlaku sampai: ${witaTime(payment.expires)}\n\nCek status pesanan kapan saja: ${window.location.origin}/cek-pesanan?code=${props.order.order_code}\n\nTerima kasih.`;
     return `https://wa.me/${props.order.customer.whatsapp}?text=${encodeURIComponent(text)}`;
 });
 
@@ -135,8 +140,17 @@ onBeforeUnmount(() => clearInterval(timer));
             <p v-if="order.delivery_fee === null" class="admin-error-text">Set the delivery fee in the review form before confirming.</p>
             <button class="admin-primary" :disabled="busy || order.delivery_fee === null" @click="confirmOrder"><i class="fa-solid fa-circle-check" aria-hidden="true"></i>{{ busy ? 'Processing…' : dokuEnabled ? confirmPaymentLabel : 'Confirm order' }}</button>
         </div>
+        <div v-if="choicePage" class="space-y-3 text-sm" :class="{ 'mb-5 border-b border-chocolate/10 pb-5': current }">
+            <p class="m-0"><strong>{{ choicePage.expired ? 'Payment deadline passed' : 'Waiting for the customer to choose VA BCA or QRIS' }}</strong> · deadline {{ witaTime(order.payment_due_at ?? null) }}</p>
+            <div v-if="!choicePage.expired" class="flex flex-wrap gap-3">
+                <button type="button" class="admin-primary" @click="copyLink(choicePage.url)"><i class="fa-solid fa-copy" aria-hidden="true"></i>{{ copied ? 'Link copied' : 'Copy payment link' }}</button>
+                <a v-if="whatsappLink" :href="whatsappLink" target="_blank" rel="noopener noreferrer" class="admin-secondary"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i>Send via WhatsApp</a>
+                <a :href="choicePage.url" target="_blank" rel="noopener noreferrer" class="admin-secondary"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i>Open payment page</a>
+            </div>
+            <p class="admin-muted m-0 text-xs">The VA number or QR is created when the customer chooses. This page refreshes every 15 seconds.</p>
+        </div>
         <div v-if="current" class="space-y-3 text-sm" :class="{ 'mt-5 border-t border-chocolate/10 pt-5': order.order_status === 'pending_review' }">
-            <dl class="grid grid-cols-1 gap-3 sm:grid-cols-3"><div><dt class="font-bold">{{ current.provider === 'manual' ? 'Manual payment' : 'Link' }} #{{ current.attempt }} status</dt><dd>{{ paymentStatusLabel(current.status) }}</dd></div><div><dt class="font-bold">Amount</dt><dd>{{ rupiah(current.amount) }}</dd></div><div><dt class="font-bold">{{ current.status === 'paid' ? 'Paid at' : 'Valid until' }}</dt><dd>{{ witaTime(current.status === 'paid' ? current.paid_at : current.expires_at) }}</dd></div></dl>
+            <dl class="grid grid-cols-1 gap-3 sm:grid-cols-3"><div><dt class="font-bold">{{ current.provider === 'manual' ? 'Manual payment' : 'Link' }} #{{ current.attempt }}<template v-if="methodLabel(current.method)"> ({{ methodLabel(current.method) }})</template> status</dt><dd>{{ paymentStatusLabel(current.status) }}</dd></div><div><dt class="font-bold">Amount</dt><dd>{{ rupiah(current.amount) }}</dd></div><div><dt class="font-bold">{{ current.status === 'paid' ? 'Paid at' : 'Valid until' }}</dt><dd>{{ witaTime(current.status === 'paid' ? current.paid_at : current.expires_at) }}</dd></div></dl>
             <div v-if="current.status === 'pending' && current.payment_url" class="flex flex-wrap gap-3">
                 <button type="button" class="admin-primary" @click="copyLink(current.payment_url)"><i class="fa-solid fa-copy" aria-hidden="true"></i>{{ copied ? 'Link copied' : 'Copy payment link' }}</button>
                 <a v-if="whatsappLink" :href="whatsappLink" target="_blank" rel="noopener noreferrer" class="admin-secondary"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i>Send via WhatsApp</a>
@@ -155,10 +169,10 @@ onBeforeUnmount(() => clearInterval(timer));
                 <button class="admin-primary" :disabled="busy"><i class="fa-solid fa-check" aria-hidden="true"></i>Mark as paid</button>
             </div>
         </form>
-        <div v-if="dokuEnabled && can.review && order.order_status === 'confirmed' && order.payment_status === 'not_created' && !openPayment" class="mt-4">
+        <div v-if="dokuEnabled && !customerChooses && can.review && order.order_status === 'confirmed' && order.payment_status === 'not_created' && !openPayment" class="mt-4">
             <button type="button" class="admin-primary" :disabled="busy" @click="act('/payments/retry')"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i>Try creating the link again</button>
         </div>
-        <form v-if="dokuEnabled && can.review && order.order_status === 'confirmed' && ['failed', 'expired', 'cancelled'].includes(order.payment_status) && !openPayment" class="mt-5 space-y-3" @submit.prevent="renew">
+        <form v-if="dokuEnabled && can.review && order.order_status === 'confirmed' && (['failed', 'expired', 'cancelled'].includes(order.payment_status) || choicePage?.expired) && !openPayment" class="mt-5 space-y-3" @submit.prevent="renew">
             <Field id="renew_reason" label="Reason for a new link" :error="errors.reason"><template #default="{ describedBy }"><textarea id="renew_reason" v-model="renewReason" required maxlength="500" rows="2" :aria-describedby="describedBy" :disabled="busy" placeholder="E.g. the customer asked for a new link after it expired"></textarea></template></Field>
             <p class="text-xs text-chocolate/65">Update the delivery fee and schedule in the review form first if anything changed. The new link uses the latest total.</p>
             <button class="admin-primary" :disabled="busy"><i class="fa-solid fa-link" aria-hidden="true"></i>Create new payment link</button>

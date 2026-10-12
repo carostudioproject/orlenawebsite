@@ -41,8 +41,9 @@ class SystemController extends Controller
                 'online' => PaymentGateways::enabled(), 'mode' => $doku['mode'], 'production' => (bool) $doku['is_production'],
                 'clientId' => filled($doku['client_id']), 'secret' => filled($doku['secret_key']) || filled($doku['snap_client_secret']),
                 'qrisMerchant' => filled($doku['qris_merchant_id']), 'qrisTerminal' => filled($doku['qris_terminal_id']),
+                'methods' => PaymentGateways::methods(), 'vaBca' => filled($doku['va_bca_partner_service_id']), 'dokuPublicKey' => is_readable((string) $doku['snap_doku_public_key_path']),
                 'privateKey' => is_readable($keyPath), 'publicKey' => $this->publicKey($keyPath),
-                'webhooks' => ['checkout' => url('/webhooks/doku'), 'qris' => url('/webhooks/doku-qris')],
+                'webhooks' => ['checkout' => url('/webhooks/doku'), 'qris' => url('/webhooks/doku-qris'), 'va' => url('/webhooks/doku-va')],
                 'recentFailures' => Payment::whereNotNull('last_error')->latest('updated_at')->limit(5)->get(['provider_order_id', 'provider', 'status', 'last_error', 'updated_at']),
             ],
             'erzap' => [

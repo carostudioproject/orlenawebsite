@@ -7,11 +7,12 @@ import { witaTime } from '../../Support/orderStatus';
 import type { AdminProps } from '../../Types/admin';
 defineOptions({ layout: AdminLayout });
 interface Failure { provider_order_id?: string; provider?: string; subject_id?: number; status: string; attempts?: number; last_error: string | null; updated_at: string }
-const props = defineProps<{
+defineProps<{
     app: { env: string; debug: boolean; url: string; indexable: boolean; timezone: string; php: string; laravel: string };
     payments: {
         online: boolean; mode: string; production: boolean; clientId: boolean; secret: boolean; qrisMerchant: boolean; qrisTerminal: boolean;
-        privateKey: boolean; publicKey: string | null; webhooks: { checkout: string; qris: string }; recentFailures: Failure[];
+        methods: string[]; vaBca: boolean; dokuPublicKey: boolean;
+        privateKey: boolean; publicKey: string | null; webhooks: { checkout: string; qris: string; va: string }; recentFailures: Failure[];
     };
     erzap: {
         enabled: boolean; baseUrl: string | null; token: boolean; defaultOutlet: string | null; salesUser: string | null; missing: string[];
@@ -35,7 +36,7 @@ const copied = ref<string | null>(null);
 async function copy(label: string, text: string) {
     try { await navigator.clipboard.writeText(text); copied.value = label; setTimeout(() => { copied.value = null; }, 1600); } catch { copied.value = null; }
 }
-const modeLabel: Record<string, string> = { qris: 'QRIS on /bayar (DOKU Direct API)', checkout: 'DOKU Checkout page (all methods)', va: 'DOKU Checkout, Virtual Account only', demo: 'Demo (simulated, no DOKU)' };
+const modeLabel: Record<string, string> = { direct: 'Customer chooses on /bayar (DOKU Direct API)', qris: 'QRIS on /bayar (DOKU Direct API)', checkout: 'DOKU Checkout page (all methods)', va: 'DOKU Checkout, Virtual Account only', demo: 'Demo (simulated, no DOKU)' };
 const check = (ok: boolean) => (ok ? 'fa-circle-check text-matcha' : 'fa-circle-xmark admin-error-text');
 </script>
 <template>
@@ -70,16 +71,19 @@ const check = (ok: boolean) => (ok ? 'fa-circle-check text-matcha' : 'fa-circle-
             <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2">
                 <dt class="font-bold">Online payment</dt><dd>{{ payments.online ? 'On' : 'Off: staff use Mark as paid' }}</dd>
                 <dt class="font-bold">Mode</dt><dd>{{ modeLabel[payments.mode] ?? payments.mode }} · {{ payments.production ? 'production' : 'sandbox' }}</dd>
+                <dt v-if="payments.methods.length" class="font-bold">Methods on /bayar</dt><dd v-if="payments.methods.length">{{ payments.methods.map(m => (m === 'va_bca' ? 'VA BCA' : 'QRIS')).join(', ') }}</dd>
                 <dt class="font-bold">Credentials</dt>
                 <dd class="space-y-1">
                     <span class="block"><i class="fa-solid" :class="check(payments.clientId)" aria-hidden="true"></i> Client ID</span>
                     <span class="block"><i class="fa-solid" :class="check(payments.secret)" aria-hidden="true"></i> Secret key</span>
                     <span class="block"><i class="fa-solid" :class="check(payments.qrisMerchant)" aria-hidden="true"></i> QRIS Merchant ID</span>
                     <span class="block"><i class="fa-solid" :class="check(payments.qrisTerminal)" aria-hidden="true"></i> QRIS Terminal ID</span>
+                    <span class="block"><i class="fa-solid" :class="check(payments.vaBca)" aria-hidden="true"></i> BCA VA partner service ID</span>
                     <span class="block"><i class="fa-solid" :class="check(payments.privateKey)" aria-hidden="true"></i> SNAP private key on server</span>
+                    <span class="block"><i class="fa-solid" :class="check(payments.dokuPublicKey)" aria-hidden="true"></i> DOKU public key (signed notifications; optional)</span>
                 </dd>
                 <dt class="font-bold">Notification URLs</dt>
-                <dd class="space-y-1 break-all"><span class="block">QRIS: <code>{{ payments.webhooks.qris }}</code></span><span class="block">Checkout: <code>{{ payments.webhooks.checkout }}</code></span></dd>
+                <dd class="space-y-1 break-all"><span class="block">VA BCA: <code>{{ payments.webhooks.va }}</code></span><span class="block">QRIS: <code>{{ payments.webhooks.qris }}</code></span><span class="block">Checkout: <code>{{ payments.webhooks.checkout }}</code></span></dd>
             </dl>
             <div>
                 <p class="m-0 font-bold">SNAP public key (upload in the DOKU dashboard)</p>

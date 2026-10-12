@@ -60,9 +60,12 @@ class OrderStatusController extends Controller
                 'created_at' => $order->created_at->toIso8601String(),
                 'items' => $order->items->map(fn ($item) => $item->only('id', 'product_name_snapshot', 'category_snapshot', 'variant_snapshot', 'quantity', 'subtotal'))->values(),
             ],
-            // The DOKU link is only offered while it can still be paid.
-            'payment' => $payment && $payment->status === 'pending' && $payment->payment_url && ! $payment->expires_at?->isPast()
-                ? ['url' => $payment->payment_url, 'expires_at' => $payment->expires_at?->toIso8601String()] : null,
+            // The DOKU link, or our payment page while the customer still has to choose VA BCA or QRIS.
+            'payment' => match (true) {
+                $payment && $payment->status === 'pending' && $payment->payment_url && ! $payment->expires_at?->isPast() => ['url' => $payment->payment_url, 'expires_at' => $payment->expires_at?->toIso8601String()],
+                $order->order_status === 'confirmed' && $order->payment_status === 'not_created' && $order->payment_due_at?->isFuture() => ['url' => url('/bayar/'.$order->order_code), 'expires_at' => $order->payment_due_at->toIso8601String()],
+                default => null,
+            },
             'whatsappUrl' => preg_match('/^[1-9][0-9]{7,14}$/', $number)
                 ? 'https://wa.me/'.$number.'?text='.rawurlencode('Halo Orlena, saya ingin menanyakan pesanan '.$order->order_code.'.') : null,
         ]);

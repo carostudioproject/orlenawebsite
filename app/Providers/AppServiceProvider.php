@@ -49,6 +49,8 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('preorder-submit', fn (Request $request) => Limit::perMinute(5)->by($request->ip()));
         // The payment page polls every few seconds while a QRIS is open.
         RateLimiter::for('payment-status', fn (Request $request) => Limit::perMinute(40)->by($request->ip()));
+        // Choosing VA BCA or QRIS on /bayar creates a DOKU link each time.
+        RateLimiter::for('payment-choose', fn (Request $request) => Limit::perMinute(6)->by($request->ip()));
         // Order tracking: a burst limit here; failed codes are also limited in OrderStatusController.
         RateLimiter::for('order-track', fn (Request $request) => Limit::perMinute(20)->by($request->ip()));
     }

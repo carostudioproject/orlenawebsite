@@ -60,7 +60,7 @@ class OrderController extends Controller
             'order' => $order->load('customer', 'items'), 'reviews' => $reviews, 'history' => $history, 'payments' => $payments,
             'additions' => $order->additions()->latest('id')->get(['id', 'items', 'subtotal_added', 'previous_total', 'new_total', 'created_at']),
             'canCancelPaid' => request()->user()->can('cancel-paid-orders'),
-            'dokuEnabled' => PaymentGateways::enabled(), 'paymentMode' => PaymentGateways::mode(), 'manualMethods' => RecordManualPayment::METHODS,
+            'dokuEnabled' => PaymentGateways::enabled(), 'paymentMode' => PaymentGateways::mode(), 'customerChooses' => PaymentGateways::customerChooses(), 'manualMethods' => RecordManualPayment::METHODS,
             // Staff check capacity by hand; this only warns when the date is busy or closed.
             'dayLoad' => [
                 'orders' => Order::whereDate('requested_date', $order->requested_date)->where('order_status', '!=', 'cancelled')->count(),
@@ -83,6 +83,9 @@ class OrderController extends Controller
         $data = $request->validate(['review_version' => ['required', 'integer', 'min:0']]);
 
         $payment = $links->confirm($order, (int) $data['review_version'], $request->user()->id);
+        if (! $payment && PaymentGateways::customerChooses()) {
+            return redirect('/admin/orders/'.$order->id)->with('success', 'Order confirmed. Send the payment page link: the customer chooses VA BCA or QRIS there.');
+        }
         if (! $payment) {
             return redirect('/admin/orders/'.$order->id)->with('success', 'Order confirmed. Online payment (DOKU) is off: send the bank details to the customer and press "Mark as paid" once the money arrives.');
         }
@@ -117,7 +120,10 @@ class OrderController extends Controller
     {
         $data = $request->validate(['reason' => ['required', 'string', 'max:500']], ['reason.required' => 'Write why a new link is needed.']);
 
-        return $this->paymentResult($order, $links->renew($order, $data['reason'], $request->user()->id), 'New payment link created.');
+        $payment = $links->renew($order, $data['reason'], $request->user()->id);
+
+        return $payment ? $this->paymentResult($order, $payment, 'New payment link created.')
+            : redirect('/admin/orders/'.$order->id)->with('success', 'Payment reopened. Send the payment page link again: the customer chooses VA BCA or QRIS.');
     }
 
     public function checkPayment(Order $order, Payment $payment, ReconcilePayment $reconcile)

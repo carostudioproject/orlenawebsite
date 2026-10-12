@@ -37,6 +37,7 @@ return [
         'is_production' => (bool) env('DOKU_IS_PRODUCTION', false),
         'timeout' => (int) env('DOKU_TIMEOUT', 20),
         // Payment mode:
+        //   direct   our own payment page; the customer chooses from `methods` (BCA Virtual Account and/or QRIS, DOKU Direct API SNAP)
         //   qris     our own payment page with a QRIS from the DOKU QRIS Direct API (SNAP; production only)
         //   va       DOKU's hosted Checkout page with Virtual Accounts only (see va_methods)
         //   checkout DOKU's hosted Checkout page with every method enabled in DOKU
@@ -44,6 +45,13 @@ return [
         'mode' => env('DOKU_MODE', 'qris'),
         // va: DOKU Checkout showing only these Virtual Accounts (works in the DOKU sandbox, with its VA simulator).
         'va_methods' => array_values(array_filter(array_map('trim', explode(',', (string) env('DOKU_VA_METHODS', 'VIRTUAL_ACCOUNT_BCA,VIRTUAL_ACCOUNT_BANK_MANDIRI,VIRTUAL_ACCOUNT_BRI,VIRTUAL_ACCOUNT_BNI,VIRTUAL_ACCOUNT_BANK_PERMATA,VIRTUAL_ACCOUNT_BANK_CIMB'))))),
+        // direct and demo: methods offered on /bayar (va_bca, qris). With two the customer chooses; with one it is created on confirm. The DOKU sandbox has no QRIS.
+        'methods' => array_values(array_filter(array_map('trim', explode(',', (string) env('DOKU_METHODS', 'va_bca,qris'))))),
+        // BCA Virtual Account (SNAP): partnerServiceId (BIN/company code) and customerNo prefix from DOKU, e.g. 19008 and 0.
+        'va_bca_partner_service_id' => env('DOKU_VA_BCA_PARTNER_SERVICE_ID'),
+        'va_bca_customer_prefix' => env('DOKU_VA_BCA_CUSTOMER_PREFIX', ''),
+        // DOKU's public key (DOKU dashboard), to trust signed SNAP notifications; without it each notification triggers a status check.
+        'snap_doku_public_key_path' => env('DOKU_SNAP_DOKU_PUBLIC_KEY_PATH') ?: storage_path('app/private/doku-snap-doku-public.pem'),
         'qris_merchant_id' => env('DOKU_QRIS_MERCHANT_ID'),
         'qris_terminal_id' => env('DOKU_QRIS_TERMINAL_ID'),
         'qris_postal_code' => env('DOKU_QRIS_POSTAL_CODE', '80361'),

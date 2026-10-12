@@ -15,7 +15,7 @@ class Order extends Model
 
     protected function casts(): array
     {
-        return ['requested_date' => 'date:Y-m-d', 'subtotal' => 'integer', 'delivery_fee' => 'integer', 'total' => 'integer'];
+        return ['requested_date' => 'date:Y-m-d', 'payment_due_at' => 'datetime', 'subtotal' => 'integer', 'delivery_fee' => 'integer', 'total' => 'integer'];
     }
 
     public function customer(): BelongsTo

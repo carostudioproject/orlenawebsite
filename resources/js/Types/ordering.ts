@@ -8,10 +8,10 @@ export interface Preorder {
     id: number; order_code: string; customer: { name: string; whatsapp: string; email: string | null };
     items: OrderItem[]; outlet_name_snapshot: string; fulfillment_method: 'pickup' | 'delivery'; requested_date: string;
     requested_time: string | null; delivery_address: string | null; customer_note: string | null; card_message?: string | null;
-    subtotal: number; delivery_fee: number | null; total: number; order_status: OrderStatus; payment_status: PaymentStatus; created_at: string;
+    subtotal: number; delivery_fee: number | null; total: number; order_status: OrderStatus; payment_status: PaymentStatus; payment_due_at?: string | null; created_at: string;
 }
 export interface PaymentAttempt {
-    id: number; attempt: number; provider?: string; status: PaymentStatus | 'creating' | 'creation_failed'; amount: number; payment_url: string | null;
+    id: number; attempt: number; provider?: string; method?: string | null; status: PaymentStatus | 'creating' | 'creation_failed'; amount: number; payment_url: string | null;
     payment_type: string | null; expires_at: string | null; paid_at: string | null; reason: string | null; last_error: string | null;
     created_at: string; creator: { id: number; name: string } | null;
 }

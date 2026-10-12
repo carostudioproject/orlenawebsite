@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Shop;
 
 use App\Actions\Integrations\ErzapSync;
 use App\Actions\Payments\ApplyPaymentStatus;
+use App\Actions\Payments\CreatePaymentLink;
 use App\Actions\Payments\ReconcilePayment;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
@@ -16,7 +17,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 
 /**
- * Orlena's own payment page: the order summary and a QRIS to scan. Reached with the Order Code from the
+ * Orlena's own payment page: the order summary and a BCA Virtual Account or QRIS, as the customer chooses. Reached with the Order Code from the
  * staff's WhatsApp message or from Cek Pesanan; it shows no name, phone number or address.
  */
 class PaymentPageController extends Controller
@@ -33,6 +34,8 @@ class PaymentPageController extends Controller
                 'items' => $order->items->map(fn ($item) => $item->only('id', 'product_name_snapshot', 'category_snapshot', 'variant_snapshot', 'quantity', 'subtotal'))->values(),
             ],
             'payment' => $this->payment($order),
+            'methods' => $this->methods($order),
+            'dueAt' => $order->payment_due_at?->toIso8601String(),
             'whatsappUrl' => preg_match('/^[1-9][0-9]{7,14}$/', $number)
                 ? 'https://wa.me/'.$number.'?text='.rawurlencode('Halo Orlena, saya ingin menanyakan pembayaran pesanan '.$order->order_code.'.') : null,
         ]);
@@ -42,7 +45,7 @@ class PaymentPageController extends Controller
     public function status(string $code, ReconcilePayment $reconcile)
     {
         $order = Order::where('order_code', $code)->firstOrFail();
-        $open = Payment::where('order_id', $order->id)->where('status', 'pending')->where('provider', 'doku_qris')->latest('attempt')->first();
+        $open = Payment::where('order_id', $order->id)->where('status', 'pending')->whereIn('provider', ['doku_qris', 'doku_va'])->latest('attempt')->first();
         if ($open && Cache::add('qris-check:'.$open->id, true, 5)) {
             try {
                 $reconcile->handle($open);
@@ -52,8 +55,21 @@ class PaymentPageController extends Controller
         }
         $order->refresh();
 
-        return response()->json(['payment_status' => $order->payment_status, 'order_status' => $order->order_status, 'payment' => $this->payment($order)])
+        return response()->json(['payment_status' => $order->payment_status, 'order_status' => $order->order_status, 'payment' => $this->payment($order), 'methods' => $this->methods($order)])
             ->header('Cache-Control', 'no-store');
+    }
+
+    /** The customer picks (or switches to) VA BCA or QRIS; see CreatePaymentLink::choose. */
+    public function choose(Request $request, string $code, CreatePaymentLink $links)
+    {
+        $order = Order::where('order_code', $code)->firstOrFail();
+        $data = $request->validate(['method' => ['required', 'string', 'in:'.implode(',', array_keys(PaymentGateways::METHOD_LABELS))]]);
+        $payment = $links->choose($order, $data['method']);
+        if ($payment->status !== 'pending') {
+            return redirect('/bayar/'.$order->order_code)->withErrors(['method' => 'Kode pembayaran belum bisa dibuat. Coba lagi sebentar atau hubungi Orlena.']);
+        }
+
+        return redirect('/bayar/'.$order->order_code);
     }
 
     /** Demo mode only: marks the sample QRIS as paid, exactly as a DOKU success would, and sends the order to Erzap. */
@@ -64,25 +80,38 @@ class PaymentPageController extends Controller
         $payment = Payment::where('order_id', $order->id)->where('provider', 'demo')->where('status', 'pending')->latest('attempt')->firstOrFail();
         $apply->handle([
             'order_id' => $payment->provider_order_id, 'transaction_status' => 'SUCCESS', 'gross_amount' => $payment->amount,
-            'payment_type' => 'QRIS-DEMO', 'transaction_date' => now()->toIso8601String(),
+            'payment_type' => $payment->method === 'va_bca' ? 'VA-BCA-DEMO' : 'QRIS-DEMO', 'transaction_date' => now()->toIso8601String(),
         ], 'demo');
         $erzap->sendNow($order);
 
         return redirect('/bayar/'.$order->order_code);
     }
 
-    /** The latest QRIS while it can still be paid. */
-    /** The open payment: a QRIS to show here, or (DOKU Checkout, e.g. Virtual Account) the DOKU page to continue on. */
+    /** The open payment: a VA number or QRIS to show here, or (DOKU Checkout) the DOKU page to continue on. */
     private function payment(Order $order): ?array
     {
         $payment = Payment::where('order_id', $order->id)->latest('attempt')->first();
-        if (! $payment || $payment->status !== 'pending' || $payment->expires_at?->isPast() || (! $payment->qr_content && ! $payment->payment_url)) {
+        if (! $payment || $payment->status !== 'pending' || $payment->expires_at?->isPast() || (! $payment->qr_content && ! $payment->va_number && ! $payment->payment_url)) {
             return null;
         }
 
         return [
             'qr' => $payment->qr_content, 'amount' => $payment->amount, 'expires_at' => $payment->expires_at?->toIso8601String(), 'demo' => $payment->provider === 'demo',
-            'checkout_url' => $payment->qr_content ? null : $payment->payment_url,
+            'method' => $payment->va_number ? 'va_bca' : ($payment->qr_content ? 'qris' : 'checkout'),
+            'va' => $payment->va_number ? trim($payment->va_number) : null,
+            'checkout_url' => $payment->qr_content || $payment->va_number ? null : $payment->payment_url,
         ];
+    }
+
+    /** Methods the customer may pick: while a link on /bayar is open, or when a confirmed order has none yet. */
+    private function methods(Order $order): array
+    {
+        $methods = PaymentGateways::enabled() ? PaymentGateways::methods() : [];
+        $open = Payment::where('open_order_id', $order->id)->first();
+        $choosable = $order->order_status === 'confirmed' && ($open
+            ? $open->status === 'pending' && ($open->qr_content || $open->va_number)
+            : $order->payment_status === 'not_created' && ! $order->payment_due_at?->isPast());
+
+        return $choosable ? array_map(fn ($method) => ['value' => $method, 'label' => PaymentGateways::METHOD_LABELS[$method]], $methods) : [];
     }
 }

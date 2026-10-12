@@ -44,7 +44,22 @@ The review form stays editable while the order is `pending_review` or `confirmed
 
 Until DOKU is configured, **Confirm order** only confirms the order (no payment link, no call to DOKU). Staff ask the customer to pay by transfer or at the outlet, then use **Mark as paid** on the order (method: bank transfer, cash, QRIS at the outlet, other; optional note). This records a `payments` row with `provider = manual` and goes through the same status handling as a DOKU SUCCESS, so the order becomes paid and is queued for Erzap. **Mark as paid** stays available after DOKU is turned on, for payments received outside DOKU.
 
-## QRIS on Orlena's own payment page (`DOKU_MODE=qris`, the default)
+## Customer chooses VA BCA or QRIS on Orlena's page (`DOKU_MODE=direct`)
+
+Same page as below, with two buttons: **Virtual Account BCA** and **QRIS** (`DOKU_METHODS`). Both use the DOKU Direct API (SNAP) with the same token and signing.
+
+- No default method: **Confirm order** only confirms and sets the payment deadline (`orders.payment_due_at`, 24 hours capped by the PO cutoff). Staff send `/bayar/{code}` (copy or WhatsApp button); the VA number or QR is created when the customer picks a method. Cek Pesanan's "Bayar sekarang" opens the same page.
+- After the deadline the page no longer offers the choice; staff use **Create new payment link** (with a reason) to reopen it with a new deadline.
+- With only one method in `DOKU_METHODS`, confirming creates that code right away (no choice step).
+
+- VA BCA: `create-va` (DOKU generates the number, closed amount, single use, expires with the payment). The page shows the number with copy buttons and m-BCA / ATM / KlikBCA steps.
+- Switching method (`POST /bayar/{code}/metode`): the open code is first checked at DOKU (if it was just paid, the payment is recorded and nothing switches), then closed (`delete-va` or `qr-expire`) and the new one created with the **same deadline**. Each switch is a new payment attempt (max 12 per order, 6 per minute per IP).
+- If creating a code fails, the order stays confirmed without a link: the customer can pick a method on the page again, or staff use **Try creating the link again**.
+- Payment detection: page polling and `payments:reconcile` use the VA status API (`/orders/v1.0/transfer-va/status`). `/webhooks/doku-va` applies a notification directly only when DOKU's signature verifies with DOKU's public key (`DOKU_SNAP_DOKU_PUBLIC_KEY_PATH`); otherwise it only triggers a status check.
+- Setup: from DOKU, the BCA VA **partnerServiceId** and **customerNo prefix** (`DOKU_VA_BCA_PARTNER_SERVICE_ID`, `DOKU_VA_BCA_CUSTOMER_PREFIX`); VA Notification URL `{APP_URL}/webhooks/doku-va`. The DOKU sandbox has VA but no QRIS, so test the sandbox with `DOKU_METHODS=va_bca` and the VA simulator: https://sandbox.doku.com/integration/simulator/
+- `DOKU_MODE=demo` shows the same choice with a sample VA number and QR (no DOKU).
+
+## QRIS on Orlena's own payment page (`DOKU_MODE=qris`)
 
 With DOKU enabled, **Confirm & Create Payment** asks the DOKU QRIS Direct API (SNAP) for a QRIS and the payment link becomes `{APP_URL}/bayar/{order code}`: Orlena's page with the order summary, the QR (drawn in the browser), the deadline and a "Simpan QR" button. It shows no name, phone number or address. Cek Pesanan's "Bayar sekarang" and the staff WhatsApp message open the same page.
 
