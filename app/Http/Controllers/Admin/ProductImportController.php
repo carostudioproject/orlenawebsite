@@ -20,7 +20,7 @@ use Throwable;
 class ProductImportController extends Controller
 {
     /** Header names of the Excel template; each one is recognised by ProductImport::detect(). */
-    public const TEMPLATE_COLUMNS = ['Kode Produk', 'Barcode', 'Nama Produk', 'Kategori', 'Ukuran', 'Harga Jual'];
+    public const TEMPLATE_COLUMNS = ['Kode Produk', 'Barcode', 'Nama Produk', 'Kategori', 'Ukuran', 'Harga Jual', 'Tipe', 'Jumlah Isi', 'Isi Dari', 'Harga Isi'];
 
     public function show(Request $request, ProductImport $import)
     {
@@ -94,6 +94,7 @@ class ProductImportController extends Controller
     /**
      * Excel template with the column names the import recognises, pre-filled with the current catalog
      * so staff only add the Erzap code and barcode (and correct prices) before importing it back.
+     * Only the first sheet is imported; "Contoh" shows a regular product, a hampers and a Mini box.
      */
     public function template()
     {
@@ -101,6 +102,9 @@ class ProductImportController extends Controller
         $writer = new Writer;
         $writer->openToFile($path);
         $header = (new Style)->setFontBold()->setFontColor('FFFFFF')->setBackgroundColor('4A2C23');
+        // Green: contents chosen by the customer (hampers and boxes only).
+        $contentHeader = (new Style)->setFontBold()->setFontColor('FFFFFF')->setBackgroundColor('4D7141');
+        $headerRow = new Row(array_map(fn (string $column, int $index) => Cell::fromValue($column, $index < 6 ? $header : $contentHeader), self::TEMPLATE_COLUMNS, array_keys(self::TEMPLATE_COLUMNS)));
         $text = (new Style)->setFormat('@');
         $money = (new Style)->setFormat('#,##0');
 
@@ -108,31 +112,61 @@ class ProductImportController extends Controller
         $sheet->setColumnWidth(18, 1, 2);
         $sheet->setColumnWidth(36, 3);
         $sheet->setColumnWidth(24, 4);
-        $sheet->setColumnWidth(14, 5, 6);
-        $writer->addRow(Row::fromValues(self::TEMPLATE_COLUMNS, $header));
-        Product::with('category:id,name')->orderBy('category_id')->orderBy('name')->orderBy('variant')->get()
+        $sheet->setColumnWidth(14, 5, 6, 7, 8, 10);
+        $sheet->setColumnWidth(40, 9);
+        $writer->addRow($headerRow);
+        Product::with('category:id,name', 'contentOptions:id,sku')->orderBy('category_id')->orderBy('name')->orderBy('variant')->get()
             ->each(fn (Product $product) => $writer->addRow(new Row([
                 // Codes and barcodes stay text so leading zeros survive.
                 Cell::fromValue((string) $product->sku, $text), Cell::fromValue((string) $product->barcode, $text),
                 Cell::fromValue($product->name), Cell::fromValue((string) $product->category?->name),
                 Cell::fromValue((string) $product->variant), Cell::fromValue($product->price ?? '', $money),
+                Cell::fromValue(Product::CONTENT_TYPES[$product->content_type] ?? 'Biasa'), Cell::fromValue($product->content_type ? (int) $product->content_count : ''),
+                Cell::fromValue($product->contentOptions->pluck('sku')->implode(', '), $text),
+                Cell::fromValue($product->content_type ? Product::CONTENT_PRICING[$product->content_pricing] ?? '' : ''),
             ])));
+
+        $examples = $writer->addNewSheetAndMakeItCurrent()->setName('Contoh');
+        $examples->setColumnWidth(18, 1, 2);
+        $examples->setColumnWidth(30, 3);
+        $examples->setColumnWidth(18, 4, 5);
+        $examples->setColumnWidth(12, 6, 7, 8, 10);
+        $examples->setColumnWidth(34, 9);
+        $examples->setColumnWidth(60, 11);
+        $writer->addRow(new Row([...$headerRow->getCells(), Cell::fromValue('Keterangan', $header)]));
+        foreach ([
+            ['BR0005', '8990005', 'Berry Cheese', 'Brownies', 'Fullsize', 100000, 'Biasa', '', '', '', 'Produk biasa. Setiap ukuran baris sendiri.'],
+            ['BR0037', '8990037', 'Berry Cheese', 'Brownies', 'Halfsize (20x10)', 60000, 'Biasa', '', '', '', 'Ukuran lain = produk lain dengan barcode sendiri.'],
+            ['HP0001', '8991001', 'Hampers Galungan', 'Hampers', 'Fullsize', 10000, 'Hampers', 1, 'BR0005, BR0007', 'Ditambah', 'Pelanggan memilih 1 isi: harga = 10.000 + harga brownies.'],
+            ['MN0001', '8992001', 'Mini Choco', 'Mini Size', 'Mini', 0, 'Biasa', '', '', '', 'Rasa Mini: harga 0, biarkan nonaktif (dijual di dalam box saja).'],
+            ['MN0002', '8992002', 'Mini Cheese', 'Mini Size', 'Mini', 0, 'Biasa', '', '', '', ''],
+            ['MB0001', '8992100', 'Mini Size Box', 'Mini Size', 'Box 2x2', 60000, 'Box', 4, 'MN0001, MN0002', 'Termasuk', 'Pelanggan memilih 4 rasa (boleh sama); harga per box.'],
+        ] as $example) {
+            $writer->addRow(new Row([
+                Cell::fromValue($example[0], $text), Cell::fromValue($example[1], $text), ...array_map(fn ($value) => Cell::fromValue($value), array_slice($example, 2, 3)),
+                Cell::fromValue($example[5], $money), ...array_map(fn ($value) => Cell::fromValue($value), array_slice($example, 6)),
+            ]));
+        }
 
         $guide = $writer->addNewSheetAndMakeItCurrent()->setName('Petunjuk');
         $guide->setColumnWidth(22, 1);
         $guide->setColumnWidth(90, 2);
         $bold = (new Style)->setFontBold();
         $writer->addRow(Row::fromValues(['Format import produk Orlena'], $bold));
-        $writer->addRow(Row::fromValues(['Upload file ini di Dashboard > Products > Import from Erzap. Hanya sheet pertama (Produk) yang dibaca; baris pertama wajib berisi nama kolom.']));
+        $writer->addRow(Row::fromValues(['Upload file ini di Dashboard > Products > Import from Erzap. Hanya sheet pertama (Produk) yang dibaca; baris pertama wajib berisi nama kolom. Lihat sheet Contoh.']));
         $writer->addRow(Row::fromValues([]));
         $writer->addRow(Row::fromValues(['Kolom', 'Keterangan'], $bold));
         foreach ([
             ['Kode Produk', 'Kode produk di Erzap. Wajib diisi bila Barcode kosong.'],
             ['Barcode', 'Barcode produk di Erzap. Wajib agar pesanan dapat dikirim ke Erzap. Harus unik per produk dan varian.'],
-            ['Nama Produk', 'Wajib. Nama yang tampil di website.'],
+            ['Nama Produk', 'Wajib. Nama tanpa ukuran, misalnya "Berry Cheese". Di website tampil Nama + Ukuran.'],
             ['Kategori', 'Dipakai untuk produk baru saja; kategori produk yang sudah ada tidak diubah.'],
-            ['Ukuran', 'Varian, misalnya Fullsize, Halfsize, Box isi 6. Dipakai untuk produk baru saja.'],
-            ['Harga Jual', 'Angka rupiah tanpa titik, misalnya 80000. Format Rp 80.000 juga diterima.'],
+            ['Ukuran', 'Misalnya Fullsize, Halfsize (20x10), Box 2x2. Setiap ukuran adalah produk sendiri (kartu, foto, harga dan barcode sendiri). Dipakai untuk produk baru saja.'],
+            ['Harga Jual', 'Angka rupiah tanpa titik, misalnya 80000. Format Rp 80.000 juga diterima. Isi box (misalnya rasa Mini Size) = 0.'],
+            ['Tipe', 'Biasa, Hampers (pelanggan memilih 1 isi) atau Box (pelanggan memilih beberapa isi, boleh sama). Kosong = tidak diubah.'],
+            ['Jumlah Isi', 'Box: berapa isi per box, misalnya 4 untuk 2x2. Hampers selalu 1.'],
+            ['Isi Dari', 'Kode Produk (atau Barcode) yang boleh dipilih sebagai isi, dipisah koma. Produk baru tidak otomatis masuk: tambahkan kodenya di sini.'],
+            ['Harga Isi', 'Ditambah = harga hampers + harga normal isinya. Termasuk = isi Rp 0 (harga per box). Kosong: Hampers = Ditambah, Box = Termasuk.'],
         ] as $line) {
             $writer->addRow(Row::fromValues($line));
         }
@@ -141,7 +175,7 @@ class ProductImportController extends Controller
         foreach ([
             'Produk dicocokkan berdasarkan Barcode, lalu Kode Produk, lalu Nama Produk + Ukuran.',
             'Produk yang sudah ada: hanya nama, harga jual, barcode, dan kode produk yang diperbarui.',
-            'Foto, deskripsi, kategori, ukuran, status aktif, isi hampers, dan periode penjualan tidak pernah diubah.',
+            'Foto, deskripsi, kategori, ukuran, status aktif, dan periode penjualan tidak pernah diubah. Tipe dan isi pilihan diubah bila kolom Tipe diisi.',
             'Produk baru masuk dalam keadaan nonaktif. Upload foto dulu, lalu aktifkan di menu Products.',
             'Baris tanpa nama, atau tanpa barcode dan kode, dilewati. Semua perubahan tampil di pratinjau sebelum disimpan.',
             'File export dari Erzap juga bisa langsung diupload bila nama kolomnya mirip; kolom bisa dipilih manual di halaman import.',
