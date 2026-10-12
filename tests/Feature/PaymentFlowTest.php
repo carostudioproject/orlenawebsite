@@ -145,6 +145,23 @@ class PaymentFlowTest extends TestCase
         $this->assertDatabaseHas('order_status_histories', ['order_id' => $order->id, 'from_status' => 'pending_review', 'to_status' => 'confirmed', 'actor_id' => $staff->id]);
     }
 
+    public function test_va_mode_limits_doku_checkout_to_virtual_accounts(): void
+    {
+        config(['services.doku.mode' => 'va', 'services.doku.va_methods' => ['VIRTUAL_ACCOUNT_BCA', 'VIRTUAL_ACCOUNT_BRI']]);
+        $this->fakeDoku();
+        $this->actingAs(User::factory()->create());
+        $order = $this->order();
+        $this->get('/admin/orders/'.$order->id)->assertInertia(fn (Assert $page) => $page->where('paymentMode', 'va'));
+        $this->confirm($order);
+
+        Http::assertSent(fn (HttpRequest $request) => str_ends_with($request->url(), '/checkout/v1/payment')
+            && $request['payment']['payment_method_types'] === ['VIRTUAL_ACCOUNT_BCA', 'VIRTUAL_ACCOUNT_BRI']);
+        $this->assertSame('doku', Payment::sole()->provider);
+        // Our payment page sends the customer on to the DOKU page to pick a bank.
+        $this->get('/bayar/'.$order->order_code)->assertInertia(fn (Assert $page) => $page
+            ->where('payment.checkout_url', 'https://sandbox.doku.com/checkout-link-v2/doku-token')->where('payment.qr', null));
+    }
+
     public function test_link_expiry_stops_at_cutoff_and_closed_dates_must_be_rescheduled(): void
     {
         $this->fakeDoku();

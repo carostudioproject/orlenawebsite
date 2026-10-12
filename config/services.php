@@ -36,9 +36,14 @@ return [
         'secret_key' => env('DOKU_SECRET_KEY'),
         'is_production' => (bool) env('DOKU_IS_PRODUCTION', false),
         'timeout' => (int) env('DOKU_TIMEOUT', 20),
-        // qris: our own payment page with a QRIS from the DOKU QRIS Direct API (SNAP). checkout: DOKU's hosted Checkout page.
-        // demo: the same payment page with a sample QR and a "simulate payment" button (no DOKU; for demos only, never on the live site).
+        // Payment mode:
+        //   qris     our own payment page with a QRIS from the DOKU QRIS Direct API (SNAP; production only)
+        //   va       DOKU's hosted Checkout page with Virtual Accounts only (see va_methods)
+        //   checkout DOKU's hosted Checkout page with every method enabled in DOKU
+        //   demo     our payment page with a sample QR and a "simulate payment" button (no DOKU; never on the live site)
         'mode' => env('DOKU_MODE', 'qris'),
+        // va: DOKU Checkout showing only these Virtual Accounts (works in the DOKU sandbox, with its VA simulator).
+        'va_methods' => array_values(array_filter(array_map('trim', explode(',', (string) env('DOKU_VA_METHODS', 'VIRTUAL_ACCOUNT_BCA,VIRTUAL_ACCOUNT_BANK_MANDIRI,VIRTUAL_ACCOUNT_BRI,VIRTUAL_ACCOUNT_BNI,VIRTUAL_ACCOUNT_BANK_PERMATA,VIRTUAL_ACCOUNT_BANK_CIMB'))))),
         'qris_merchant_id' => env('DOKU_QRIS_MERCHANT_ID'),
         'qris_terminal_id' => env('DOKU_QRIS_TERMINAL_ID'),
         'qris_postal_code' => env('DOKU_QRIS_POSTAL_CODE', '80361'),

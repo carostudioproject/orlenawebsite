@@ -12,7 +12,7 @@ interface PayOrder {
     requested_date: string; requested_time: string | null; subtotal: number; delivery_fee: number | null; total: number;
     items: Pick<OrderItem, 'id' | 'product_name_snapshot' | 'category_snapshot' | 'variant_snapshot' | 'quantity' | 'subtotal'>[];
 }
-interface QrisPayment { qr: string; amount: number; expires_at: string | null; demo?: boolean }
+interface QrisPayment { qr: string | null; amount: number; expires_at: string | null; demo?: boolean; checkout_url?: string | null }
 const props = defineProps<{ order: PayOrder; payment: QrisPayment | null; whatsappUrl: string | null }>();
 
 const paymentStatus = ref<PaymentStatus>(props.order.payment_status);
@@ -89,6 +89,15 @@ const message = computed(() => {
             <h2 class="mt-4 text-2xl">Pembayaran diterima</h2>
             <p class="admin-muted mt-2 text-sm">Terima kasih! Pesanan Anda sedang disiapkan sesuai jadwal.</p>
             <Link :href="`/cek-pesanan?code=${order.order_code}`" class="admin-secondary mt-5"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>Cek status pesanan</Link>
+        </section>
+
+        <section v-else-if="payment?.checkout_url" class="admin-card mt-6" aria-labelledby="va-title">
+            <h2 id="va-title" class="m-0 text-xl">Bayar via Virtual Account</h2>
+            <p class="mt-1 text-sm text-chocolate/70">Total yang harus dibayar</p>
+            <p class="m-0 text-3xl font-bold tabular-nums">{{ rupiah(payment.amount) }}</p>
+            <p class="mt-4 text-sm" role="timer" aria-live="off">Bayar sebelum <strong>{{ deadline }}</strong><br><span class="text-chocolate/65">Sisa waktu: {{ remaining }}</span></p>
+            <a :href="payment.checkout_url" class="admin-primary mt-4 w-full"><i class="fa-solid fa-building-columns" aria-hidden="true"></i>Pilih bank dan bayar</a>
+            <p class="admin-muted mt-3 text-xs">Anda akan diarahkan ke halaman pembayaran DOKU untuk memilih bank (BCA, Mandiri, BRI, BNI, dan lainnya) dan mendapatkan nomor Virtual Account. Status pesanan berubah otomatis setelah pembayaran diterima.</p>
         </section>
 
         <section v-else-if="payment" class="admin-card mt-6" aria-labelledby="qris-title">

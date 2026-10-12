@@ -60,7 +60,7 @@ class OrderController extends Controller
             'order' => $order->load('customer', 'items'), 'reviews' => $reviews, 'history' => $history, 'payments' => $payments,
             'additions' => $order->additions()->latest('id')->get(['id', 'items', 'subtotal_added', 'previous_total', 'new_total', 'created_at']),
             'canCancelPaid' => request()->user()->can('cancel-paid-orders'),
-            'dokuEnabled' => PaymentGateways::enabled(), 'manualMethods' => RecordManualPayment::METHODS,
+            'dokuEnabled' => PaymentGateways::enabled(), 'paymentMode' => PaymentGateways::mode(), 'manualMethods' => RecordManualPayment::METHODS,
             // Staff check capacity by hand; this only warns when the date is busy or closed.
             'dayLoad' => [
                 'orders' => Order::whereDate('requested_date', $order->requested_date)->where('order_status', '!=', 'cancelled')->count(),

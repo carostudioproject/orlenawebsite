@@ -35,7 +35,7 @@ const copied = ref<string | null>(null);
 async function copy(label: string, text: string) {
     try { await navigator.clipboard.writeText(text); copied.value = label; setTimeout(() => { copied.value = null; }, 1600); } catch { copied.value = null; }
 }
-const modeLabel: Record<string, string> = { qris: 'QRIS on /bayar (DOKU Direct API)', checkout: 'DOKU Checkout page', demo: 'Demo (simulated, no DOKU)' };
+const modeLabel: Record<string, string> = { qris: 'QRIS on /bayar (DOKU Direct API)', checkout: 'DOKU Checkout page (all methods)', va: 'DOKU Checkout, Virtual Account only', demo: 'Demo (simulated, no DOKU)' };
 const check = (ok: boolean) => (ok ? 'fa-circle-check text-matcha' : 'fa-circle-xmark admin-error-text');
 </script>
 <template>

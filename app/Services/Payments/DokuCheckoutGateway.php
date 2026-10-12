@@ -5,7 +5,7 @@ namespace App\Services\Payments;
 use App\Models\Payment;
 use App\Services\Doku\DokuClient;
 
-/** DOKU's hosted Checkout page (DOKU_MODE=checkout). */
+/** DOKU's hosted Checkout page: all enabled methods (DOKU_MODE=checkout) or Virtual Accounts only (DOKU_MODE=va). */
 class DokuCheckoutGateway implements PaymentGateway
 {
     public function __construct(private DokuClient $doku) {}
@@ -55,7 +55,11 @@ class DokuCheckoutGateway implements PaymentGateway
 
         return [
             'order' => $orderData,
-            'payment' => ['payment_due_date' => max(1, (int) now()->startOfMinute()->diffInMinutes($payment->expires_at))],
+            'payment' => array_filter([
+                'payment_due_date' => max(1, (int) now()->startOfMinute()->diffInMinutes($payment->expires_at)),
+                // DOKU shows only these methods; one method skips the choice screen.
+                'payment_method_types' => PaymentGateways::mode() === 'va' ? config('services.doku.va_methods') : null,
+            ]),
             'customer' => array_filter([
                 'id' => 'CUST-'.$order->customer->id, 'name' => mb_substr($order->customer->name, 0, 255),
                 'phone' => mb_substr($order->customer->whatsapp, 0, 16), 'email' => $order->customer->email,

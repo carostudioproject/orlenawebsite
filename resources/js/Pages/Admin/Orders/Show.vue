@@ -15,7 +15,7 @@ import type { PaymentAttempt, Preorder, StatusChange } from '../../../Types/orde
 defineOptions({ layout: AdminLayout });
 interface Review { id: number; actor_name: string | null; note: string; previous_delivery_fee: number | null; delivery_fee: number | null; previous_schedule: string | null; schedule: string | null; created_at: string }
 interface Addition { id: number; items: { name: string; variant: string | null; quantity: number; subtotal: number }[]; subtotal_added: number; previous_total: number; new_total: number; created_at: string }
-const props = defineProps<{ order: Preorder; reviews: Paginated<Review>; history: StatusChange[]; payments: PaymentAttempt[]; canCancelPaid: boolean; additions: Addition[]; dokuEnabled: boolean; manualMethods: Record<string, string>;
+const props = defineProps<{ order: Preorder; reviews: Paginated<Review>; history: StatusChange[]; payments: PaymentAttempt[]; canCancelPaid: boolean; additions: Addition[]; dokuEnabled: boolean; paymentMode: string; manualMethods: Record<string, string>;
     dayLoad: { orders: number; capacity: number | null; closed: string | null };
     erzapSync: { id: number; type: string; status: string; attempts: number; last_error: string | null; synced_at: string | null; next_attempt_at: string | null; external_ref: string | null } | null;
 }>();
@@ -49,11 +49,13 @@ const busy = ref(false);
 function act(url: string, data: Record<string, unknown> = {}, onSuccess?: () => void) {
     router.post(`/admin/orders/${props.order.id}${url}`, data as never, { preserveScroll: true, onStart: () => { busy.value = true; }, onFinish: () => { busy.value = false; }, onSuccess });
 }
+const linkKind = computed(() => ({ va: 'DOKU virtual account (VA) payment link', qris: 'QRIS payment page', demo: 'demo payment page', checkout: 'DOKU payment link' } as Record<string, string>)[props.paymentMode] ?? 'payment link');
+const confirmPaymentLabel = computed(() => (props.paymentMode === 'va' ? 'Confirm & Create VA Payment' : props.paymentMode === 'qris' ? 'Confirm & Create QRIS' : 'Confirm & Create Payment'));
 async function confirmOrder() {
     const ok = await confirmDialog({
-        title: 'Confirm this order?', icon: 'fa-circle-check', confirmLabel: props.dokuEnabled ? 'Confirm & Create Payment' : 'Confirm order',
+        title: 'Confirm this order?', icon: 'fa-circle-check', confirmLabel: props.dokuEnabled ? confirmPaymentLabel.value : 'Confirm order',
         message: props.dokuEnabled
-            ? `A DOKU payment link for ${rupiah(props.order.total)} will be created for ${props.order.order_code}. Make sure the products, schedule and delivery fee are correct.`
+            ? `A ${linkKind.value} for ${rupiah(props.order.total)} will be created for ${props.order.order_code}. Make sure the products, schedule and delivery fee are correct.`
             : `${props.order.order_code} will be confirmed for ${rupiah(props.order.total)}. Online payment is off: ask the customer to pay by transfer, then mark the order as paid.`,
     });
     if (ok) act('/confirm', { review_version: props.order.review_version });
@@ -128,10 +130,10 @@ onBeforeUnmount(() => clearInterval(timer));
         <h2 class="mb-4 text-xl">Payment</h2>
         <p v-if="errors.payment" role="alert" class="admin-alert admin-alert-error mb-4">{{ errors.payment }}</p>
         <div v-if="can.review && order.order_status === 'pending_review'" class="space-y-3 text-sm">
-            <p v-if="dokuEnabled">Check products, production capacity, schedule and delivery fee. Confirming creates a DOKU payment link for <strong>{{ rupiah(order.total) }}</strong>, valid for 24 hours (until {{ $page.props.poCutoff }} at the latest).</p>
+            <p v-if="dokuEnabled">Check products, production capacity, schedule and delivery fee. Confirming creates a {{ linkKind }} for <strong>{{ rupiah(order.total) }}</strong>, valid for 24 hours (until {{ $page.props.poCutoff }} at the latest).</p>
             <p v-else>Check products, production capacity, schedule and delivery fee, then confirm. <strong>Online payment (DOKU) is off</strong>: ask the customer to pay {{ rupiah(order.total) }} by transfer and mark the order as paid when it arrives.</p>
             <p v-if="order.delivery_fee === null" class="admin-error-text">Set the delivery fee in the review form before confirming.</p>
-            <button class="admin-primary" :disabled="busy || order.delivery_fee === null" @click="confirmOrder"><i class="fa-solid fa-circle-check" aria-hidden="true"></i>{{ busy ? 'Processing…' : dokuEnabled ? 'Confirm & Create Payment' : 'Confirm order' }}</button>
+            <button class="admin-primary" :disabled="busy || order.delivery_fee === null" @click="confirmOrder"><i class="fa-solid fa-circle-check" aria-hidden="true"></i>{{ busy ? 'Processing…' : dokuEnabled ? confirmPaymentLabel : 'Confirm order' }}</button>
         </div>
         <div v-if="current" class="space-y-3 text-sm" :class="{ 'mt-5 border-t border-chocolate/10 pt-5': order.order_status === 'pending_review' }">
             <dl class="grid grid-cols-1 gap-3 sm:grid-cols-3"><div><dt class="font-bold">{{ current.provider === 'manual' ? 'Manual payment' : 'Link' }} #{{ current.attempt }} status</dt><dd>{{ paymentStatusLabel(current.status) }}</dd></div><div><dt class="font-bold">Amount</dt><dd>{{ rupiah(current.amount) }}</dd></div><div><dt class="font-bold">{{ current.status === 'paid' ? 'Paid at' : 'Valid until' }}</dt><dd>{{ witaTime(current.status === 'paid' ? current.paid_at : current.expires_at) }}</dd></div></dl>

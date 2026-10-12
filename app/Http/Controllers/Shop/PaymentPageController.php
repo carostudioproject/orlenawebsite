@@ -72,13 +72,17 @@ class PaymentPageController extends Controller
     }
 
     /** The latest QRIS while it can still be paid. */
+    /** The open payment: a QRIS to show here, or (DOKU Checkout, e.g. Virtual Account) the DOKU page to continue on. */
     private function payment(Order $order): ?array
     {
         $payment = Payment::where('order_id', $order->id)->latest('attempt')->first();
-        if (! $payment || $payment->status !== 'pending' || ! $payment->qr_content || $payment->expires_at?->isPast()) {
+        if (! $payment || $payment->status !== 'pending' || $payment->expires_at?->isPast() || (! $payment->qr_content && ! $payment->payment_url)) {
             return null;
         }
 
-        return ['qr' => $payment->qr_content, 'amount' => $payment->amount, 'expires_at' => $payment->expires_at?->toIso8601String(), 'demo' => $payment->provider === 'demo'];
+        return [
+            'qr' => $payment->qr_content, 'amount' => $payment->amount, 'expires_at' => $payment->expires_at?->toIso8601String(), 'demo' => $payment->provider === 'demo',
+            'checkout_url' => $payment->qr_content ? null : $payment->payment_url,
+        ];
     }
 }

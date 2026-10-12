@@ -12,11 +12,16 @@ class PaymentGateways
 {
     private const BY_PROVIDER = ['doku' => DokuCheckoutGateway::class, 'doku_qris' => DokuQrisGateway::class, 'demo' => DemoGateway::class];
 
-    private const BY_MODE = ['checkout' => DokuCheckoutGateway::class, 'qris' => DokuQrisGateway::class, 'demo' => DemoGateway::class];
+    private const BY_MODE = ['checkout' => DokuCheckoutGateway::class, 'va' => DokuCheckoutGateway::class, 'qris' => DokuQrisGateway::class, 'demo' => DemoGateway::class];
 
     public static function demo(): bool
     {
         return config('services.doku.mode') === 'demo';
+    }
+
+    public static function mode(): string
+    {
+        return (string) config('services.doku.mode', 'qris');
     }
 
     /** Whether confirming an order creates a payment link. */
