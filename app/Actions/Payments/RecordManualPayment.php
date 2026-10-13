@@ -20,7 +20,8 @@ class RecordManualPayment
 
     public function handle(Order $order, string $method, ?string $note, int $actor): Payment
     {
-        $payment = DB::transaction(function () use ($order, $method, $note, $actor) {
+        // One transaction: the payment row and its success are saved together, so a crash never leaves an open manual payment.
+        return DB::transaction(function () use ($order, $method, $note, $actor) {
             $locked = Order::lockForUpdate()->findOrFail($order->id);
             if ($locked->order_status !== 'confirmed' || $locked->payment_status === 'paid' || $locked->payment_status === 'refunded') {
                 throw ValidationException::withMessages(['payment' => 'Only confirmed, unpaid orders can be marked as paid.']);
@@ -34,15 +35,12 @@ class RecordManualPayment
                 'open_order_id' => $locked->id, 'amount' => $locked->total, 'status' => 'pending', 'reason' => $note, 'created_by' => $actor,
             ]);
             Audit::record('payment.manual_recorded', $payment, ['attempt' => $attempt, 'amount' => $payment->amount, 'method' => $method], $actor);
+            $this->apply->handle([
+                'order_id' => $payment->provider_order_id, 'transaction_status' => 'SUCCESS', 'gross_amount' => $payment->amount,
+                'payment_type' => 'MANUAL-'.strtoupper($method), 'transaction_date' => now()->toIso8601String(),
+            ], 'manual');
 
-            return $payment;
+            return $payment->fresh();
         }, 3);
-
-        $this->apply->handle([
-            'order_id' => $payment->provider_order_id, 'transaction_status' => 'SUCCESS', 'gross_amount' => $payment->amount,
-            'payment_type' => 'MANUAL-'.strtoupper($method), 'transaction_date' => now()->toIso8601String(),
-        ], 'manual');
-
-        return $payment->fresh();
     }
 }

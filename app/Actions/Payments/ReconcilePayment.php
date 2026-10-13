@@ -4,6 +4,7 @@ namespace App\Actions\Payments;
 
 use App\Models\Payment;
 use App\Services\Payments\PaymentGateways;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Reads the authoritative status from the gateway that created the payment.
@@ -11,7 +12,19 @@ use App\Services\Payments\PaymentGateways;
  */
 class ReconcilePayment
 {
+    /** Seconds between two status checks of one payment triggered from outside (page polling, unsigned notifications). */
+    public const COOLDOWN = 5;
+
     public function __construct(private PaymentGateways $gateways, private ApplyPaymentStatus $apply) {}
+
+    /**
+     * Checks the payment at most once per COOLDOWN seconds: callbacks anyone can send, and the payment page polling,
+     * cannot make the site call DOKU over and over. Returns "throttled" when a check ran moments ago.
+     */
+    public function throttled(Payment $payment): string
+    {
+        return Cache::add('payment-check:'.$payment->id, true, self::COOLDOWN) ? $this->handle($payment) : 'throttled';
+    }
 
     public function handle(Payment $payment): string
     {

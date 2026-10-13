@@ -185,6 +185,8 @@ class CreatePaymentLink
             if (Payment::where('open_order_id', $locked->id)->exists()) {
                 $this->fail('A payment link is being created or is still open. Wait a moment, then reload the page.');
             }
+            // A kept deadline still stops at the current date's H-1 cutoff (the schedule may have changed).
+            $deadline = $deadline?->min($this->dates->cutoff($locked->requested_date->toDateString()));
             if ($deadline && ! $deadline->isFuture()) {
                 $this->fail('Batas waktu pembayaran sudah lewat. Hubungi Orlena melalui WhatsApp untuk link baru.');
             }

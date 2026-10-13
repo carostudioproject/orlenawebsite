@@ -32,7 +32,7 @@ class DokuVaWebhookController extends Controller
                         'order_id' => $payment->provider_order_id, 'transaction_status' => 'SUCCESS', 'gross_amount' => $request->input('paidAmount.value'),
                         'payment_type' => 'VA-BCA', 'transaction_date' => $request->input('trxDateTime') ?? $request->input('paymentRequestId'),
                     ], 'notification')
-                    : $reconcile->handle($payment);
+                    : $reconcile->throttled($payment);
             } catch (DokuException) {
                 $result = 'check_failed';
             }

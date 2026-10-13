@@ -21,6 +21,9 @@ class ErzapSync
     /** Minutes to wait after each failed attempt. */
     private const BACKOFF = [5, 15, 60, 180, 720];
 
+    /** Rows waiting for settings or mapping are looked at again after this long (saving the mapping requeues them at once). */
+    private const PARK_MINUTES = 30;
+
     public function __construct(private ErzapClient $erzap) {}
 
     public static function queue(Order $order): void
@@ -53,18 +56,23 @@ class ErzapSync
                 return 'synced';
             }
             $order = Order::with('items.product', 'outlet', 'customer', 'payments')->find($sync->subject_id);
-            if (! $order || $order->payment_status !== 'paid') {
-                $sync->update(['status' => 'skipped', 'last_error' => $order ? 'The order is no longer paid.' : 'Order not found.', 'next_attempt_at' => null]);
+            // A cancelled order is never sent as a sale, even when it was paid (the refund is handled outside Erzap).
+            if (! $order || $order->payment_status !== 'paid' || $order->order_status === 'cancelled') {
+                $sync->update(['status' => 'skipped', 'last_error' => match (true) {
+                    ! $order => 'Order not found.',
+                    $order->order_status === 'cancelled' => 'The order was cancelled.',
+                    default => 'The order is no longer paid.',
+                }, 'next_attempt_at' => null]);
 
                 return 'skipped';
             }
             if (! $this->erzap->configured()) {
-                $sync->update(['status' => 'waiting_config', 'last_error' => 'Missing Erzap settings: '.implode(', ', $this->erzap->missingSettings()).'.', 'next_attempt_at' => null]);
+                $sync->update(['status' => 'waiting_config', 'last_error' => 'Missing Erzap settings: '.implode(', ', $this->erzap->missingSettings()).'.', 'next_attempt_at' => now()->addMinutes(self::PARK_MINUTES)]);
 
                 return 'waiting_config';
             }
             if ($missing = $this->missingMapping($order)) {
-                $sync->update(['status' => 'needs_mapping', 'last_error' => 'Missing in Mapping: '.implode(', ', $missing).'.', 'next_attempt_at' => null]);
+                $sync->update(['status' => 'needs_mapping', 'last_error' => 'Missing in Mapping: '.implode(', ', $missing).'.', 'next_attempt_at' => now()->addMinutes(self::PARK_MINUTES)]);
 
                 return 'needs_mapping';
             }
@@ -73,7 +81,7 @@ class ErzapSync
                 $result = $this->erzap->sendOrder($cart);
             } catch (ErzapException $e) {
                 if ($e->notConfigured) {
-                    $sync->update(['status' => 'waiting_config', 'payload' => $cart, 'last_error' => 'Erzap settings are not complete.', 'next_attempt_at' => null]);
+                    $sync->update(['status' => 'waiting_config', 'payload' => $cart, 'last_error' => 'Erzap settings are not complete.', 'next_attempt_at' => now()->addMinutes(self::PARK_MINUTES)]);
 
                     return 'waiting_config';
                 }
@@ -96,11 +104,12 @@ class ErzapSync
         });
     }
 
-    /** Syncs the scheduler should try now: new rows, failures past their backoff, and rows waiting for config or mapping. */
+    /** Syncs the scheduler should try now: new rows, then failed or parked rows whose next attempt is due. */
     public function due(int $limit = 50)
     {
         return IntegrationSync::where('provider', 'erzap')->where('type', self::TYPE)->whereIn('status', IntegrationSync::RUNNABLE)
-            ->where(fn ($q) => $q->where('status', '!=', 'failed')->orWhere(fn ($q) => $q->whereNotNull('next_attempt_at')->where('next_attempt_at', '<=', now())))
+            // New rows run at once; failed and parked rows (settings or mapping missing) only when their time comes, so they cannot fill every batch.
+            ->where(fn ($q) => $q->where('status', 'pending')->orWhere(fn ($q) => $q->whereNotNull('next_attempt_at')->where('next_attempt_at', '<=', now())))
             ->orderBy('id')->limit($limit)->get();
     }
 

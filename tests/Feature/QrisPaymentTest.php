@@ -158,6 +158,10 @@ class QrisPaymentTest extends TestCase
             ->assertOk()->assertJson(['responseCode' => '2005200']);
         $this->assertSame('pending', $order->fresh()->payment_status);
 
+        // Repeated callbacks within the cooldown do not call DOKU again.
+        $this->postJson('/webhooks/doku-qris', ['originalReferenceNo' => 'DOKU-REF-1'])->assertOk()->assertJson(['status' => 'throttled']);
+        $this->assertSame('pending', $order->fresh()->payment_status);
+        $this->travel(6)->seconds();
         $this->postJson('/webhooks/doku-qris', ['originalReferenceNo' => 'DOKU-REF-1'])->assertOk()->assertJson(['status' => 'applied']);
         $this->assertSame('paid', $order->fresh()->payment_status);
         $this->postJson('/webhooks/doku-qris', ['partnerReferenceNo' => 'unknown'])->assertOk()->assertJson(['status' => 'unknown_payment']);

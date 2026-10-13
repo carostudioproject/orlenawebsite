@@ -26,7 +26,7 @@ class DokuQrisWebhookController extends Controller
         $result = 'unknown_payment';
         if ($payment) {
             try {
-                $result = $reconcile->handle($payment);
+                $result = $reconcile->throttled($payment);
             } catch (DokuException) {
                 $result = 'check_failed';
             }

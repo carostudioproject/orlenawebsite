@@ -14,7 +14,8 @@ Upload everything except `node_modules`, `.env`, `tests`, and `storage/app/priva
 
 ## 2. Hostinger settings
 
-- PHP 8.2 or newer with extensions `pdo_mysql`, `mbstring`, `openssl`, `zip` (Excel export), `gd` (logo in PDF), `dom`, `fileinfo`.
+- PHP **8.2, 8.3 or 8.4** (the locked OpenSpout version does not install on 8.5), for both the website and the cron job's PHP (`/usr/bin/php`), with extensions `pdo_mysql`, `mbstring`, `openssl`, `curl`, `zip`, `xmlreader` and `libxml` (Excel import/export), `gd` with WebP (photo resizing, logo in PDF), `dom`, `fileinfo`, `exif` (photo rotation, optional). Check with `php -v` and `php -m` over SSH; `composer check-platform-reqs` lists anything missing.
+- Upload limits for photos and Erzap image sync: `upload_max_filesize` ≥ 8M, `post_max_size` ≥ 32M, `max_file_uploads` ≥ 20.
 - Point the domain's document root to the project's `public/` folder. The project folder itself must not be web-accessible.
 - Create a MySQL database and user.
 
@@ -22,11 +23,11 @@ Upload everything except `node_modules`, `.env`, `tests`, and `storage/app/priva
 
 Create `.env` on the server from `.env.example`:
 
-- `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL=https://<domain>`, then `php artisan key:generate`
+- `APP_ENV=production`, `APP_DEBUG=false`, `LOG_LEVEL=warning`, `APP_URL=https://<domain>`, then `php artisan key:generate`. `.env.example` holds development defaults (debug on); never copy those to the live site. Developer tools shows "debug ON" in red if it is left on.
 - `DB_*` from Hostinger, `SESSION_SECURE_COOKIE=true`
 - `SITE_INDEXABLE=true` and `META_PIXEL_ENABLED=true` only after approval
-- `DOKU_CLIENT_ID`, `DOKU_SECRET_KEY` (sandbox first, production keys at launch), `DOKU_IS_PRODUCTION`
-- `ERZAP_*` stays disabled until the Erzap documentation arrives; `API_TOKENS` only if an integration needs it
+- Payments: choose one setup in step 6. `DOKU_MODE=demo` is blocked when `APP_ENV=production` unless `DOKU_ALLOW_DEMO=true` (only for a demo server such as dev.caro-studio.com; never on the live shop, since a simulated payment counts as paid and goes to Erzap).
+- `ERZAP_*`: base URL, token, outlet and sales user IDs from Erzap; `ERZAP_INBOUND_TOKEN` only if Erzap gives a separate token for its calls to `/web_service/...` (see [Erzap integration](erzap-integration.md)). `API_TOKENS` only if an integration needs it.
 
 ## 4. First run (SSH or Hostinger terminal)
 
@@ -47,12 +48,22 @@ This reconciles expired DOKU links (every 10 minutes) and sends Erzap syncs (eve
 
 ## 6. DOKU
 
-In the DOKU Back Office set the **Notification URL** (and the Checkout expired notification) to `https://<domain>/webhooks/doku`. Test one sandbox payment end to end before switching to production keys. See [payments](payments-and-fulfillment.md).
+Pick one mode and fill only its settings (details in [payments](payments-and-fulfillment.md)). Test one sandbox payment end to end, then switch `DOKU_IS_PRODUCTION=true` with the production keys.
+
+| Mode | `.env` | Notification URL in the DOKU dashboard | Sandbox test |
+|---|---|---|---|
+| Customer chooses **VA BCA or QRIS** on `/bayar` (planned for Orlena) | `DOKU_ENABLED=true`, `DOKU_MODE=direct`, `DOKU_METHODS=va_bca,qris`, `DOKU_CLIENT_ID`, `DOKU_SECRET_KEY` (or `DOKU_SNAP_CLIENT_SECRET`), `DOKU_VA_BCA_PARTNER_SERVICE_ID`, `DOKU_VA_BCA_CUSTOMER_PREFIX`, `DOKU_QRIS_MERCHANT_ID`, `DOKU_QRIS_TERMINAL_ID`, SNAP private key at `storage/app/private/doku-snap-private.pem` (generate it in Developer tools and upload the public key to DOKU) | VA: `https://<domain>/webhooks/doku-va`; QRIS: `https://<domain>/webhooks/doku-qris` | VA only (`DOKU_METHODS=va_bca`): the DOKU sandbox has no QRIS. Pay with the VA simulator. |
+| **QRIS only** on `/bayar` | `DOKU_ENABLED=true`, `DOKU_MODE=qris`, the QRIS and SNAP settings above | `https://<domain>/webhooks/doku-qris` | Production only |
+| **DOKU Checkout page** (all methods, or `DOKU_MODE=va` for VA only) | `DOKU_ENABLED=true`, `DOKU_MODE=checkout` or `va`, `DOKU_CLIENT_ID`, `DOKU_SECRET_KEY` | `https://<domain>/webhooks/doku` (also the Checkout expired notification) | Sandbox simulator |
+| **No online payment** | `DOKU_ENABLED=false` | none | Staff use Mark as paid |
+
+Developer tools (`/admin/system`, Developer role) shows the active mode, which settings are filled and the Notification URLs to copy.
 
 ## 7. Smoke test after each release
 
 - Homepage, About, Blog and `/order` load; place a test order and open WhatsApp.
-- Log in to `/admin`, open the order, confirm, and pay with the DOKU sandbox simulator; the order turns **Paid** within a minute.
+- Log in to `/admin`, open the order and confirm it. Pay it through the mode chosen in step 6 (VA simulator in the sandbox, or a real small payment in production); the order turns **Paid** within a minute and is sent to Erzap. Mark as paid alone does not prove the DOKU setup.
+- Response headers include `X-Frame-Options`, `X-Content-Type-Options` and, over HTTPS, `Strict-Transport-Security`.
 - Open **Laporan** and download PDF and Excel.
 - `php artisan schedule:list` shows both scheduled commands.
 

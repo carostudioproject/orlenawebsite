@@ -17,22 +17,29 @@ class PaymentGateways
 
     private const BY_PROVIDER = ['doku' => DokuCheckoutGateway::class, 'doku_qris' => DokuQrisGateway::class, 'doku_va' => DokuVaGateway::class, 'demo' => DemoGateway::class];
 
-    private const BY_MODE = ['checkout' => DokuCheckoutGateway::class, 'va' => DokuCheckoutGateway::class, 'qris' => DokuQrisGateway::class, 'demo' => DemoGateway::class];
+    private const BY_MODE = ['checkout' => DokuCheckoutGateway::class, 'va' => DokuCheckoutGateway::class, 'qris' => DokuQrisGateway::class];
 
+    /**
+     * Demo payments are marked paid without money and sent to Erzap, so a production install only allows them
+     * when DOKU_ALLOW_DEMO=true says so (a demo server). Otherwise DOKU_MODE=demo is treated as "off".
+     */
     public static function demo(): bool
     {
-        return config('services.doku.mode') === 'demo';
+        return config('services.doku.mode') === 'demo' && (! app()->isProduction() || (bool) config('services.doku.allow_demo'));
     }
 
+    /** The configured mode, or "off" when demo is configured but not allowed here. */
     public static function mode(): string
     {
-        return (string) config('services.doku.mode', 'qris');
+        $mode = (string) config('services.doku.mode', 'qris');
+
+        return $mode === 'demo' && ! self::demo() ? 'off' : $mode;
     }
 
     /** Whether confirming an order creates a payment link. */
     public static function enabled(): bool
     {
-        return (bool) config('services.doku.enabled') || self::demo();
+        return ((bool) config('services.doku.enabled') && self::mode() !== 'off') || self::demo();
     }
 
     /**

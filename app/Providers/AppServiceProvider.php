@@ -45,7 +45,13 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('payment-check', fn (Request $request) => Limit::perMinute(10)->by((string) $request->user()?->id));
         RateLimiter::for('report-export', fn (Request $request) => Limit::perMinute(10)->by((string) $request->user()?->id));
         RateLimiter::for('staff-login', fn (Request $request) => Limit::perMinute(20)->by($request->ip()));
-        RateLimiter::for('api', fn (Request $request) => Limit::perMinute(60)->by($request->bearerToken() ? hash('sha256', $request->bearerToken()) : $request->ip()));
+        // Always per IP, so made-up tokens cannot buy fresh limits; a configured token gets its own, larger limit.
+        RateLimiter::for('api', function (Request $request) {
+            $token = (string) $request->bearerToken();
+            $known = $token !== '' && collect(config('services.api.tokens', []))->contains(fn ($valid) => hash_equals((string) $valid, $token));
+
+            return $known ? Limit::perMinute(120)->by('token:'.hash('sha256', $token)) : Limit::perMinute(60)->by('ip:'.$request->ip());
+        });
         RateLimiter::for('preorder-submit', fn (Request $request) => Limit::perMinute(5)->by($request->ip()));
         // The payment page polls every few seconds while a QRIS is open.
         RateLimiter::for('payment-status', fn (Request $request) => Limit::perMinute(40)->by($request->ip()));

@@ -86,6 +86,10 @@ class ErzapAndApiTest extends TestCase
 
         // Configured but no barcode / outlet ID: waits for mapping, still nothing sent.
         config(['services.erzap.enabled' => true, 'services.erzap.base_url' => 'https://erzap.test:4443', 'services.erzap.token' => 'erzap-secret', 'services.erzap.sales_user_id' => '8']);
+        // A row waiting for settings is parked: the next run leaves it until its time comes, so it cannot fill every batch.
+        $this->artisan('erzap:sync')->assertSuccessful();
+        $this->assertSame('waiting_config', $sync->fresh()->status);
+        $this->travel(31)->minutes();
         $this->artisan('erzap:sync')->assertSuccessful();
         $this->assertSame('needs_mapping', $sync->fresh()->status);
         $this->assertStringContainsString('Erzap outlet ID for Test Outlet', $sync->fresh()->last_error);

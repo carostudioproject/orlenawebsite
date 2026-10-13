@@ -14,7 +14,6 @@ use App\Services\Payments\PaymentGateways;
 use App\Support\ShopPage;
 use App\Support\SiteContent;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 
 /**
  * Orlena's own payment page: the order summary and a BCA Virtual Account or QRIS, as the customer chooses. Reached with the Order Code from the
@@ -46,9 +45,9 @@ class PaymentPageController extends Controller
     {
         $order = Order::where('order_code', $code)->firstOrFail();
         $open = Payment::where('order_id', $order->id)->where('status', 'pending')->whereIn('provider', ['doku_qris', 'doku_va'])->latest('attempt')->first();
-        if ($open && Cache::add('qris-check:'.$open->id, true, 5)) {
+        if ($open) {
             try {
-                $reconcile->handle($open);
+                $reconcile->throttled($open);
             } catch (DokuException) {
                 // Temporary DOKU errors: the page keeps polling and the scheduler checks again.
             }

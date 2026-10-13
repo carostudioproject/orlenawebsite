@@ -39,7 +39,7 @@ class SystemController extends Controller
                 'php' => PHP_VERSION, 'laravel' => app()->version(),
             ],
             'payments' => [
-                'online' => PaymentGateways::enabled(), 'mode' => $doku['mode'], 'production' => (bool) $doku['is_production'],
+                'online' => PaymentGateways::enabled(), 'mode' => PaymentGateways::mode(), 'production' => (bool) $doku['is_production'],
                 'clientId' => filled($doku['client_id']), 'secret' => filled($doku['secret_key']) || filled($doku['snap_client_secret']),
                 'qrisMerchant' => filled($doku['qris_merchant_id']), 'qrisTerminal' => filled($doku['qris_terminal_id']),
                 'methods' => PaymentGateways::methods(), 'vaBca' => filled($doku['va_bca_partner_service_id']), 'dokuPublicKey' => is_readable((string) $doku['snap_doku_public_key_path']),

@@ -44,9 +44,12 @@ class ReviewOrder
                 throw ValidationException::withMessages(['requested_date' => $closed.' Reopen it under PO schedule if this was agreed.']);
             }
             $previous = $locked->delivery_fee;
+            // A deadline set while the customer chooses VA BCA or QRIS never passes the new date's H-1 cutoff.
+            $dueAt = $locked->payment_due_at && $date !== $locked->requested_date->toDateString()
+                ? $locked->payment_due_at->toImmutable()->min($dates->cutoff($date)) : $locked->payment_due_at;
             $locked->update([
                 'delivery_fee' => $fee, 'total' => $locked->subtotal + ($fee ?? 0), 'review_version' => $locked->review_version + 1,
-                'requested_date' => $date, 'requested_time' => $time,
+                'requested_date' => $date, 'requested_time' => $time, 'payment_due_at' => $dueAt,
             ]);
             $changed = $schedule !== $previousSchedule;
             DB::table('order_reviews')->insert([

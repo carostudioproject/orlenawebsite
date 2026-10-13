@@ -13,6 +13,7 @@ use App\Support\Audit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 /** Erzap: connection status, outlet/product mapping, and the sync log with manual retry. */
@@ -65,8 +66,10 @@ class IntegrationController extends Controller
             'products.*.id' => ['required', 'integer', 'distinct', 'exists:products,id'],
             'products.*.erzap_product_id' => ['nullable', 'string', 'max:80'],
             'products.*.erzap_variant_id' => ['nullable', 'string', 'max:80'],
-            'products.*.barcode' => ['nullable', 'string', 'max:80'],
-        ]);
+            // Erzap matches order lines by barcode: one barcode per product, without spaces (same rule as the product form).
+            'products.*.barcode' => ['nullable', 'string', 'max:80', 'regex:/^\S+$/', 'distinct:ignore_case'],
+        ], ['products.*.barcode.regex' => 'A barcode cannot contain spaces.', 'products.*.barcode.distinct' => 'This barcode is used twice in the list.']);
+        $this->rejectTakenBarcodes($data['products'] ?? []);
         DB::transaction(function () use ($data) {
             foreach ($data['outlets'] ?? [] as $row) {
                 $outlet = Outlet::find($row['id']);
@@ -89,6 +92,22 @@ class IntegrationController extends Controller
         });
 
         return back()->with('success', 'Erzap mapping saved.');
+    }
+
+    /** A barcode may not belong to another product, unless that product is in the same list and gets another barcode. */
+    private function rejectTakenBarcodes(array $rows): void
+    {
+        $inList = collect($rows)->keyBy('id');
+        foreach ($rows as $index => $row) {
+            if (blank($row['barcode'] ?? null)) {
+                continue;
+            }
+            $owner = Product::whereRaw('LOWER(barcode) = ?', [mb_strtolower($row['barcode'])])->whereKeyNot($row['id'])->get(['id', 'name', 'variant'])
+                ->first(fn (Product $other) => ! $inList->has($other->id) || mb_strtolower((string) ($inList[$other->id]['barcode'] ?? '')) === mb_strtolower($row['barcode']));
+            if ($owner) {
+                throw ValidationException::withMessages(["products.$index.barcode" => 'Barcode '.$row['barcode'].' already belongs to '.$owner->label().'.']);
+            }
+        }
     }
 
     public function retry(Request $request, IntegrationSync $sync, ErzapSync $erzap)

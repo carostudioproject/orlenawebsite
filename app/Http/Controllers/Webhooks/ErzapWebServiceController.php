@@ -60,9 +60,11 @@ class ErzapWebServiceController extends Controller
             return response()->json(['notice' => 'Status '.mb_substr($status, 0, 10).' tidak dipakai', 'status' => 1]);
         }
 
-        return $this->inbound->markSaved($code)
-            ? response()->json(['notice' => 'Status pesanan sukses diupdate', 'status' => 1])
-            : response()->json(['notice' => 'Data shopping cart dengan kode '.mb_substr($code, 0, 40).' tidak ditemukan', 'status' => 0]);
+        return match ($this->inbound->markSaved($code)) {
+            'saved' => response()->json(['notice' => 'Status pesanan sukses diupdate', 'status' => 1]),
+            'not_queued' => response()->json(['notice' => 'Pesanan '.mb_substr($code, 0, 40).' belum dibayar atau tidak dikirim ke ERZAP', 'status' => 0]),
+            default => response()->json(['notice' => 'Data shopping cart dengan kode '.mb_substr($code, 0, 40).' tidak ditemukan', 'status' => 0]),
+        };
     }
 
     /** 2.6 sinkronisasi_gambar: multipart with an erzap_json field and file_<ref> parts. */

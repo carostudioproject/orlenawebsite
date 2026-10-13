@@ -9,7 +9,22 @@ use Illuminate\Support\Str;
 class ContentImage
 {
     /** Upload rules shared by every content image field. */
-    public const RULES = ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'];
+    /**
+     * Largest side accepted. A small compressed file can still have huge dimensions; decoding it would need
+     * width × height × 4 bytes of memory, so anything bigger is refused before GD opens it.
+     */
+    public const MAX_DIMENSION = 6000;
+
+    public const RULES = ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096', 'dimensions:max_width=6000,max_height=6000'];
+
+    /** Whether the file is a JPG, PNG or WebP within MAX_DIMENSION, read from its header without decoding it. */
+    public static function acceptable(string $path): bool
+    {
+        $info = @getimagesize($path);
+
+        return in_array($info[2] ?? null, [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_WEBP], true)
+            && ($info[0] ?? 0) > 0 && $info[0] <= self::MAX_DIMENSION && ($info[1] ?? 0) > 0 && $info[1] <= self::MAX_DIMENSION;
+    }
 
     /** Existing images must be site assets or earlier uploads; arbitrary URLs are rejected. */
     public const PATH = ['nullable', 'string', 'max:500', 'regex:#^/(assets|storage/content)/[^?\#]+\.(png|jpe?g|webp)$#i', 'not_regex:#\.\.#'];
@@ -36,6 +51,9 @@ class ContentImage
             return null;
         }
         $path = $upload->getRealPath();
+        if (! self::acceptable($path)) {
+            return null;
+        }
         $info = @getimagesize($path);
         $image = match ($info[2] ?? null) {
             IMAGETYPE_JPEG => @imagecreatefromjpeg($path),

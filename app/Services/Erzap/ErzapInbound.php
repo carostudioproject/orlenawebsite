@@ -139,31 +139,42 @@ class ErzapInbound
      */
     public function pendingOrders(): array
     {
-        $ids = IntegrationSync::where('provider', 'erzap')->where('type', ErzapSync::TYPE)->where('subject_type', 'orders')
-            ->whereIn('status', IntegrationSync::RUNNABLE)->pluck('subject_id');
+        // Filtered and limited in SQL, so a long Erzap outage never loads the whole backlog.
+        $queued = IntegrationSync::select('subject_id')->where('provider', 'erzap')->where('type', ErzapSync::TYPE)->where('subject_type', 'orders')
+            ->whereIn('status', IntegrationSync::RUNNABLE);
 
-        return Order::with('items.product', 'outlet', 'customer', 'payments')->whereIn('id', $ids)->where('payment_status', 'paid')
-            ->orderBy('created_at')->get()
-            ->reject(fn (Order $order) => $order->items->contains(fn ($item) => blank($item->product?->barcode)))
-            ->take(self::PULL_LIMIT)
+        return Order::with('items.product', 'outlet', 'customer', 'payments')->whereIn('id', $queued)
+            ->where('payment_status', 'paid')->where('order_status', '!=', 'cancelled')
+            ->whereDoesntHave('items', fn ($items) => $items->whereNull('product_id')
+                ->orWhereHas('product', fn ($product) => $product->whereNull('barcode')->orWhere('barcode', '')))
+            ->orderBy('created_at')->limit(self::PULL_LIMIT)->get()
             ->map(fn (Order $order) => $this->sync->pullCart($order))->values()->all();
     }
 
-    /** update_status_pesanan with status 5: the order is saved in Erzap. False when the order code is unknown. */
-    public function markSaved(string $code): bool
+    /**
+     * update_status_pesanan with status 5: the order is saved in Erzap. Only an order already queued for Erzap (paid)
+     * is marked; anything else returns why: "unknown" (no such code) or "not_queued" (not paid, so never offered).
+     */
+    public function markSaved(string $code): string
     {
         $order = Order::where('order_code', $code)->first();
         if (! $order) {
-            return false;
+            return 'unknown';
         }
-        ErzapSync::queue($order);
-        IntegrationSync::where('provider', 'erzap')->where('type', ErzapSync::TYPE)->where('subject_type', 'orders')->where('subject_id', $order->id)
-            ->where('status', '!=', 'synced')->update([
-                'status' => 'synced', 'external_ref' => $order->order_code, 'last_error' => null, 'next_attempt_at' => null, 'synced_at' => now(), 'updated_at' => now(),
-            ]);
-        Audit::log('erzap.saved_by_erzap', 'orders', $order->id, ['order' => $order->order_code]);
 
-        return true;
+        return DB::transaction(function () use ($order) {
+            $sync = IntegrationSync::where('provider', 'erzap')->where('type', ErzapSync::TYPE)->where('subject_type', 'orders')
+                ->where('subject_id', $order->id)->lockForUpdate()->latest('id')->first();
+            if (! $sync || ! in_array(Order::whereKey($order->id)->value('payment_status'), ['paid', 'refunded'], true)) {
+                return 'not_queued';
+            }
+            if ($sync->status !== 'synced') {
+                $sync->update(['status' => 'synced', 'external_ref' => $order->order_code, 'last_error' => null, 'next_attempt_at' => null, 'synced_at' => now()]);
+                Audit::log('erzap.saved_by_erzap', 'orders', $order->id, ['order' => $order->order_code]);
+            }
+
+            return 'saved';
+        });
     }
 
     private function barcode(array $item): ?string
@@ -196,8 +207,6 @@ class ErzapInbound
 
     private function isPhoto(UploadedFile $file): bool
     {
-        $info = @getimagesize($file->getRealPath());
-
-        return $file->getSize() <= 8 * 1024 * 1024 && in_array($info[2] ?? null, [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_WEBP], true);
+        return $file->getSize() <= 8 * 1024 * 1024 && ContentImage::acceptable($file->getRealPath());
     }
 }
