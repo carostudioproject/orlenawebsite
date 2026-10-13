@@ -24,17 +24,20 @@ class OrderCatalog
             'image' => $product->image, 'variant' => $product->variant,
             'is_hamper' => $product->is_hamper || $product->content_type === 'hampers', 'hamper_items' => $product->hamperItems(), 'sale_ends_on' => $product->sale_ends_on?->toDateString(),
             'price' => $price($product),
-            'content_type' => $product->hasChoice() ? $product->content_type : null,
-            'content_count' => $product->hasChoice() ? $product->content_count : null,
+            'content_type' => $product->hasChoice() || $product->hasFixedContents() ? $product->content_type : null,
+            'content_count' => $product->hasChoice() ? $product->content_count : ($product->hasFixedContents() ? (int) $product->contentOptions->sum('pivot.quantity') : null),
+            // A fixed box lists what it holds; it has no choice to make.
+            'fixed_contents' => $product->hasFixedContents() ? $product->contentOptions->sortBy('name')->values()
+                ->map(fn (Product $option) => ['id' => $option->id, 'name' => $option->name, 'variant' => $option->variant, 'image' => $option->image, 'quantity' => $option->pivot->quantity])->all() : [],
             'contents' => $product->hasChoice() ? $product->contentOptions->filter(fn (Product $option) => $option->availableAsContentOf($product))
                 ->sortBy([['name', 'asc'], ['variant', 'asc']])->values()
                 ->map(fn (Product $option) => [
-                    'id' => $option->id, 'name' => $option->name, 'variant' => $option->variant,
+                    'id' => $option->id, 'name' => $option->name, 'variant' => $option->variant, 'image' => $option->image,
                     'price' => $product->content_pricing === 'added' ? $price($option) : 0,
                 ])->all() : [],
         ])
             // A hampers or box without any available contents cannot be ordered.
-            ->filter(fn (array $row) => ! $row['content_type'] || $row['contents'])->values();
+            ->filter(fn (array $row) => ! in_array($row['content_type'], ['hampers', 'box'], true) || $row['contents'])->values();
         $categoryIds = $rows->pluck('category_id')->unique();
 
         return [

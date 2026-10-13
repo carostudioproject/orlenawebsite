@@ -16,5 +16,5 @@ export interface CatalogRecord {
     price?: number | null; is_active?: boolean; accepts_preorder?: boolean; is_delivery_hub?: boolean; show_on_website?: boolean; variant?: string | null; is_hamper?: boolean; hamper_contents?: string | null; sale_starts_on?: string | null; sale_ends_on?: string | null;
     erzap_product_id?: string | null; erzap_variant_id?: string | null; barcode?: string | null; erzap_outlet_id?: string | null; image?: string | null; description?: string | null; address?: string; maps_url?: string | null;
     outlet_prices?: { outlet_id: number; price: number }[]; order_position?: number;
-    content_type?: 'hampers' | 'box' | null; content_count?: number | null; content_pricing?: 'added' | 'included' | null; content_ids?: number[];
+    content_type?: 'hampers' | 'box' | 'set' | 'flavour' | null; content_count?: number | null; content_pricing?: 'added' | 'included' | null; content_ids?: number[];
 }

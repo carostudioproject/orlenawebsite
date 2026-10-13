@@ -238,7 +238,8 @@ class ProductImport
             // Contents ("Isi Dari") are linked once every product of the file exists, so codes may point to new products.
             foreach ($touched as [$product, $item]) {
                 if ($item['content_type'] !== null && $item['content_from'] !== null) {
-                    $product->contentOptions()->sync($product->content_type ? $this->resolveCodes($item['content_from'], $product->id) : []);
+                    $ids = in_array($product->content_type, ['hampers', 'box', 'set'], true) ? $this->resolveCodes($item['content_from'], $product->id) : [];
+                    $product->contentOptions()->sync(array_map(fn ($count) => ['quantity' => $product->content_type === 'set' ? $count : 1], array_count_values($ids)));
                 }
             }
             $summary = $this->summary($plan);
@@ -258,17 +259,32 @@ class ProductImport
         $type = match (true) {
             $type === '' => null,
             str_starts_with($type, 'hamper') => 'hampers',
-            str_starts_with($type, 'box') => 'box',
+            // "Box isi tetap": flavours fixed by Orlena; checked before plain "Box".
+            str_contains($type, 'tetap') || $type === 'set' => 'set',
+            str_starts_with($type, 'box') || str_starts_with($type, 'mix') => 'box',
+            str_starts_with($type, 'rasa') || str_starts_with($type, 'isi') || str_starts_with($type, 'flavour') => 'flavour',
             default => '',
         };
         $pricing = mb_strtolower(trim((string) $pricing));
-        $codes = array_values(array_unique(array_filter(array_map('trim', preg_split('/[,;\r\n]+/', (string) $from)), fn ($code) => $code !== '')));
+        // "2x BR0054" counts twice; only a fixed box keeps repeats.
+        $codes = [];
+        foreach (array_filter(array_map('trim', preg_split('/[,;\r\n]+/', (string) $from)), fn ($code) => $code !== '') as $code) {
+            $repeat = preg_match('/^(\d{1,2})\s*[x×]\s*(\S.*)$/iu', $code, $match) ? max(1, (int) $match[1]) : 1;
+            array_push($codes, ...array_fill(0, $repeat, trim($match[2] ?? $code)));
+        }
+        $codes = $type === 'set' ? $codes : array_values(array_unique($codes));
 
         return [
             'content_type' => $type,
-            'content_count' => $type === 'hampers' ? 1 : (is_numeric($count) && (int) $count >= 1 ? min(50, (int) $count) : null),
+            'content_count' => match ($type) {
+                'hampers' => 1,
+                'box' => is_numeric($count) && (int) $count >= 1 ? min(50, (int) $count) : null,
+                'set' => $codes ? count($codes) : null,
+                default => null,
+            },
             'content_from' => trim((string) $from) === '' ? null : $codes,
             'content_pricing' => match (true) {
+                ! in_array($type, ['hampers', 'box'], true) => null,
                 str_starts_with($pricing, 'tambah') || str_starts_with($pricing, 'ditambah') => 'added',
                 str_starts_with($pricing, 'termasuk') => 'included',
                 default => $type === 'box' ? 'included' : 'added',
@@ -286,7 +302,17 @@ class ProductImport
             return ['content_type' => null, 'content_count' => null, 'content_pricing' => null];
         }
 
-        return ['content_type' => $item['content_type'], 'content_count' => $item['content_count'] ?? $product?->content_count ?? 1, 'content_pricing' => $item['content_pricing']];
+        $choice = in_array($item['content_type'], ['hampers', 'box'], true);
+
+        return [
+            'content_type' => $item['content_type'],
+            'content_count' => match ($item['content_type']) {
+                'flavour' => null,
+                'set' => $item['content_count'] ?? $product?->content_count,
+                default => $item['content_count'] ?? $product?->content_count ?? 1,
+            },
+            'content_pricing' => $choice ? $item['content_pricing'] : null,
+        ];
     }
 
     private function contentChanges(array $item, Product $product): array
@@ -297,8 +323,8 @@ class ProductImport
                 $changes[$column] = [$product->{$column}, $value];
             }
         }
-        if ($item['content_type'] && $item['content_from'] !== null) {
-            $current = $product->contentOptions->map(fn ($option) => $option->sku)->sort()->values()->all();
+        if (in_array($item['content_type'], ['hampers', 'box', 'set'], true) && $item['content_from'] !== null) {
+            $current = $product->contentOptions->flatMap(fn ($option) => array_fill(0, max(1, (int) $option->pivot->quantity), $option->sku))->sort()->values()->all();
             $wanted = collect($item['content_from'])->map(fn ($code) => $this->sku($code))->sort()->values()->all();
             if (array_map('mb_strtolower', $current) !== array_map('mb_strtolower', $wanted)) {
                 $changes['contents'] = [implode(', ', $current), implode(', ', $item['content_from'])];
@@ -331,14 +357,21 @@ class ProductImport
         return $missing ? 'Isi Dari: code not found: '.implode(', ', array_slice($missing, 0, 5)).'.' : null;
     }
 
-    /** Product IDs for Isi Dari codes (product code or barcode); hampers and boxes cannot be contents. */
+    /** Product IDs for Isi Dari codes (product code or barcode): regular products and box flavours, never hampers or boxes. */
     private function resolveCodes(array $codes, int $self): array
     {
         $lower = array_map('mb_strtolower', $codes);
-
-        return Product::whereNull('content_type')->whereKeyNot($self)
+        $byCode = [];
+        Product::where(fn ($query) => $query->whereNull('content_type')->orWhere('content_type', 'flavour'))->whereKeyNot($self)
             ->where(fn ($query) => $query->whereIn(DB::raw('LOWER(sku)'), $lower)->orWhereIn(DB::raw('LOWER(barcode)'), $lower))
-            ->pluck('id')->all();
+            ->get(['id', 'sku', 'barcode'])
+            ->each(function (Product $product) use (&$byCode) {
+                $byCode[mb_strtolower((string) $product->sku)] = $product->id;
+                $byCode[mb_strtolower((string) $product->barcode)] = $product->id;
+            });
+
+        // One ID per code, repeats kept (a fixed box with "2x BR0054" lists it twice).
+        return array_values(array_filter(array_map(fn ($code) => $byCode[$code] ?? null, $lower)));
     }
 
     /** Hampers contents: one item per line; ";" also separates items. */

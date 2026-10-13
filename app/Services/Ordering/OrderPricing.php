@@ -17,7 +17,7 @@ class OrderPricing
     public function quote(array $selection, Outlet $outlet): array
     {
         $ids = array_merge(array_column($selection, 'product_id'), ...array_map(fn ($row) => array_map('intval', $row['contents'] ?? []), $selection));
-        $products = Product::with('category', 'contentOptions:id')->whereIn('id', array_unique($ids))->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+        $products = Product::with('category', 'contentOptions.category')->whereIn('id', array_unique($ids))->orderBy('id')->lockForUpdate()->get()->keyBy('id');
         $items = [];
         foreach ($selection as $index => $row) {
             $product = $products->get($row['product_id']);
@@ -41,6 +41,14 @@ class OrderPricing
     /** Validates the contents chosen for one unit and merges repeats: [line + per_unit] per content product. */
     private function contents(Product $product, array $chosen, $products, Outlet $outlet, int $quantity, int $index): array
     {
+        // A box with fixed flavours: its contents come from the product, at Rp 0.
+        if ($product->hasFixedContents()) {
+            if ($chosen) {
+                $this->fail("items.$index.contents", 'Isi '.$product->label().' sudah ditentukan.');
+            }
+
+            return $product->contentOptions->map(fn (Product $content) => [...$this->line($content, 0, $content->pivot->quantity * $quantity), 'per_unit' => $content->pivot->quantity])->values()->all();
+        }
         if (! $product->hasChoice()) {
             if ($chosen) {
                 $this->fail("items.$index.contents", 'Produk ini tidak memiliki pilihan isi.');

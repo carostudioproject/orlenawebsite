@@ -11,8 +11,12 @@
 .order-categories .order-category { scroll-snap-align: start; }
 /* Phones: compact text chips without the image. */
 @media (max-width: 639px) { .order-category { gap: .45rem; padding: .5rem .5rem .5rem .9rem; } }
-.order-product { display: flex; flex-direction: column; gap: .75rem; border: 1px solid var(--admin-line); border-radius: 1rem; padding: .85rem; transition: border-color .15s, box-shadow .15s; }
-.order-product:hover { border-color: #3b030429; box-shadow: 0 6px 20px -14px #3b030466; }
+/* Shop-grid card: full-bleed square photo, centred name and price, outline button. */
+.order-product { display: flex; flex-direction: column; }
+.order-product-photo { position: relative; display: flex; aspect-ratio: 1; align-items: center; justify-content: center; overflow: hidden; border-radius: 1rem; background: #f6e3dc; cursor: pointer; }
+.order-product-photo img { width: 100%; height: 100%; object-fit: cover; transition: transform .3s; }
+.order-product-photo:hover img { transform: scale(1.03); }
+.order-product-badge { position: absolute; inset: auto 0 0; padding: .4rem; background: #3b0304e0; color: white; font-size: .72rem; font-weight: 700; letter-spacing: .03em; text-align: center; }
 .order-size span { display: inline-block; cursor: pointer; border: 1px solid #3b030429; border-radius: 999px; padding: .35rem .8rem; font-size: .8rem; font-weight: 700; transition: background-color .15s, border-color .15s; }
 .order-size input:checked + span { border-color: var(--admin-chocolate); background: var(--admin-almond); }
 .order-size input:focus-visible + span { outline: 2px solid var(--admin-chocolate); outline-offset: 2px; }
@@ -36,3 +40,32 @@ label.order-content-option:has(input:checked) { border-color: var(--admin-chocol
 .order-method input:checked + span { border-color: var(--admin-chocolate); background: #fff5f0; box-shadow: inset 0 0 0 1px var(--admin-chocolate); }
 .order-method input:focus-visible + span { outline: 2px solid var(--admin-chocolate); outline-offset: 2px; }
 .order-method.is-disabled span { cursor: not-allowed; opacity: .5; }
+/* 16px text: iOS zooms into smaller form fields. */
+.order-select { width: 100%; border: 1px solid #3b030429; border-radius: .75rem; background-color: white; padding: .55rem .75rem; font-size: 1rem; }
+/* Product popup: a bottom sheet on phones, a centred dialog on wider screens. */
+.order-sheet { width: 100%; max-width: 32rem; max-height: 88dvh; margin: auto auto 0; border: 0; border-radius: 1.25rem 1.25rem 0 0; padding: 0; background: white; color: var(--admin-chocolate); }
+.order-sheet[open] { display: flex; flex-direction: column; animation: order-sheet-in .2s ease-out; }
+.order-sheet::backdrop { background: rgb(27 1 2 / .45); }
+.order-sheet-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 1.25rem; }
+.order-sheet-footer { display: flex; align-items: center; gap: 1rem; border-top: 1px solid var(--admin-line); padding: .9rem 1.25rem calc(.9rem + env(safe-area-inset-bottom)); }
+@media (min-width: 640px) { .order-sheet { margin: auto; border-radius: 1.25rem; } }
+@keyframes order-sheet-in { from { transform: translateY(1.5rem); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .order-sheet[open] { animation: none; } }
+/* Cart bar (every screen size) and the cart drawer: a bottom sheet on phones, a right-hand panel on wide screens. */
+.order-cartbar.admin-shell, .order-cartbar { position: fixed; inset: auto 0 0; z-index: 30; border-top: 1px solid var(--admin-line); background: #ffffffeb; padding: .7rem 0 calc(.7rem + env(safe-area-inset-bottom)); box-shadow: 0 -10px 30px -24px #3b030466; backdrop-filter: blur(8px); }
+.order-cartbar-count { position: absolute; top: -.2rem; right: -.25rem; min-width: 1.25rem; border-radius: 999px; background: var(--admin-chocolate); padding: 0 .3rem; color: white; font-size: .7rem; font-weight: 700; line-height: 1.25rem; text-align: center; }
+@media (min-width: 1024px) {
+    .order-sheet.is-drawer { height: 100dvh; max-height: 100dvh; width: 26rem; max-width: 100%; margin: 0 0 0 auto; border-radius: 1.25rem 0 0 1.25rem; }
+    .order-sheet.is-drawer[open] { animation-name: order-drawer-in; }
+}
+@keyframes order-drawer-in { from { transform: translateX(2rem); opacity: 0; } }
+/* Pictures inside the product popup: small thumbnails in rows, square tiles for single choices. */
+.order-thumb { display: flex; width: 2.5rem; height: 2.5rem; flex-shrink: 0; align-items: center; justify-content: center; overflow: hidden; border-radius: .5rem; background: #f6e3dc; color: #3b030440; }
+.order-thumb img, .order-tile-photo img { width: 100%; height: 100%; object-fit: cover; }
+.order-tile { display: block; cursor: pointer; border: 2px solid #3b030414; border-radius: .9rem; background: white; padding: .35rem .35rem .5rem; transition: border-color .15s, background-color .15s; }
+.order-tile:hover { border-color: #3b030440; }
+.order-tile:has(input:checked) { border-color: var(--admin-chocolate); background: #fff5f0; }
+.order-tile:has(input:focus-visible) { outline: 2px solid var(--admin-chocolate); outline-offset: 2px; }
+.order-tile-photo { display: flex; aspect-ratio: 1; align-items: center; justify-content: center; overflow: hidden; border-radius: .6rem; background: #f6e3dc; color: #3b030440; font-size: 1.25rem; }
+/* Category chips stay reachable while scrolling the products (top set from the header height). */
+.order-category-bar { position: sticky; z-index: 20; margin: -.5rem -1.5rem 0; background: white; padding: .5rem 1.5rem .6rem; box-shadow: 0 10px 14px -14px #3b030440; }

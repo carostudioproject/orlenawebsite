@@ -1,10 +1,12 @@
 export interface OrderItem { id: number; parent_item_id?: number | null; product_name_snapshot: string; category_snapshot: string; variant_snapshot: string | null; quantity: number; unit_price_snapshot: number; subtotal: number }
 export interface OrderCategory { id: number; name: string; image: string | null }
 /** A content the customer can choose for a hampers/box; price is what it adds per unit (0 in a box). */
-export interface ContentOption { id: number; name: string; variant: string | null; price: number }
+export interface ContentOption { id: number; name: string; variant: string | null; image: string | null; price: number }
 export interface OrderProduct {
     id: number; name: string; category_id: number; description: string | null; image: string | null; variant: string | null; is_hamper: boolean; hamper_items: string[]; sale_ends_on: string | null; price: number;
-    content_type: 'hampers' | 'box' | null; content_count: number | null; contents: ContentOption[];
+    content_type: 'hampers' | 'box' | 'set' | null; content_count: number | null; contents: ContentOption[];
+    /** A box with fixed flavours: what each unit holds. */
+    fixed_contents: { id: number; name: string; variant: string | null; image: string | null; quantity: number }[];
 }
 export type OrderStatus = 'pending_review' | 'confirmed' | 'processing' | 'ready' | 'delivering' | 'completed' | 'cancelled';
 export type PaymentStatus = 'not_created' | 'pending' | 'paid' | 'failed' | 'expired' | 'cancelled' | 'refunded';

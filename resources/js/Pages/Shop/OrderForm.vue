@@ -4,9 +4,10 @@ import { computed, nextTick, ref, watch } from 'vue';
 import ShopLayout from '../../Layouts/ShopLayout.vue';
 import Field from '../../Components/Field.vue';
 import ProductPicker from '../../Components/Shop/ProductPicker.vue';
+import CartPanel, { type PanelLine } from '../../Components/Shop/CartPanel.vue';
 import type { OrderCategory, OrderProduct } from '../../Types/ordering';
 import { rupiah } from '../../Support/money';
-import { addLine, clampQuantity as clamp, contentsLabel, toRequest, unitPrice, type CartLine } from '../../Support/cart';
+import { addLine, contentsLabel, toRequest, unitPrice, type CartLine } from '../../Support/cart';
 defineOptions({ layout: ShopLayout });
 interface OutletOption { id: number; name: string; address: string }
 const props = defineProps<{
@@ -46,7 +47,6 @@ const cart = computed(() => form.items.map((item, index) => {
     const product = productById.value.get(item.product_id);
     return { ...item, index, product, unit: unitPrice(product, item.contents), contentsText: contentsLabel(product, item.contents) };
 }));
-const cartCount = computed(() => form.items.reduce((sum, item) => sum + item.quantity, 0));
 const subtotal = computed(() => cart.value.reduce((sum, row) => sum + row.unit * row.quantity, 0));
 
 // Prices follow the outlet that fulfils the order: the chosen pickup outlet or the delivery outlet.
@@ -105,6 +105,13 @@ async function submit() {
     })).post('/order', { preserveScroll: true, onError: async () => { await nextTick(); errorSummary.value?.focus(); } });
 }
 function scrollToCart() { document.getElementById('cart')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+// The cart bar and drawer (CartPanel) edit the same lines.
+const cartPanel = ref<InstanceType<typeof CartPanel> | null>(null);
+const panelLines = computed<PanelLine[]>(() => cart.value.map(row => ({
+    key: `${row.product_id}:${row.contents.join(',')}`, index: row.index, name: row.product?.name ?? 'Produk tidak tersedia',
+    detail: [row.product ? categoryName(row.product.category_id) : '', row.product?.variant ?? ''].filter(Boolean).join(' · '),
+    contentsText: row.contentsText, unit: row.unit, quantity: row.quantity, error: itemError(row.index),
+})));
 </script>
 <template>
     <h1 class="text-4xl">Form order Orlena</h1>
@@ -112,59 +119,62 @@ function scrollToCart() { document.getElementById('cart')?.scrollIntoView({ beha
     <p class="mt-3 text-sm"><a href="/order/tambah" class="font-bold underline"><i class="fa-solid fa-cart-plus" aria-hidden="true"></i> Sudah punya Order Code? Tambah ke pesanan yang belum dibayar</a></p>
     <div v-if="!products.length || (!outlets.length && !deliveryOutlet)" role="status" class="my-8 rounded-2xl bg-cream p-6"><h2 class="text-xl">Pemesanan belum tersedia</h2><p class="mt-2 text-sm">Produk dan outlet sedang disiapkan. Form dapat digunakan setelah pilihan tersedia.</p></div>
 
-    <form class="mt-8 grid items-start gap-7 pb-24 lg:grid-cols-[minmax(0,1fr)_360px] lg:pb-0" novalidate @submit.prevent="submit">
-        <div class="min-w-0 space-y-6">
-            <div v-if="form.hasErrors" ref="errorSummary" tabindex="-1" role="alert" class="admin-alert admin-alert-error"><p class="font-bold">Pesanan belum terkirim. Periksa kembali:</p><ul class="list-disc pl-5"><li v-for="(error, key) in form.errors" :key="key">{{ error }}</li></ul><button type="button" class="mt-2 underline" :disabled="quoting || form.processing" @click="refreshQuote">Muat ulang harga</button></div>
+    <form class="mt-8 space-y-6 pb-28" novalidate @submit.prevent="submit">
+        <div v-if="form.hasErrors" ref="errorSummary" tabindex="-1" role="alert" class="admin-alert admin-alert-error"><p class="font-bold">Pesanan belum terkirim. Periksa kembali:</p><ul class="list-disc pl-5"><li v-for="(error, key) in form.errors" :key="key">{{ error }}</li></ul><button type="button" class="mt-2 underline" :disabled="quoting || form.processing" @click="refreshQuote">Muat ulang harga</button></div>
 
-            <section class="admin-card space-y-5" aria-labelledby="step-products">
-                <h2 id="step-products" class="text-xl"><span class="order-step">1</span>Pilih produk</h2>
-                <ProductPicker :categories="categories" :products="products" :disabled="form.processing" @add="addToCart" />
-            </section>
+        <section class="admin-card space-y-5" aria-labelledby="step-products">
+            <h2 id="step-products" class="text-xl"><span class="order-step">1</span>Pilih produk</h2>
+            <ProductPicker :categories="categories" :products="products" :disabled="form.processing" @add="addToCart" />
+        </section>
 
-            <section class="admin-card space-y-5" aria-labelledby="step-customer">
-                <h2 id="step-customer" class="text-xl"><span class="order-step">2</span>Data pemesan</h2>
-                <Field id="name" label="Nama lengkap" :error="form.errors.name"><template #default="{ describedBy }"><input id="name" v-model="form.name" required autocomplete="name" maxlength="120" :aria-describedby="describedBy" :aria-invalid="!!form.errors.name"></template></Field>
-                <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                    <Field id="whatsapp" label="Nomor WhatsApp" :error="form.errors.whatsapp"><template #default="{ describedBy }"><input id="whatsapp" v-model="form.whatsapp" type="tel" required autocomplete="tel" placeholder="08… atau +62…" maxlength="30" :aria-describedby="describedBy" :aria-invalid="!!form.errors.whatsapp"></template></Field>
-                    <Field id="email" label="Email (opsional)" :error="form.errors.email"><template #default="{ describedBy }"><input id="email" v-model="form.email" type="email" autocomplete="email" maxlength="254" :aria-describedby="describedBy" :aria-invalid="!!form.errors.email"></template></Field>
-                </div>
-            </section>
+        <section class="admin-card space-y-5" aria-labelledby="step-customer">
+            <h2 id="step-customer" class="text-xl"><span class="order-step">2</span>Data pemesan</h2>
+            <Field id="name" label="Nama lengkap" :error="form.errors.name"><template #default="{ describedBy }"><input id="name" v-model="form.name" required autocomplete="name" maxlength="120" :aria-describedby="describedBy" :aria-invalid="!!form.errors.name"></template></Field>
+            <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <Field id="whatsapp" label="Nomor WhatsApp" :error="form.errors.whatsapp"><template #default="{ describedBy }"><input id="whatsapp" v-model="form.whatsapp" type="tel" required autocomplete="tel" placeholder="08… atau +62…" maxlength="30" :aria-describedby="describedBy" :aria-invalid="!!form.errors.whatsapp"></template></Field>
+                <Field id="email" label="Email (opsional)" :error="form.errors.email"><template #default="{ describedBy }"><input id="email" v-model="form.email" type="email" autocomplete="email" maxlength="254" :aria-describedby="describedBy" :aria-invalid="!!form.errors.email"></template></Field>
+            </div>
+        </section>
 
-            <section class="admin-card space-y-5" aria-labelledby="step-fulfillment">
-                <h2 id="step-fulfillment" class="text-xl"><span class="order-step">3</span>Penerimaan &amp; jadwal</h2>
-                <fieldset class="grid grid-cols-1 gap-3 sm:grid-cols-2"><legend class="mb-2 text-sm font-bold">Metode penerimaan</legend>
-                    <label class="order-method"><input v-model="form.fulfillment_method" type="radio" value="pickup" class="sr-only"><span><i class="fa-solid fa-store" aria-hidden="true"></i><strong>Pickup di outlet</strong><small>Ambil sendiri di outlet pilihan.</small></span></label>
-                    <label class="order-method" :class="{ 'is-disabled': !deliveryOutlet }"><input v-model="form.fulfillment_method" type="radio" value="delivery" class="sr-only" :disabled="!deliveryOutlet"><span><i class="fa-solid fa-motorcycle" aria-hidden="true"></i><strong>Delivery (Gojek/Grab)</strong><small>{{ deliveryOutlet ? `Dikirim dari ${deliveryOutlet.name}.` : 'Sedang tidak tersedia.' }}</small></span></label>
-                </fieldset>
-                <p v-if="form.errors.fulfillment_method" class="admin-error-text text-sm" role="alert">{{ form.errors.fulfillment_method }}</p>
-                <template v-if="form.fulfillment_method === 'pickup'">
-                    <Field id="outlet_id" label="Outlet pickup" :error="form.errors.outlet_id"><template #default="{ describedBy }"><select id="outlet_id" v-model="form.outlet_id" required :disabled="form.processing" :aria-describedby="describedBy" :aria-invalid="!!form.errors.outlet_id"><option value="" disabled>Pilih outlet</option><option v-for="outlet in outlets" :key="outlet.id" :value="outlet.id">{{ outlet.name }}</option></select></template></Field>
-                    <p v-if="pickupOutlet" class="admin-muted -mt-2 text-xs"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> {{ pickupOutlet.address }}</p>
-                </template>
-                <template v-else>
-                    <p class="admin-alert admin-alert-info">Pesanan dikirim dari <strong>{{ deliveryOutlet?.name }}</strong> menggunakan Gojek/Grab. Ongkir mengikuti tarif aplikasi dan dikonfirmasi admin sebelum pembayaran.</p>
-                    <Field id="delivery_address" label="Alamat pengiriman lengkap" :error="form.errors.delivery_address"><template #default="{ describedBy }"><textarea id="delivery_address" v-model="form.delivery_address" required rows="3" maxlength="2000" autocomplete="street-address" placeholder="Nama jalan, nomor rumah, patokan" :aria-describedby="describedBy" :aria-invalid="!!form.errors.delivery_address"></textarea></template></Field>
-                </template>
-                <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                    <Field id="requested_date" label="Tanggal PO" :hint="`Paling awal ${earliestDate}. Batas pemesanan ${cutoffLabel}.`" :error="form.errors.requested_date ?? closedDateHint ?? undefined"><template #default="{ describedBy }"><input id="requested_date" v-model="form.requested_date" type="date" required :min="earliestDate" :aria-describedby="describedBy" :aria-invalid="!!form.errors.requested_date"></template></Field>
-                    <Field id="requested_time" :label="form.fulfillment_method === 'delivery' ? 'Jam pengiriman (WITA)' : 'Jam pickup (WITA)'" hint="Jam akan dikonfirmasi admin sesuai kapasitas." :error="form.errors.requested_time"><template #default="{ describedBy }"><input id="requested_time" v-model="form.requested_time" type="time" required :aria-describedby="describedBy" :aria-invalid="!!form.errors.requested_time"></template></Field>
-                </div>
-                <Field v-if="hasHamper" id="card_message" label="Kartu ucapan hampers (opsional)" :hint="`Ditulis di kartu yang disertakan bersama hampers. ${form.card_message.length}/300 karakter.`" :error="form.errors.card_message"><template #default="{ describedBy }"><textarea id="card_message" v-model="form.card_message" rows="3" maxlength="300" placeholder="Contoh: Selamat Hari Raya, semoga selalu diberi berkah. Dari keluarga Sinta." :aria-describedby="describedBy" :aria-invalid="!!form.errors.card_message"></textarea></template></Field>
-                <Field id="customer_note" label="Catatan (opsional)" :error="form.errors.customer_note"><template #default="{ describedBy }"><textarea id="customer_note" v-model="form.customer_note" rows="3" maxlength="2000" placeholder="Misalnya tulisan di kue atau permintaan khusus" :aria-describedby="describedBy"></textarea></template></Field>
-            </section>
-        </div>
+        <section class="admin-card space-y-5" aria-labelledby="step-fulfillment">
+            <h2 id="step-fulfillment" class="text-xl"><span class="order-step">3</span>Penerimaan &amp; jadwal</h2>
+            <fieldset class="grid grid-cols-1 gap-3 sm:grid-cols-2"><legend class="mb-2 text-sm font-bold">Metode penerimaan</legend>
+                <label class="order-method"><input v-model="form.fulfillment_method" type="radio" value="pickup" class="sr-only"><span><i class="fa-solid fa-store" aria-hidden="true"></i><strong>Pickup di outlet</strong><small>Ambil sendiri di outlet pilihan.</small></span></label>
+                <label class="order-method" :class="{ 'is-disabled': !deliveryOutlet }"><input v-model="form.fulfillment_method" type="radio" value="delivery" class="sr-only" :disabled="!deliveryOutlet"><span><i class="fa-solid fa-motorcycle" aria-hidden="true"></i><strong>Delivery (Gojek/Grab)</strong><small>{{ deliveryOutlet ? `Dikirim dari ${deliveryOutlet.name}.` : 'Sedang tidak tersedia.' }}</small></span></label>
+            </fieldset>
+            <p v-if="form.errors.fulfillment_method" class="admin-error-text text-sm" role="alert">{{ form.errors.fulfillment_method }}</p>
+            <template v-if="form.fulfillment_method === 'pickup'">
+                <Field id="outlet_id" label="Outlet pickup" :error="form.errors.outlet_id"><template #default="{ describedBy }"><select id="outlet_id" v-model="form.outlet_id" required :disabled="form.processing" :aria-describedby="describedBy" :aria-invalid="!!form.errors.outlet_id"><option value="" disabled>Pilih outlet</option><option v-for="outlet in outlets" :key="outlet.id" :value="outlet.id">{{ outlet.name }}</option></select></template></Field>
+                <p v-if="pickupOutlet" class="admin-muted -mt-2 text-xs"><i class="fa-solid fa-location-dot" aria-hidden="true"></i> {{ pickupOutlet.address }}</p>
+            </template>
+            <template v-else>
+                <p class="admin-alert admin-alert-info">Pesanan dikirim dari <strong>{{ deliveryOutlet?.name }}</strong> menggunakan Gojek/Grab. Ongkir mengikuti tarif aplikasi dan dikonfirmasi admin sebelum pembayaran.</p>
+                <Field id="delivery_address" label="Alamat pengiriman lengkap" :error="form.errors.delivery_address"><template #default="{ describedBy }"><textarea id="delivery_address" v-model="form.delivery_address" required rows="3" maxlength="2000" autocomplete="street-address" placeholder="Nama jalan, nomor rumah, patokan" :aria-describedby="describedBy" :aria-invalid="!!form.errors.delivery_address"></textarea></template></Field>
+            </template>
+            <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <Field id="requested_date" label="Tanggal PO" :hint="`Paling awal ${earliestDate}. Batas pemesanan ${cutoffLabel}.`" :error="form.errors.requested_date ?? closedDateHint ?? undefined"><template #default="{ describedBy }"><input id="requested_date" v-model="form.requested_date" type="date" required :min="earliestDate" :aria-describedby="describedBy" :aria-invalid="!!form.errors.requested_date"></template></Field>
+                <Field id="requested_time" :label="form.fulfillment_method === 'delivery' ? 'Jam pengiriman (WITA)' : 'Jam pickup (WITA)'" hint="Jam akan dikonfirmasi admin sesuai kapasitas." :error="form.errors.requested_time"><template #default="{ describedBy }"><input id="requested_time" v-model="form.requested_time" type="time" required :aria-describedby="describedBy" :aria-invalid="!!form.errors.requested_time"></template></Field>
+            </div>
+            <Field v-if="hasHamper" id="card_message" label="Kartu ucapan hampers (opsional)" :hint="`Ditulis di kartu yang disertakan bersama hampers. ${form.card_message.length}/300 karakter.`" :error="form.errors.card_message"><template #default="{ describedBy }"><textarea id="card_message" v-model="form.card_message" rows="3" maxlength="300" placeholder="Contoh: Selamat Hari Raya, semoga selalu diberi berkah. Dari keluarga Sinta." :aria-describedby="describedBy" :aria-invalid="!!form.errors.card_message"></textarea></template></Field>
+            <Field id="customer_note" label="Catatan (opsional)" :error="form.errors.customer_note"><template #default="{ describedBy }"><textarea id="customer_note" v-model="form.customer_note" rows="3" maxlength="2000" placeholder="Misalnya tulisan di kue atau permintaan khusus" :aria-describedby="describedBy"></textarea></template></Field>
+        </section>
 
-        <aside id="cart" class="admin-card space-y-5 lg:sticky lg:top-24" aria-labelledby="cart-title">
-            <h2 id="cart-title" class="flex items-center justify-between text-xl">Keranjang <span class="rounded-full bg-almond px-3 py-0.5 text-sm">{{ cartCount }}</span></h2>
-            <p v-if="!cart.length" class="admin-muted py-4 text-center text-sm"><i class="fa-solid fa-basket-shopping mb-2 block text-2xl text-chocolate/25" aria-hidden="true"></i>Keranjang masih kosong. Pilih produk lalu tekan Tambah.</p>
-            <ul v-else class="divide-y divide-chocolate/10">
-                <li v-for="row in cart" :key="`${row.product_id}:${row.contents.join(',')}`" class="space-y-2 py-3 text-sm">
-                    <div class="flex justify-between gap-3"><div class="min-w-0"><p class="m-0 font-bold">{{ row.product?.name ?? 'Produk tidak tersedia' }}</p><p class="m-0 text-xs text-matcha">{{ row.product ? categoryName(row.product.category_id) : '' }}{{ row.product?.variant ? ` · ${row.product.variant}` : '' }}</p><p v-if="row.contentsText" class="m-0 mt-0.5 text-xs text-chocolate/75"><i class="fa-solid fa-gift" aria-hidden="true"></i> Isi: {{ row.contentsText }}</p></div><span class="shrink-0 font-bold tabular-nums">{{ rupiah(row.unit * row.quantity) }}</span></div>
-                    <div class="flex items-center justify-between gap-2">
-                        <div class="order-stepper is-small" role="group" :aria-label="`Jumlah ${row.product?.name}`"><button type="button" aria-label="Kurangi" :disabled="row.quantity <= 1 || form.processing" @click="form.items[row.index].quantity--"><i class="fa-solid fa-minus" aria-hidden="true"></i></button><input v-model.number="form.items[row.index].quantity" class="order-qty" type="number" min="1" max="99" inputmode="numeric" :aria-label="`Jumlah ${row.product?.name}`" @change="form.items[row.index].quantity = clamp(form.items[row.index].quantity)"><button type="button" aria-label="Tambah" :disabled="row.quantity >= 99 || form.processing" @click="form.items[row.index].quantity++"><i class="fa-solid fa-plus" aria-hidden="true"></i></button></div>
-                        <button type="button" class="admin-action-icon admin-danger" :aria-label="`Hapus ${row.product?.name} dari keranjang`" title="Hapus" :disabled="form.processing" @click="form.items.splice(row.index, 1); form.clearErrors()"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
+        <!-- Step 4: what will be sent, then the submit button. -->
+        <section id="cart" class="admin-card space-y-5" aria-labelledby="step-summary">
+            <div class="flex items-center justify-between gap-3">
+                <h2 id="step-summary" class="text-xl"><span class="order-step">4</span>Ringkasan &amp; kirim</h2>
+                <button v-if="cart.length" type="button" class="admin-action" @click="cartPanel?.open()"><i class="fa-solid fa-pen" aria-hidden="true"></i>Ubah keranjang</button>
+            </div>
+            <p v-if="!cart.length" class="admin-muted rounded-xl bg-cream/60 p-4 text-center text-sm"><i class="fa-solid fa-basket-shopping mb-2 block text-2xl text-chocolate/25" aria-hidden="true"></i>Keranjang masih kosong. Pilih produk di langkah 1.</p>
+            <ul v-else class="m-0 list-none divide-y divide-chocolate/10 p-0">
+                <li v-for="row in cart" :key="`${row.product_id}:${row.contents.join(',')}`" class="flex justify-between gap-3 py-3 text-sm">
+                    <div class="min-w-0">
+                        <p class="m-0 font-bold">{{ row.quantity }} × {{ row.product?.name ?? 'Produk tidak tersedia' }}</p>
+                        <p class="m-0 text-xs text-matcha">{{ row.product ? categoryName(row.product.category_id) : '' }}{{ row.product?.variant ? ` · ${row.product.variant}` : '' }}</p>
+                        <p v-if="row.contentsText" class="m-0 mt-0.5 text-xs text-chocolate/75"><i class="fa-solid fa-gift" aria-hidden="true"></i> Isi: {{ row.contentsText }}</p>
+                        <p v-if="itemError(row.index)" class="admin-error-text m-0 mt-1 text-xs" role="alert">{{ itemError(row.index) }}</p>
                     </div>
-                    <p v-if="itemError(row.index)" class="admin-error-text m-0 text-xs" role="alert">{{ itemError(row.index) }}</p>
+                    <span class="shrink-0 font-bold tabular-nums">{{ rupiah(row.unit * row.quantity) }}</span>
                 </li>
             </ul>
             <dl class="space-y-2 border-t border-chocolate/10 pt-4 text-sm">
@@ -177,11 +187,10 @@ function scrollToCart() { document.getElementById('cart')?.scrollIntoView({ beha
             <p v-else-if="!effectiveOutlet" class="admin-muted text-xs">Harga final mengikuti outlet. Pilih metode penerimaan dan outlet di langkah 3.</p>
             <button class="admin-primary w-full" :disabled="!canSubmit">{{ form.processing ? 'Menyimpan pesanan…' : 'Kirim permintaan PO' }}</button>
             <p class="admin-muted text-xs leading-relaxed">{{ form.fulfillment_method === 'delivery' ? 'Total awal belum termasuk ongkir. ' : '' }}Ini adalah permintaan PO; ketersediaan produk dan jadwal dikonfirmasi admin. Setelah tersimpan, Anda mendapat Order Code untuk dilanjutkan via WhatsApp.</p>
-        </aside>
+        </section>
 
-        <!-- Mobile: keep the cart total in reach while browsing products. -->
-        <div v-if="cart.length" class="fixed inset-x-0 bottom-0 z-30 border-t border-chocolate/10 bg-white/95 p-3 backdrop-blur lg:hidden">
-            <button type="button" class="admin-primary w-full justify-between" @click="scrollToCart"><span><i class="fa-solid fa-basket-shopping" aria-hidden="true"></i> {{ cartCount }} item</span><span>{{ rupiah(subtotal) }} · Lihat keranjang</span></button>
-        </div>
+        <CartPanel ref="cartPanel" :lines="panelLines" :subtotal="subtotal" :disabled="form.processing" @quantity="(index, quantity) => { form.items[index].quantity = quantity; }" @remove="index => { form.items.splice(index, 1); form.clearErrors(); }">
+            <template #action="{ close }"><button type="button" class="admin-primary flex-1" @click="close(); scrollToCart()">Lanjut ke ringkasan</button></template>
+        </CartPanel>
     </form>
 </template>

@@ -83,7 +83,7 @@ class HampersAndBoxTest extends TestCase
                 $byId = collect($products)->keyBy('id');
                 // Each size is its own card; inactive Mini flavours are not cards but are box contents.
                 $this->assertFalse($byId->has($this->choco->id));
-                $this->assertSame(['hampers', 1, [['id' => $this->berry->id, 'name' => 'Berry Cheese', 'variant' => 'Fullsize', 'price' => 100000]]],
+                $this->assertSame(['hampers', 1, [['id' => $this->berry->id, 'name' => 'Berry Cheese', 'variant' => 'Fullsize', 'image' => null, 'price' => 100000]]],
                     [$byId[$this->hampers->id]['content_type'], $byId[$this->hampers->id]['content_count'], $byId[$this->hampers->id]['contents']]);
                 $this->assertSame(['box', 4, [0, 0]], [$byId[$this->box->id]['content_type'], $byId[$this->box->id]['content_count'], array_column($byId[$this->box->id]['contents'], 'price')]);
                 $this->assertTrue($byId[$this->hampers->id]['is_hamper']);
@@ -177,6 +177,64 @@ class HampersAndBoxTest extends TestCase
         $this->assertNull($product->fresh()->barcode);
     }
 
+    public function test_a_box_with_fixed_flavours_is_added_without_choosing(): void
+    {
+        $set = Product::create(['category_id' => $this->box->category_id, 'sku' => 'MB0002', 'barcode' => 'BC-MB0002', 'name' => 'Mini Box Classic', 'variant' => 'Box 2x2',
+            'price' => 55000, 'is_active' => true, 'content_type' => 'set', 'content_count' => 4]);
+        $set->contentOptions()->sync([$this->choco->id => ['quantity' => 3], $this->cheese->id => ['quantity' => 1]]);
+
+        $this->get('/order')->assertInertia(fn (Assert $page) => $page->where('products', function ($products) use ($set) {
+            $row = collect($products)->firstWhere('id', $set->id);
+            $this->assertSame(['set', 4, []], [$row['content_type'], $row['content_count'], $row['contents']]);
+            $this->assertSame([['Mini Cheese', 1], ['Mini Choco', 3]], array_map(fn ($item) => [$item['name'], $item['quantity']], $row['fixed_contents']));
+
+            return true;
+        }));
+        // The customer cannot change what is inside.
+        $this->post('/order', $this->payload([['product_id' => $set->id, 'quantity' => 2, 'quoted_price' => 55000, 'contents' => [$this->cheese->id]]]))
+            ->assertSessionHasErrors('items.0.contents');
+        $this->post('/order', $this->payload([['product_id' => $set->id, 'quantity' => 2, 'quoted_price' => 55000]]))->assertSessionHasNoErrors();
+
+        $order = Order::with('items')->sole();
+        $box = $order->items->firstWhere('product_id', $set->id);
+        $this->assertSame([110000, 2], [$order->subtotal, $box->quantity]);
+        $flavours = $order->items->where('parent_item_id', $box->id)->mapWithKeys(fn ($item) => [$item->product_id => [$item->quantity, $item->subtotal]])->all();
+        $this->assertSame([$this->choco->id => [6, 0], $this->cheese->id => [2, 0]], $flavours);
+    }
+
+    public function test_staff_create_box_flavours_and_a_fixed_box(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $base = ['category_id' => $this->box->category_id, 'is_active' => false, 'price' => 0];
+        $this->actingAs($admin)->post('/admin/products', [...$base, 'name' => 'Mini Almond', 'sku' => 'BR0054', 'variant' => 'Mini', 'content_type' => 'flavour'])->assertSessionHasNoErrors();
+        $almond = Product::where('sku', 'BR0054')->sole();
+        $this->assertSame(['flavour', null, null], [$almond->content_type, $almond->content_count, $almond->content_pricing]);
+
+        // The form offers flavours for boxes and regular products for hampers.
+        $this->get('/admin/products/create')->assertInertia(fn (Assert $page) => $page->where('contentCandidates', fn ($candidates) => collect($candidates)->firstWhere('id', $almond->id)['flavour'] === true
+            && collect($candidates)->firstWhere('id', $this->berry->id)['flavour'] === false));
+        // Hampers hold regular products only.
+        $this->post('/admin/products', [...$base, 'name' => 'Hampers X', 'sku' => 'HP0100', 'variant' => 'Mini', 'content_type' => 'hampers', 'content_count' => 1, 'content_pricing' => 'added', 'content_ids' => [$almond->id]])
+            ->assertSessionHasErrors('content_ids.0');
+
+        // A fixed box: each id once per piece.
+        $this->post('/admin/products', [...$base, 'name' => 'Mini Box Almond', 'sku' => 'MB0100', 'variant' => 'Box 2x2', 'price' => 55000, 'content_type' => 'set',
+            'content_ids' => [$almond->id, $almond->id, $almond->id, $this->choco->id]])->assertSessionHasNoErrors();
+        $set = Product::where('sku', 'MB0100')->sole();
+        $this->assertSame(['set', 4, null], [$set->content_type, $set->content_count, $set->content_pricing]);
+        $this->assertSame(collect([$almond->id => 3, $this->choco->id => 1])->sortKeysDesc()->all(), $set->contentOptions()->get()->mapWithKeys(fn ($option) => [$option->id => $option->pivot->quantity])->sortKeysDesc()->all());
+        $this->get('/admin/products/'.$set->id.'/edit')->assertInertia(fn (Assert $page) => $page->where('record.content_ids', fn ($ids) => collect($ids)->sort()->values()->all() === collect([$almond->id, $almond->id, $almond->id, $this->choco->id])->sort()->values()->all()));
+    }
+
+    public function test_box_flavours_are_saved_at_rp_0_but_only_while_inactive(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $flavour = ['name' => 'Mini Size Almond', 'sku' => 'BR0054', 'barcode' => '1785484845001', 'category_id' => $this->choco->category_id, 'variant' => 'Mini', 'price' => 0];
+        $this->actingAs($admin)->post('/admin/products', [...$flavour, 'is_active' => true])->assertSessionHasErrors('price');
+        $this->post('/admin/products', [...$flavour, 'is_active' => false])->assertSessionHasNoErrors();
+        $this->assertSame([0, false], [Product::where('sku', 'BR0054')->sole()->price, Product::where('sku', 'BR0054')->sole()->is_active]);
+    }
+
     public function test_the_excel_import_sets_types_and_contents_by_code(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
@@ -186,7 +244,8 @@ class HampersAndBoxTest extends TestCase
         foreach ([
             ['Kode Produk', 'Barcode', 'Nama Produk', 'Kategori', 'Ukuran', 'Harga Jual', 'Tipe', 'Jumlah Isi', 'Isi Dari', 'Harga Isi'],
             ['MB0002', '777002', 'Mini Size Box', 'Mini Size', 'Box 3x3', 120000, 'Box', 9, 'MN0001, MN0002, MN0003', 'Termasuk'],
-            ['MN0003', '777003', 'Mini Pandan', 'Mini Size', 'Mini', 0, 'Biasa', '', '', ''],
+            ['MN0003', '777003', 'Mini Pandan', 'Mini Size', 'Mini', 0, 'Rasa box', '', '', ''],
+            ['MB0003', '777004', 'Mini Box Pandan', 'Mini Size', 'Box 2x2', 55000, 'Box isi tetap', '', '3x MN0003, 1x MN0001', ''],
             ['HP0001', 'BC-HP0001', 'Hampers Galungan', 'Hampers', 'Fullsize', 10000, 'Hampers', '', 'BR0005, NOPE1', ''],
         ] as $row) {
             $writer->addRow(Row::fromValues($row));
@@ -195,7 +254,7 @@ class HampersAndBoxTest extends TestCase
         $response = $this->actingAs($admin)->post('/admin/products/import', ['file' => new UploadedFile($path, 'produk.xlsx', null, null, true)])->assertRedirect();
         $token = str($response->headers->get('Location'))->after('token=')->toString();
         $this->get('/admin/products/import?token='.$token)->assertInertia(fn (Assert $page) => $page
-            ->where('upload.summary', ['create' => 2, 'update' => 1, 'unchanged' => 0, 'skip' => 0])
+            ->where('upload.summary', ['create' => 3, 'update' => 1, 'unchanged' => 0, 'skip' => 0])
             ->where('upload.rows', fn ($rows) => collect($rows)->firstWhere('sku', 'HP0001')['warning'] === 'Isi Dari: code not found: NOPE1.'
                 && collect($rows)->firstWhere('sku', 'HP0001')['changes']['contents'] === ['BR0005, BR0007', 'BR0005, NOPE1']));
         $this->post('/admin/products/import/apply', ['token' => $token])->assertRedirect('/admin/products');
@@ -205,6 +264,9 @@ class HampersAndBoxTest extends TestCase
         // Codes may point to products created by the same file.
         $this->assertSame(['MN0001', 'MN0002', 'MN0003'], $box->contentOptions()->orderBy('sku')->pluck('sku')->all());
         $this->assertSame(['BR0005'], $this->hampers->contentOptions()->pluck('sku')->all());
-        $this->assertNull(Product::where('sku', 'MN0003')->sole()->content_type);
+        $this->assertSame('flavour', Product::where('sku', 'MN0003')->sole()->content_type);
+        // "3x MN0003, 1x MN0001": a fixed box keeps how many of each flavour.
+        $fixed = Product::where('sku', 'MB0003')->sole();
+        $this->assertSame(['set', 4, ['MN0001' => 1, 'MN0003' => 3]], [$fixed->content_type, $fixed->content_count, $fixed->contentOptions()->orderBy('sku')->get()->mapWithKeys(fn ($option) => [$option->sku => $option->pivot->quantity])->all()]);
     }
 }

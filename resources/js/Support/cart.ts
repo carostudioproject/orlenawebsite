@@ -23,7 +23,9 @@ export function unitPrice(product: OrderProduct | undefined, contents: number[])
 
 /** "Berry (Fullsize)" or "2× Choco, 2× Keju" for the chosen contents of one unit. */
 export function contentsLabel(product: OrderProduct | undefined, contents: number[]): string {
-    if (!product || !contents.length) return '';
+    if (!product) return '';
+    // A box with fixed flavours shows what it holds.
+    if (!contents.length) return product.fixed_contents.map(item => `${item.quantity}× ${item.name}`).join(', ');
     const counts = new Map<number, number>();
     for (const id of contents) counts.set(id, (counts.get(id) ?? 0) + 1);
     return [...counts].map(([id, count]) => {

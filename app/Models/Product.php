@@ -13,6 +13,12 @@ class Product extends Model
     /** Products whose contents the customer chooses: hampers (one item, its price added) or box (N items, priced per box). */
     public const CONTENT_TYPES = ['hampers' => 'Hampers', 'box' => 'Box'];
 
+    /**
+     * Every product type, as written in the Excel Tipe column. "set" is a box with fixed flavours (no choice);
+     * "flavour" is only sold inside a box (Rp 0, never its own card). Regular products have no type.
+     */
+    public const TYPES = ['hampers' => 'Hampers', 'box' => 'Box', 'set' => 'Box isi tetap', 'flavour' => 'Rasa box'];
+
     /** added: each content costs its normal price on top; included: contents are Rp 0 (the box price covers them). */
     public const CONTENT_PRICING = ['added' => 'Ditambah', 'included' => 'Termasuk'];
 
@@ -63,10 +69,16 @@ class Product extends Model
         return isset(self::CONTENT_TYPES[$this->content_type]) && $this->content_count > 0;
     }
 
-    /** Products allowed as contents ("Isi Dari"). */
+    /** A box whose flavours are fixed by Orlena; its contents come with every unit. */
+    public function hasFixedContents(): bool
+    {
+        return $this->content_type === 'set';
+    }
+
+    /** Products allowed as contents ("Isi Dari"), or the fixed flavours of a set with how many of each. */
     public function contentOptions(): BelongsToMany
     {
-        return $this->belongsToMany(Product::class, 'product_contents', 'product_id', 'content_product_id');
+        return $this->belongsToMany(Product::class, 'product_contents', 'product_id', 'content_product_id')->withPivot('quantity');
     }
 
     /** Hampers and boxes that allow this product as contents. */
@@ -81,7 +93,7 @@ class Product extends Model
      */
     public function availableAsContentOf(Product $parent): bool
     {
-        if ($parent->content_pricing === 'included') {
+        if ($parent->content_pricing === 'included' || $parent->hasFixedContents()) {
             return true;
         }
 

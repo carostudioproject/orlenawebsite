@@ -121,9 +121,10 @@ class ProductImportController extends Controller
                 Cell::fromValue((string) $product->sku, $text), Cell::fromValue((string) $product->barcode, $text),
                 Cell::fromValue($product->name), Cell::fromValue((string) $product->category?->name),
                 Cell::fromValue((string) $product->variant), Cell::fromValue($product->price ?? '', $money),
-                Cell::fromValue(Product::CONTENT_TYPES[$product->content_type] ?? 'Biasa'), Cell::fromValue($product->content_type ? (int) $product->content_count : ''),
-                Cell::fromValue($product->contentOptions->pluck('sku')->implode(', '), $text),
-                Cell::fromValue($product->content_type ? Product::CONTENT_PRICING[$product->content_pricing] ?? '' : ''),
+                Cell::fromValue(Product::TYPES[$product->content_type] ?? 'Biasa'), Cell::fromValue(in_array($product->content_type, ['hampers', 'box', 'set'], true) ? (int) $product->content_count : ''),
+                // A fixed box writes "2x BR0054" for repeated flavours.
+                Cell::fromValue($product->contentOptions->map(fn (Product $option) => ($option->pivot->quantity > 1 ? $option->pivot->quantity.'x ' : '').$option->sku)->implode(', '), $text),
+                Cell::fromValue(Product::CONTENT_PRICING[$product->content_pricing] ?? ''),
             ])));
 
         $examples = $writer->addNewSheetAndMakeItCurrent()->setName('Contoh');
@@ -138,9 +139,10 @@ class ProductImportController extends Controller
             ['BR0005', '8990005', 'Berry Cheese', 'Brownies', 'Fullsize', 100000, 'Biasa', '', '', '', 'Produk biasa. Setiap ukuran baris sendiri.'],
             ['BR0037', '8990037', 'Berry Cheese', 'Brownies', 'Halfsize (20x10)', 60000, 'Biasa', '', '', '', 'Ukuran lain = produk lain dengan barcode sendiri.'],
             ['HP0001', '8991001', 'Hampers Galungan', 'Hampers', 'Fullsize', 10000, 'Hampers', 1, 'BR0005, BR0007', 'Ditambah', 'Pelanggan memilih 1 isi: harga = 10.000 + harga brownies.'],
-            ['MN0001', '8992001', 'Mini Choco', 'Mini Size', 'Mini', 0, 'Biasa', '', '', '', 'Rasa Mini: harga 0, biarkan nonaktif (dijual di dalam box saja).'],
-            ['MN0002', '8992002', 'Mini Cheese', 'Mini Size', 'Mini', 0, 'Biasa', '', '', '', ''],
+            ['MN0001', '8992001', 'Mini Choco', 'Mini Size', 'Mini', 0, 'Rasa box', '', '', '', 'Rasa Mini: harga 0, tidak tampil sendiri (dijual di dalam box saja).'],
+            ['MN0002', '8992002', 'Mini Cheese', 'Mini Size', 'Mini', 0, 'Rasa box', '', '', '', ''],
             ['MB0001', '8992100', 'Mini Size Box', 'Mini Size', 'Box 2x2', 60000, 'Box', 4, 'MN0001, MN0002', 'Termasuk', 'Pelanggan memilih 4 rasa (boleh sama); harga per box.'],
+            ['MB0002', '8992101', 'Mini Box Classic', 'Mini Size', 'Box 2x2', 55000, 'Box isi tetap', '', '2x MN0001, 2x MN0002', '', 'Rasa sudah ditentukan: pelanggan langsung menambahkan.'],
         ] as $example) {
             $writer->addRow(new Row([
                 Cell::fromValue($example[0], $text), Cell::fromValue($example[1], $text), ...array_map(fn ($value) => Cell::fromValue($value), array_slice($example, 2, 3)),
@@ -163,9 +165,9 @@ class ProductImportController extends Controller
             ['Kategori', 'Dipakai untuk produk baru saja; kategori produk yang sudah ada tidak diubah.'],
             ['Ukuran', 'Misalnya Fullsize, Halfsize (20x10), Box 2x2. Setiap ukuran adalah produk sendiri (kartu, foto, harga dan barcode sendiri). Dipakai untuk produk baru saja.'],
             ['Harga Jual', 'Angka rupiah tanpa titik, misalnya 80000. Format Rp 80.000 juga diterima. Isi box (misalnya rasa Mini Size) = 0.'],
-            ['Tipe', 'Biasa, Hampers (pelanggan memilih 1 isi) atau Box (pelanggan memilih beberapa isi, boleh sama). Kosong = tidak diubah.'],
-            ['Jumlah Isi', 'Box: berapa isi per box, misalnya 4 untuk 2x2. Hampers selalu 1.'],
-            ['Isi Dari', 'Kode Produk (atau Barcode) yang boleh dipilih sebagai isi, dipisah koma. Produk baru tidak otomatis masuk: tambahkan kodenya di sini.'],
+            ['Tipe', 'Biasa, Hampers (pelanggan memilih 1 isi), Box (pelanggan memilih beberapa rasa, boleh sama), Box isi tetap (rasa sudah ditentukan) atau Rasa box (rasa Mini, Rp 0, hanya di dalam box). Kosong = tidak diubah.'],
+            ['Jumlah Isi', 'Box: berapa rasa yang dipilih per box, misalnya 4 untuk 2x2. Hampers selalu 1. Box isi tetap dihitung dari Isi Dari.'],
+            ['Isi Dari', 'Kode Produk (atau Barcode) yang boleh dipilih sebagai isi, dipisah koma. Box isi tetap: tulis jumlahnya, misalnya "2x MN0001, 2x MN0002". Produk baru tidak otomatis masuk: tambahkan kodenya di sini.'],
             ['Harga Isi', 'Ditambah = harga hampers + harga normal isinya. Termasuk = isi Rp 0 (harga per box). Kosong: Hampers = Ditambah, Box = Termasuk.'],
         ] as $line) {
             $writer->addRow(Row::fromValues($line));

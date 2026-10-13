@@ -6,7 +6,7 @@ import Field from '../../../Components/Field.vue';
 import ImageInput from '../../../Components/Admin/ImageInput.vue';
 import type { CatalogRecord } from '../../../Types/admin';
 defineOptions({ layout: AdminLayout });
-interface Candidate { id: number; name: string; variant: string | null; sku: string; price: number | null; is_active: boolean; category: string | null }
+interface Candidate { id: number; name: string; variant: string | null; sku: string; price: number | null; is_active: boolean; flavour: boolean; category: string | null }
 const props = defineProps<{ resource: 'products' | 'outlets' | 'categories'; record: CatalogRecord | null; categories: { id: number; name: string }[]; outlets: { id: number; name: string }[]; hamperMode?: boolean; contentCandidates?: Candidate[] }>();
 const names = { products: 'product', outlets: 'outlet', categories: 'category' };
 // Hampers are products; opened from the Hampers list the form is titled and pre-set as a hamper.
@@ -20,7 +20,7 @@ const form = useForm({
     is_active: props.record?.is_active ?? props.resource !== 'products', accepts_preorder: props.record?.accepts_preorder ?? true, is_delivery_hub: props.record?.is_delivery_hub ?? false,
     is_hamper: props.record?.is_hamper ?? false, hamper_contents: props.record?.hamper_contents ?? '',
     // New hampers default to "customer chooses 1 item"; fixed packages use the hampers contents text instead.
-    content_type: (props.record ? props.record.content_type ?? '' : props.hamperMode ? 'hampers' : '') as '' | 'hampers' | 'box',
+    content_type: (props.record ? props.record.content_type ?? '' : props.hamperMode ? 'hampers' : '') as '' | 'hampers' | 'box' | 'set' | 'flavour',
     content_count: props.record?.content_count ?? 1, content_pricing: props.record?.content_pricing ?? 'added',
     content_ids: [...(props.record?.content_ids ?? [])] as number[],
     sale_starts_on: props.record?.sale_starts_on ?? '', sale_ends_on: props.record?.sale_ends_on ?? '',
@@ -28,6 +28,35 @@ const form = useForm({
     upload: null as File | null,
     outlet_prices: (props.record?.outlet_prices ?? []).map(p => ({ outlet_id: p.outlet_id as number | string, price: p.price as number | string })),
 });
+/**
+ * What kind of product this is, chosen first:
+ * regular (sold on its own), hampers (customer picks 1 item, price added), box (customer picks N items, price per box),
+ * set (a box with flavours fixed by Orlena), or content (only sold inside a box, e.g. a Mini Size flavour: Rp 0, never its own card).
+ */
+type Kind = 'regular' | 'hampers' | 'box' | 'set' | 'content';
+const typeOf: Record<Kind, typeof form.content_type> = { regular: '', hampers: 'hampers', box: 'box', set: 'set', content: 'flavour' };
+const kind = ref<Kind>(form.content_type === 'flavour' ? 'content' : form.content_type || 'regular');
+const kinds: { value: Kind; label: string; hint: string; icon: string }[] = [
+    { value: 'regular', label: 'Regular product', hint: 'Sold on its own, e.g. Blueberry Cheese Fullsize.', icon: 'fa-cookie-bite' },
+    { value: 'hampers', label: 'Hampers', hint: 'The customer picks 1 product inside; its price is added.', icon: 'fa-gift' },
+    { value: 'box', label: 'Box (Mix n Match)', hint: 'The customer picks several items, e.g. 4 Mini flavours; one price per box.', icon: 'fa-box-open' },
+    { value: 'set', label: 'Box with fixed flavours', hint: 'Orlena sets the flavours, e.g. 2 Almond + 2 Choco; the customer just adds it.', icon: 'fa-box' },
+    { value: 'content', label: 'Box flavour only', hint: 'E.g. Mini Size Almond: Rp 0, only chosen inside a box.', icon: 'fa-layer-group' },
+];
+watch(kind, (value, previous) => {
+    form.content_type = typeOf[value];
+    if (value === 'content') { form.price = 0; form.is_active = false; }
+    // Hampers hold regular products; boxes hold box flavours: a list from the other kind no longer applies.
+    if ((value === 'hampers') !== (previous === 'hampers')) form.content_ids = [];
+});
+// Box flavours for a box or fixed box; regular products for hampers.
+const flavourPool = computed(() => form.content_type === 'box' || form.content_type === 'set');
+/** Pieces of each flavour in a fixed box: the id is repeated once per piece. */
+const pieces = (id: number) => form.content_ids.filter(item => item === id).length;
+function setPieces(id: number, step: number) {
+    if (step > 0) form.content_ids.push(id);
+    else if (pieces(id)) form.content_ids.splice(form.content_ids.lastIndexOf(id), 1);
+}
 // Hampers hold one item whose price is added; a box holds N items priced per box.
 watch(() => form.content_type, type => {
     if (type === 'hampers') { form.content_count = 1; form.content_pricing = 'added'; }
@@ -37,7 +66,8 @@ const contentSearch = ref('');
 const sameSize = ref(!!props.record?.variant && form.content_type === 'hampers');
 const candidates = computed(() => (props.contentCandidates ?? []).filter(item => {
     if (form.content_ids.includes(item.id)) return true;
-    if (sameSize.value && form.variant && (item.variant ?? '').toLowerCase() !== form.variant.toLowerCase()) return false;
+    if (item.flavour !== flavourPool.value) return false;
+    if (sameSize.value && form.content_type === 'hampers' && form.variant && (item.variant ?? '').toLowerCase() !== form.variant.toLowerCase()) return false;
     const search = contentSearch.value.trim().toLowerCase();
     return !search || `${item.name} ${item.variant ?? ''} ${item.sku} ${item.category ?? ''}`.toLowerCase().includes(search);
 }));
@@ -60,37 +90,57 @@ function submit() {
         <div v-if="Object.keys(form.errors).length" role="alert" class="admin-alert admin-alert-error"><p class="font-bold">Please check the following:</p><ul class="list-disc pl-5"><li v-for="(error,key) in form.errors" :key="key">{{ error }}</li></ul></div>
         <Field id="name" label="Name" :error="form.errors.name"><template #default="{ describedBy }"><input id="name" v-model="form.name" required maxlength="160" :aria-describedby="describedBy" :aria-invalid="!!form.errors.name"></template></Field>
         <template v-if="resource === 'products'">
+            <fieldset class="space-y-2">
+                <legend class="mb-2 text-sm font-bold">Product type</legend>
+                <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <label v-for="option in kinds" :key="option.value" class="flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-sm transition" :class="kind === option.value ? 'border-chocolate bg-cream' : 'border-chocolate/15 hover:border-chocolate/40'">
+                        <input v-model="kind" type="radio" name="product-kind" :value="option.value" class="mt-1">
+                        <span><span class="block font-bold"><i class="fa-solid" :class="option.icon" aria-hidden="true"></i> {{ option.label }}</span><span class="admin-muted text-xs">{{ option.hint }}</span></span>
+                    </label>
+                </div>
+            </fieldset>
             <div class="grid grid-cols-1 gap-5 sm:grid-cols-2"><Field id="sku" label="Product code (Kode Produk in Erzap)" :error="form.errors.sku"><template #default="{ describedBy }"><input id="sku" v-model="form.sku" required maxlength="80" :aria-describedby="describedBy" :aria-invalid="!!form.errors.sku"></template></Field><Field id="category_id" label="Category" :error="form.errors.category_id"><template #default="{ describedBy }"><select id="category_id" v-model="form.category_id" required :aria-describedby="describedBy" :aria-invalid="!!form.errors.category_id"><option value="" disabled>Choose a category</option><option v-for="category in categories" :key="category.id" :value="category.id">{{ category.name }}</option></select></template></Field></div>
             <p v-if="!categories.length" class="text-sm">Add a category first under Categories.</p>
             <Field id="barcode" label="Barcode (from Erzap)" hint="Must be exactly the barcode of this product and size in Erzap; orders reach Erzap by barcode. Leave empty only for products not sent to Erzap." :error="form.errors.barcode"><template #default="{ describedBy }"><input id="barcode" v-model.trim="form.barcode" maxlength="80" inputmode="numeric" autocomplete="off" class="font-mono" :aria-describedby="describedBy" :aria-invalid="!!form.errors.barcode"></template></Field>
             <Field id="variant" label="Variant (optional)" hint="E.g. Fullsize, Halfsize (20x10), Box 2x2. Each size is its own product (own card, photo, price and Erzap barcode)." :error="form.errors.variant"><template #default="{ describedBy }"><input id="variant" v-model="form.variant" maxlength="40" list="variant-suggestions" placeholder="Leave empty if there is only one kind" :aria-describedby="describedBy" :aria-invalid="!!form.errors.variant"><datalist id="variant-suggestions"><option value="Fullsize" /><option value="Halfsize" /></datalist></template></Field>
             <Field id="description" label="Description" :error="form.errors.description"><template #default="{ describedBy }"><textarea id="description" v-model="form.description" rows="4" maxlength="5000" :aria-describedby="describedBy"></textarea></template></Field>
-            <Field id="price" label="Base price (Rp)" :error="form.errors.price"><template #default="{ describedBy }"><input id="price" v-model="form.price" type="number" min="1" max="999999999" step="1" :required="form.is_active" :aria-describedby="describedBy" :aria-invalid="!!form.errors.price"></template></Field>
+            <Field v-if="kind !== 'content'" id="price" :label="kind === 'box' ? 'Price per box (Rp)' : kind === 'hampers' ? 'Hampers price without its contents (Rp)' : 'Price (Rp)'" :error="form.errors.price"><template #default="{ describedBy }"><input id="price" v-model="form.price" type="number" min="0" max="999999999" step="1" :required="form.is_active" :aria-describedby="describedBy" :aria-invalid="!!form.errors.price"></template></Field>
+            <p v-else class="admin-alert admin-alert-info m-0 text-sm"><i class="fa-solid fa-layer-group" aria-hidden="true"></i> Price Rp 0 and inactive: this flavour is not shown as its own product. Tick it in the box (e.g. Mix n Match) under <em>Can be chosen as contents</em>. Its barcode still goes to Erzap.</p>
             <fieldset class="space-y-4 rounded-xl border border-chocolate/15 p-4">
                 <legend class="px-2 text-sm font-bold">Contents and sale period</legend>
-                <Field id="content_type" label="Type" :error="form.errors.content_type"><template #default="{ describedBy }"><select id="content_type" v-model="form.content_type" :aria-describedby="describedBy"><option value="">Regular product (fixed contents)</option><option value="hampers">Hampers: the customer chooses the item inside</option><option value="box">Box: the customer chooses several items (e.g. Mini Size 2x2)</option></select></template></Field>
-                <template v-if="form.content_type">
-                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <template v-if="form.content_type && form.content_type !== 'flavour'">
+                    <div v-if="form.content_type !== 'set'" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <Field id="content_count" label="Items per unit" :hint="form.content_type === 'hampers' ? 'Hampers always hold 1 item.' : 'E.g. 4 for 2x2, 9 for 3x3. The same item may be chosen more than once.'" :error="form.errors.content_count"><template #default="{ describedBy }"><input id="content_count" v-model.number="form.content_count" type="number" min="1" max="50" required :disabled="form.content_type === 'hampers'" :aria-describedby="describedBy"></template></Field>
                         <Field id="content_pricing" label="Price of the contents" :error="form.errors.content_pricing"><template #default="{ describedBy }"><select id="content_pricing" v-model="form.content_pricing" :aria-describedby="describedBy"><option value="added">Added: hampers price + the item's normal price</option><option value="included">Included: Rp 0 (the price is per box)</option></select></template></Field>
                     </div>
                     <div class="space-y-2">
                         <div class="flex flex-wrap items-end justify-between gap-3">
-                            <p class="m-0 text-sm font-bold">Can be chosen as contents <span class="admin-muted font-normal">({{ form.content_ids.length }} selected)</span></p>
-                            <div class="flex flex-wrap items-center gap-3 text-xs">
-                                <label v-if="form.variant" class="flex items-center gap-1.5"><input v-model="sameSize" type="checkbox">Only size "{{ form.variant }}"</label>
+                            <p v-if="form.content_type === 'set'" class="m-0 text-sm font-bold">Flavours in this box <span class="admin-muted font-normal">({{ form.content_ids.length }} pieces)</span></p>
+                            <p v-else class="m-0 text-sm font-bold">{{ flavourPool ? 'Flavours the customer can choose' : 'Products the customer can choose' }} <span class="admin-muted font-normal">({{ form.content_ids.length }} selected)</span></p>
+                            <div v-if="form.content_type !== 'set'" class="flex flex-wrap items-center gap-3 text-xs">
+                                <label v-if="form.variant && form.content_type === 'hampers'" class="flex items-center gap-1.5"><input v-model="sameSize" type="checkbox">Only size "{{ form.variant }}"</label>
                                 <button type="button" class="underline" @click="toggleAll(true)">Select shown</button><button type="button" class="underline" @click="toggleAll(false)">Clear shown</button>
                             </div>
                         </div>
                         <input v-model="contentSearch" type="search" placeholder="Search name, size or code" aria-label="Search products to use as contents">
                         <div class="max-h-72 space-y-1 overflow-y-auto rounded-xl border border-chocolate/15 p-2" role="group" aria-label="Products that can be chosen as contents">
-                            <label v-for="item in candidates" :key="item.id" class="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-cream">
+                            <template v-if="form.content_type === 'set'">
+                                <div v-for="item in candidates" :key="item.id" class="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-cream">
+                                    <span class="flex-1">{{ item.name }}<span v-if="item.variant" class="admin-muted"> · {{ item.variant }}</span> <span class="admin-muted text-xs">{{ item.sku }}</span></span>
+                                    <span class="inline-flex items-center gap-1" role="group" :aria-label="`Pieces of ${item.name}`">
+                                        <button type="button" class="admin-action-icon" :aria-label="`Less ${item.name}`" :disabled="!pieces(item.id)" @click="setPieces(item.id, -1)"><i class="fa-solid fa-minus" aria-hidden="true"></i></button>
+                                        <span class="w-6 text-center font-bold tabular-nums">{{ pieces(item.id) }}</span>
+                                        <button type="button" class="admin-action-icon" :aria-label="`More ${item.name}`" :disabled="form.content_ids.length >= 50" @click="setPieces(item.id, 1)"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
+                                    </span>
+                                </div>
+                            </template>
+                            <label v-for="item in (form.content_type === 'set' ? [] : candidates)" :key="item.id" class="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-cream">
                                 <input v-model="form.content_ids" type="checkbox" :value="item.id">
                                 <span class="flex-1">{{ item.name }}<span v-if="item.variant" class="admin-muted"> · {{ item.variant }}</span> <span class="admin-muted text-xs">{{ item.sku }}</span></span>
                                 <span class="text-xs tabular-nums" :class="{ 'admin-muted': form.content_pricing === 'included' }">{{ item.price ? `Rp ${item.price.toLocaleString('id-ID')}` : 'no price' }}</span>
                                 <span v-if="!item.is_active && form.content_pricing === 'added'" class="text-xs admin-error-text">inactive</span>
                             </label>
-                            <p v-if="!candidates.length" class="admin-muted m-0 p-2 text-sm">No products match.</p>
+                            <p v-if="!candidates.length" class="admin-muted m-0 p-2 text-sm">{{ flavourPool ? 'No box flavours yet. Add each flavour as a product with type "Box flavour only".' : 'No products match.' }}</p>
                         </div>
                         <p v-if="form.errors.content_ids" class="admin-error-text m-0 text-sm" role="alert">{{ form.errors.content_ids }}</p>
                         <p class="admin-muted m-0 text-xs">{{ form.content_pricing === 'added' ? 'Only active products with a price are offered to customers. ' : '' }}New products are not added automatically; tick them here.</p>
@@ -115,7 +165,7 @@ function submit() {
         <ImageInput id="photo" :label="{ products: 'Product photo', outlets: 'Outlet photo', categories: 'Category photo' }[resource]" :current="record?.image ?? null" :error="form.errors.upload" @select="file => (form.upload = file)" />
         <fieldset class="space-y-3 rounded-xl border border-chocolate/15 p-4">
             <legend class="px-2 text-sm font-bold">Status</legend>
-            <label class="flex items-start gap-3 text-sm"><input v-model="form.is_active" type="checkbox" class="mt-0.5"><span><span class="block font-bold">Active</span><span class="admin-muted text-xs">{{ { products: 'The product can be chosen on the PO form.', outlets: 'The outlet is operating. Showing it on the website is set under Website content → Outlet order.', categories: 'Products in this category can be ordered. Showing it in Baked Goods is set under Website content.' }[resource] }}</span></span></label>
+            <label class="flex items-start gap-3 text-sm"><input v-model="form.is_active" type="checkbox" class="mt-0.5" :disabled="resource === 'products' && kind === 'content'"><span><span class="block font-bold">Active</span><span class="admin-muted text-xs">{{ { products: 'The product can be chosen on the PO form.', outlets: 'The outlet is operating. Showing it on the website is set under Website content → Outlet order.', categories: 'Products in this category can be ordered. Showing it in Baked Goods is set under Website content.' }[resource] }}</span></span></label>
             <label v-if="resource === 'outlets'" class="flex items-start gap-3 text-sm"><input v-model="form.is_delivery_hub" type="checkbox" class="mt-0.5"><span><span class="block font-bold">Delivery outlet</span><span class="admin-muted text-xs">All delivery (Gojek/Grab) orders ship from this outlet. Only one outlet; choosing this one replaces the previous one.</span></span></label>
             <label v-if="resource === 'outlets'" class="flex items-start gap-3 text-sm"><input v-model="form.accepts_preorder" type="checkbox" class="mt-0.5"><span><span class="block font-bold">Takes pre-orders</span><span class="admin-muted text-xs">The outlet appears as a choice on the pre-order form (only while active).</span></span></label>
         </fieldset>

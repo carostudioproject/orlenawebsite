@@ -58,7 +58,8 @@ class CatalogController extends Controller
         $record = $id ? self::MODELS[$resource]::findOrFail($id) : null;
         if ($record instanceof Product) {
             $record->load('outletPrices');
-            $record->setAttribute('content_ids', $record->contentOptions()->pluck('products.id'));
+            // A fixed box repeats each flavour once per piece, e.g. [almond, almond, choco, choco].
+            $record->setAttribute('content_ids', $record->contentOptions()->get()->flatMap(fn (Product $option) => array_fill(0, max(1, (int) $option->pivot->quantity), $option->id))->values());
         }
 
         return Inertia::render('Admin/Catalog/Form', [
@@ -68,9 +69,10 @@ class CatalogController extends Controller
             'categories' => $resource === 'products' ? Category::orderBy('name')->get(['id', 'name']) : [],
             'outlets' => $resource === 'products' ? Outlet::orderBy('name')->get(['id', 'name']) : [],
             // Products that can be chosen as hampers/box contents ("Isi Dari").
-            'contentCandidates' => $resource === 'products' ? Product::with('category:id,name')->whereNull('content_type')->when($record, fn ($query) => $query->whereKeyNot($record->id))
-                ->orderBy('name')->orderBy('variant')->get(['id', 'name', 'variant', 'sku', 'price', 'is_active', 'category_id'])
-                ->map(fn (Product $product) => [...$product->only('id', 'name', 'variant', 'sku', 'price', 'is_active'), 'category' => $product->category?->name]) : [],
+            'contentCandidates' => $resource === 'products' ? Product::with('category:id,name')->where(fn ($query) => $query->whereNull('content_type')->orWhere('content_type', 'flavour'))
+                ->when($record, fn ($query) => $query->whereKeyNot($record->id))
+                ->orderBy('name')->orderBy('variant')->get(['id', 'name', 'variant', 'sku', 'price', 'is_active', 'category_id', 'content_type'])
+                ->map(fn (Product $product) => [...$product->only('id', 'name', 'variant', 'sku', 'price', 'is_active'), 'flavour' => $product->content_type === 'flavour', 'category' => $product->category?->name]) : [],
         ]);
     }
 
@@ -99,8 +101,13 @@ class CatalogController extends Controller
             if ($resource === 'products' && empty($data['is_hamper'])) {
                 $data['hamper_contents'] = null;
             }
-            if ($resource === 'products' && empty($data['content_type'])) {
-                [$data['content_type'], $data['content_count'], $data['content_pricing'], $contentIds] = [null, null, null, []];
+            if ($resource === 'products' && ! in_array($data['content_type'] ?? null, ['hampers', 'box', 'set'], true)) {
+                $contentIds = [];
+            }
+            // Only hampers and boxes have a count and a contents price; a fixed box counts its pieces.
+            if ($resource === 'products' && ! in_array($data['content_type'] ?? null, ['hampers', 'box'], true)) {
+                $data['content_count'] = ($data['content_type'] ?? null) === 'set' ? count($contentIds) : null;
+                $data['content_pricing'] = null;
             }
             if ($request->hasFile('upload')) {
                 $data['image'] = ContentImage::resolve($request->file('upload'), null);
@@ -116,7 +123,9 @@ class CatalogController extends Controller
                 $record->outletPrices()->delete();
                 $record->outletPrices()->createMany($prices);
                 $changes['outlet_prices'] = $prices;
-                $synced = $record->contentOptions()->sync(array_values(array_diff(array_map('intval', $contentIds), [$record->id])));
+                // Repeats count only for a fixed box (2x Almond); other lists hold each product once.
+                $counts = array_count_values(array_values(array_diff(array_map('intval', $contentIds), [$record->id])));
+                $synced = $record->contentOptions()->sync(array_map(fn ($count) => ['quantity' => $record->content_type === 'set' ? $count : 1], $counts));
                 if (array_filter($synced)) {
                     $changes['content_ids'] = $record->contentOptions()->pluck('products.id')->all();
                 }
