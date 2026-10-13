@@ -69,3 +69,9 @@ With DOKU enabled, **Confirm & Create Payment** asks the DOKU QRIS Direct API (S
 - `DOKU_MODE=checkout` switches back to the hosted DOKU Checkout page.
 
 Setup (sandbox first): ask DOKU to activate **QRIS** and send the **Merchant ID (mall ID)** and **Terminal ID**; generate an RSA key pair on the server (`openssl genrsa -out storage/app/private/doku-snap-private.pem 2048`, then `openssl rsa -in … -pubout`) and upload the public key in the DOKU dashboard; set the QRIS Notification URL to `{APP_URL}/webhooks/doku-qris`; fill `DOKU_ENABLED=true`, `DOKU_CLIENT_ID`, `DOKU_SECRET_KEY` (or `DOKU_SNAP_CLIENT_SECRET`), `DOKU_QRIS_MERCHANT_ID`, `DOKU_QRIS_TERMINAL_ID`, `DOKU_QRIS_POSTAL_CODE`. Test with the DOKU QRIS simulator: https://sandbox.doku.com/qris-simulator/
+
+## Settlement and status checks
+
+- An order is **paid** when the money received on all its payment attempts covers its **current** total. An older link paid after the total went up (e.g. a delivery fee added) is recorded but does not settle the order: the order page shows "Received Rp X of Rp Y", and Mark as paid records only the difference. Overpayments are flagged for a refund.
+- When an order becomes paid, any other open link is closed (also at DOKU), so the customer cannot pay twice. A refund on one attempt only reopens the order if the money still held no longer covers it.
+- `payments:reconcile` (every 10 minutes) reads DOKU for open links (each at most every 10 minutes) and for links expired or closed in the last 2 days (hourly), so a lost notification or a late payment is still recorded. Callbacks and page polling check one payment at most every 5 seconds.

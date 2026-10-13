@@ -15,7 +15,7 @@ import type { PaymentAttempt, Preorder, StatusChange } from '../../../Types/orde
 defineOptions({ layout: AdminLayout });
 interface Review { id: number; actor_name: string | null; note: string; previous_delivery_fee: number | null; delivery_fee: number | null; previous_schedule: string | null; schedule: string | null; created_at: string }
 interface Addition { id: number; items: { name: string; variant: string | null; quantity: number; subtotal: number }[]; subtotal_added: number; previous_total: number; new_total: number; created_at: string }
-const props = defineProps<{ order: Preorder; reviews: Paginated<Review>; history: StatusChange[]; payments: PaymentAttempt[]; canCancelPaid: boolean; additions: Addition[]; dokuEnabled: boolean; paymentMode: string; customerChooses: boolean; manualMethods: Record<string, string>;
+const props = defineProps<{ order: Preorder; reviews: Paginated<Review>; history: StatusChange[]; payments: PaymentAttempt[]; canCancelPaid: boolean; additions: Addition[]; received: number; dokuEnabled: boolean; paymentMode: string; customerChooses: boolean; manualMethods: Record<string, string>;
     dayLoad: { orders: number; capacity: number | null; closed: string | null };
     erzapSync: { id: number; type: string; status: string; attempts: number; last_error: string | null; synced_at: string | null; next_attempt_at: string | null; external_ref: string | null } | null;
 }>();
@@ -29,6 +29,9 @@ const editable = computed(() => ['pending_review', 'confirmed'].includes(props.o
     && ['not_created', 'failed', 'expired', 'cancelled'].includes(props.order.payment_status) && !openPayment.value);
 const finished = computed(() => ['completed', 'cancelled'].includes(props.order.order_status));
 const paidAfterCancel = computed(() => props.order.order_status === 'cancelled' && props.order.payment_status === 'paid');
+// Money received on every attempt against the current total (an older link may have been paid after the total changed).
+const shortfall = computed(() => (props.received > 0 && props.order.payment_status !== 'paid' && props.order.order_status !== 'cancelled' ? props.order.total - props.received : 0));
+const overpaid = computed(() => (props.received > props.order.total ? props.received - props.order.total : 0));
 
 const form = useForm({
     review_version: props.order.review_version, delivery_fee: props.order.delivery_fee ?? '' as number | string, note: '',
@@ -129,6 +132,8 @@ onBeforeUnmount(() => clearInterval(timer));
     <p v-else-if="order.order_status === 'pending_review' && dayLoad.capacity" class="admin-muted mb-4 text-sm"><i class="fa-solid fa-calendar-day" aria-hidden="true"></i> {{ dayLoad.orders }} of {{ dayLoad.capacity }} orders for this PO date.</p>
     <p v-if="additions.length && order.order_status === 'pending_review'" class="admin-alert admin-alert-info mb-6"><i class="fa-solid fa-cart-plus" aria-hidden="true"></i> The customer added items {{ additions.length }} time(s), last on {{ witaTime(additions[0].created_at) }}. Items and total below include the additions; check availability again before confirming.</p>
     <p v-if="paidAfterCancel" role="alert" class="admin-alert admin-alert-error mb-6">This order was cancelled but payment was received. Refund it manually in DOKU and record the result.</p>
+    <p v-if="shortfall > 0" role="alert" class="admin-alert admin-alert-error mb-6"><i class="fa-solid fa-scale-unbalanced" aria-hidden="true"></i> Received {{ rupiah(received) }} of {{ rupiah(order.total) }}: an older payment link was paid after the total changed. Collect the remaining {{ rupiah(shortfall) }} (Mark as paid records only the difference) or adjust the order.</p>
+    <p v-if="overpaid > 0" role="alert" class="admin-alert admin-alert-error mb-6"><i class="fa-solid fa-scale-unbalanced" aria-hidden="true"></i> Received {{ rupiah(received) }}, which is {{ rupiah(overpaid) }} more than the total {{ rupiah(order.total) }}. Refund the difference to the customer.</p>
     <div class="grid grid-cols-1 gap-6 xl:grid-cols-2"><section class="admin-card"><h2 class="mb-5 text-xl">Customer and fulfillment</h2><dl class="space-y-4 text-sm"><div><dt class="font-bold">Name</dt><dd>{{ order.customer.name }}</dd></div><div><dt class="font-bold">WhatsApp</dt><dd>{{ order.customer.whatsapp }}</dd></div><div v-if="order.customer.email"><dt class="font-bold">Email</dt><dd>{{ order.customer.email }}</dd></div><div><dt class="font-bold">Fulfillment</dt><dd>{{ order.fulfillment_method === 'delivery' ? `Delivery (Gojek/Grab) from ${order.outlet_name_snapshot}` : `Pickup at ${order.outlet_name_snapshot}` }}</dd></div><div><dt class="font-bold">Requested date / time</dt><dd>{{ order.requested_date }} {{ order.requested_time?.slice(0,5) }} WITA</dd></div><div v-if="order.delivery_address"><dt class="font-bold">Address</dt><dd class="whitespace-pre-wrap">{{ order.delivery_address }}</dd></div><div v-if="order.customer_note"><dt class="font-bold">Customer note</dt><dd class="whitespace-pre-wrap">{{ order.customer_note }}</dd></div><div v-if="order.card_message"><dt class="font-bold"><i class="fa-solid fa-envelope-open-text" aria-hidden="true"></i> Greeting card</dt><dd class="whitespace-pre-wrap rounded-lg bg-cream p-3">{{ order.card_message }}</dd></div></dl></section><section class="admin-card"><h2 class="mb-5 text-xl">Order items</h2><OrderSummary :order="order" lang="en" /></section></div>
 
     <section class="admin-card mt-6">

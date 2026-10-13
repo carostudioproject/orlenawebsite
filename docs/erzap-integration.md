@@ -73,3 +73,7 @@ Pushing (`simpan_pesanan_penjualan`, below) and Erzap pulling (`check_pesanan`) 
 - Does the order arrive as a finished (paid) sale or as a sales order to process in Erzap?
 - Must `kode` follow Erzap's own numbering, or may it be our Order Code? If Erzap should number it, does `kode: null` do that? Is a repeated `kode` rejected?
 - Exact request format (JSON body, `Content-Type`) and whether port 4443 is required; shared hosting may block outgoing ports other than 80/443.
+
+## Sending
+
+A sync row is claimed (`sending`, for up to 2 minutes) in a short transaction, the request to Erzap runs outside any database transaction, and the result is recorded afterwards unless Erzap's own status 5 settled the row meanwhile. A run that dies mid-request leaves the row to be picked up again when its claim expires. Rows waiting for settings or mapping are retried every 30 minutes (saving the mapping requeues them at once); cancelled orders are never sent.

@@ -32,6 +32,8 @@ class ReconcilePayment
         if (! $gateway) {
             return 'no_change';
         }
+        // Recorded before asking, so a payment DOKU keeps failing on is not retried every run (updated_at is left alone).
+        Payment::whereKey($payment->id)->toBase()->update(['checked_at' => now()]);
         $status = $gateway->status($payment);
         if ($status !== null && $status['transaction_status'] !== 'PENDING') {
             return $this->apply->handle($status, 'status_check');

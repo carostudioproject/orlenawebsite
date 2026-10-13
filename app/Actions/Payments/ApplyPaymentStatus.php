@@ -5,6 +5,7 @@ namespace App\Actions\Payments;
 use App\Actions\Integrations\ErzapSync;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Services\Payments\PaymentGateways;
 use App\Support\Audit;
 use Illuminate\Support\Facades\DB;
 
@@ -69,19 +70,43 @@ class ApplyPaymentStatus
             $changes['paid_at'] = now();
         }
         $payment->update($changes);
-
-        $latest = (int) Payment::where('order_id', $order->id)->max('attempt') === $payment->attempt;
-        // A paid order only moves to refunded; a stale attempt never overwrites the newest link's status.
-        if (in_array($target, ['paid', 'refunded'], true) || ($latest && $order->payment_status !== 'paid')) {
-            $order->update(['payment_status' => $target]);
-        }
-        // Paid orders go to Erzap; sent later by the scheduler, never inside this transaction.
-        if ($target === 'paid') {
-            ErzapSync::queue($order);
-        }
         Audit::record('payment.status_changed', $payment, ['from' => $previous, 'to' => $target, 'attempt' => $payment->attempt]);
 
+        // The order is settled by the money received on all its attempts against its current total, not by one attempt:
+        // an older link paid after the total went up does not settle the order on its own.
+        $received = (int) Payment::where('order_id', $order->id)->where('status', 'paid')->sum('amount');
+        if ($target === 'paid') {
+            if ($received < $order->total) {
+                Audit::record('payment.underpaid', $order, ['received' => $received, 'total' => $order->total, 'attempt' => $payment->attempt]);
+
+                return ['underpaid', 'Diterima Rp '.number_format($received, 0, ',', '.').' dari total Rp '.number_format($order->total, 0, ',', '.')];
+            }
+            $order->update(['payment_status' => 'paid']);
+            // Paid orders go to Erzap; sent later by the scheduler, never inside this transaction.
+            ErzapSync::queue($order);
+            $this->closeOtherLinks($order, $payment);
+        } elseif ($target === 'refunded') {
+            // A refund only reopens the order when the money still held no longer covers it.
+            if ($received < $order->total) {
+                $order->update(['payment_status' => 'refunded']);
+            }
+        } elseif ($order->payment_status !== 'paid' && (int) Payment::where('order_id', $order->id)->max('attempt') === $payment->attempt) {
+            // A stale attempt never overwrites the newest link's status, and nothing overwrites "paid".
+            $order->update(['payment_status' => $target]);
+        }
+
         return ['applied', null];
+    }
+
+    /** Once the order is paid, other open links are closed so the customer cannot pay twice (at DOKU after commit). */
+    private function closeOtherLinks(Order $order, Payment $paid): void
+    {
+        $open = Payment::where('order_id', $order->id)->whereKeyNot($paid->id)->whereIn('status', Payment::OPEN)->lockForUpdate()->get();
+        foreach ($open as $link) {
+            $link->update(['status' => 'cancelled', 'open_order_id' => null, 'last_error' => 'Closed: the order was paid with attempt '.$paid->attempt.'.']);
+            Audit::record('payment.closed_after_paid', $link, ['paid_attempt' => $paid->attempt]);
+            DB::afterCommit(fn () => app(PaymentGateways::class)->for($link)?->cancel($link));
+        }
     }
 
     private function target(string $transactionStatus): ?string

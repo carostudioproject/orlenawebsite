@@ -32,7 +32,9 @@ class RecordManualPayment
             $attempt = (int) Payment::where('order_id', $locked->id)->max('attempt') + 1;
             $payment = Payment::create([
                 'order_id' => $locked->id, 'attempt' => $attempt, 'provider' => 'manual', 'provider_order_id' => $locked->order_code.'-P'.$attempt,
-                'open_order_id' => $locked->id, 'amount' => $locked->total, 'status' => 'pending', 'reason' => $note, 'created_by' => $actor,
+                // Only what is still owed, e.g. the difference after an older link was paid before the total went up.
+                'open_order_id' => $locked->id, 'amount' => max(1, $locked->total - (int) Payment::where('order_id', $locked->id)->where('status', 'paid')->sum('amount')),
+                'status' => 'pending', 'reason' => $note, 'created_by' => $actor,
             ]);
             Audit::record('payment.manual_recorded', $payment, ['attempt' => $attempt, 'amount' => $payment->amount, 'method' => $method], $actor);
             $this->apply->handle([

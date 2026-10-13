@@ -3,11 +3,14 @@
 namespace Tests\Feature;
 
 use App\Actions\Integrations\ErzapSync;
+use App\Actions\Payments\ApplyPaymentStatus;
+use App\Actions\Payments\ReconcilePayment;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\IntegrationSync;
 use App\Models\Order;
 use App\Models\Outlet;
+use App\Models\Payment;
 use App\Models\Product;
 use App\Models\User;
 use App\Services\Payments\PaymentGateways;
@@ -15,6 +18,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -142,6 +146,93 @@ class AuditFixesTest extends TestCase
         $sync = IntegrationSync::where('subject_id', $cancelled->id)->sole();
         $this->assertSame('skipped', app(ErzapSync::class)->run($sync));
         $this->assertSame('The order was cancelled.', $sync->fresh()->last_error);
+    }
+
+    private function payment(Order $order, int $attempt, int $amount, string $status, string $provider = 'doku_va', array $extra = []): Payment
+    {
+        return Payment::create([
+            'order_id' => $order->id, 'attempt' => $attempt, 'provider' => $provider, 'provider_order_id' => $order->order_code.'-P'.$attempt,
+            'amount' => $amount, 'status' => $status, 'open_order_id' => $status === 'pending' ? $order->id : null, 'expires_at' => now()->addHour(), ...$extra,
+        ]);
+    }
+
+    private function success(Payment $payment): string
+    {
+        return app(ApplyPaymentStatus::class)->handle(['order_id' => $payment->provider_order_id, 'transaction_status' => 'SUCCESS', 'gross_amount' => $payment->amount.'.00',
+            'payment_type' => 'VA-BCA', 'transaction_date' => now()->toIso8601String()], 'test');
+    }
+
+    public function test_an_older_link_paid_after_the_total_went_up_does_not_settle_the_order(): void
+    {
+        // Link 1 was for Rp 150.000; the delivery fee then raised the total to Rp 160.000 and link 1 expired.
+        $order = $this->order(['order_status' => 'confirmed', 'payment_status' => 'expired']);
+        $old = $this->payment($order, 1, 150000, 'expired');
+        $this->assertSame('underpaid', $this->success($old));
+        $this->assertSame(['paid', 'expired'], [$old->fresh()->status, $order->fresh()->payment_status]);
+        $this->assertDatabaseMissing('integration_syncs', ['subject_id' => $order->id]);
+
+        // Staff record only the difference; then the order is paid.
+        $this->actingAs(User::factory()->create(['role' => 'staff']))->post('/admin/orders/'.$order->id.'/payments/manual', ['method' => 'transfer'])->assertSessionHasNoErrors();
+        $this->assertSame([10000, 'paid'], [Payment::where('provider', 'manual')->sole()->amount, $order->fresh()->payment_status]);
+    }
+
+    public function test_paying_one_link_closes_the_other_open_link_and_one_refund_keeps_it_paid(): void
+    {
+        $order = $this->order(['order_status' => 'confirmed', 'payment_status' => 'pending']);
+        $late = $this->payment($order, 1, 160000, 'expired', 'demo');
+        $open = $this->payment($order, 2, 160000, 'pending', 'demo');
+        $this->assertSame('applied', $this->success($late));
+        $this->assertSame(['paid', 'cancelled', null], [$order->fresh()->payment_status, $open->fresh()->status, $open->fresh()->open_order_id]);
+
+        // Paid twice (the closed link was paid anyway): refunding one keeps the order paid.
+        $this->success($open);
+        app(ApplyPaymentStatus::class)->handle(['order_id' => $open->provider_order_id, 'transaction_status' => 'REFUNDED', 'gross_amount' => '160000.00', 'transaction_date' => 'r1'], 'test');
+        $this->assertSame(['refunded', 'paid'], [$open->fresh()->status, $order->fresh()->payment_status]);
+    }
+
+    public function test_the_scheduler_checks_open_and_recently_closed_links(): void
+    {
+        $order = $this->order(['order_status' => 'confirmed', 'payment_status' => 'pending']);
+        $open = $this->payment($order, 1, 160000, 'pending');
+        $recentlyExpired = $this->payment($order, 2, 160000, 'expired');
+        $checkedMoments = $this->payment($order, 3, 160000, 'expired', 'doku_va', ['checked_at' => now()->subMinutes(5)]);
+        $manual = $this->payment($order, 4, 160000, 'cancelled', 'manual');
+        $old = $this->payment($order, 5, 160000, 'cancelled');
+        Payment::whereKey($old->id)->toBase()->update(['updated_at' => now()->subDays(3)]);
+
+        $checked = [];
+        $this->mock(ReconcilePayment::class, function ($mock) use (&$checked) {
+            $mock->shouldReceive('handle')->andReturnUsing(function (Payment $payment) use (&$checked) {
+                $checked[] = $payment->id;
+
+                return 'not_started';
+            });
+        });
+        $this->artisan('payments:reconcile')->assertSuccessful();
+        sort($checked);
+        $this->assertSame([$open->id, $recentlyExpired->id], $checked);
+    }
+
+    public function test_an_erzap_send_in_progress_is_not_sent_twice(): void
+    {
+        config(['services.erzap.enabled' => true, 'services.erzap.base_url' => 'https://erzap.test:4443', 'services.erzap.token' => 'erzap-secret',
+            'services.erzap.sales_user_id' => '8', 'services.erzap.default_outlet_id' => '1']);
+        Http::fake(['erzap.test:4443/*' => Http::response(['status' => '1', 'message' => 'Sukses menyimpan pesanan penjualan'])]);
+        $order = $this->order(['order_status' => 'confirmed', 'payment_status' => 'paid']);
+        ErzapSync::queue($order);
+        $sync = IntegrationSync::sole();
+
+        // Claimed by another run moments ago: left alone, nothing sent.
+        $sync->update(['status' => 'sending', 'next_attempt_at' => now()->addMinute()]);
+        $this->assertSame('sending', app(ErzapSync::class)->run($sync));
+        $this->assertCount(0, app(ErzapSync::class)->due());
+        Http::assertNothingSent();
+
+        // That run died: once its claim expires the row is picked up and sent.
+        $this->travel(2)->minutes();
+        $this->assertSame([$sync->id], app(ErzapSync::class)->due()->pluck('id')->all());
+        $this->assertSame('synced', app(ErzapSync::class)->run($sync));
+        Http::assertSentCount(1);
     }
 
     public function test_every_response_carries_basic_security_headers(): void

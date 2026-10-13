@@ -24,6 +24,9 @@ class ErzapSync
     /** Rows waiting for settings or mapping are looked at again after this long (saving the mapping requeues them at once). */
     private const PARK_MINUTES = 30;
 
+    /** How long a send may take before another run may pick the row up again (well above the HTTP timeout). */
+    private const CLAIM_SECONDS = 120;
+
     public function __construct(private ErzapClient $erzap) {}
 
     public static function queue(Order $order): void
@@ -50,10 +53,15 @@ class ErzapSync
     /** Sends one sync. Returns its new status. */
     public function run(IntegrationSync $sync, ?int $actor = null): string
     {
-        return DB::transaction(function () use ($sync, $actor) {
+        // 1. Claim the row in a short transaction: checks and the cart are prepared, the row becomes "sending".
+        $claim = DB::transaction(function () use ($sync) {
             $sync = IntegrationSync::lockForUpdate()->findOrFail($sync->id);
             if ($sync->status === 'synced') {
                 return 'synced';
+            }
+            // Another process is sending it right now (its claim has not expired).
+            if ($sync->status === 'sending' && $sync->next_attempt_at?->isFuture()) {
+                return 'sending';
             }
             $order = Order::with('items.product', 'outlet', 'customer', 'payments')->find($sync->subject_id);
             // A cancelled order is never sent as a sale, even when it was paid (the refund is handled outside Erzap).
@@ -77,17 +85,39 @@ class ErzapSync
                 return 'needs_mapping';
             }
             $cart = $this->cart($order);
-            try {
-                $result = $this->erzap->sendOrder($cart);
-            } catch (ErzapException $e) {
-                if ($e->notConfigured) {
-                    $sync->update(['status' => 'waiting_config', 'payload' => $cart, 'last_error' => 'Erzap settings are not complete.', 'next_attempt_at' => now()->addMinutes(self::PARK_MINUTES)]);
+            // The claim expires on its own, so a process that dies mid-request does not block the row forever.
+            $sync->update(['status' => 'sending', 'payload' => $cart, 'next_attempt_at' => now()->addSeconds(self::CLAIM_SECONDS)]);
 
-                    return 'waiting_config';
-                }
+            return [$cart, $order->order_code];
+        }, 3);
+        if (is_string($claim)) {
+            return $claim;
+        }
+        [$cart, $code] = $claim;
+
+        // 2. The request to Erzap runs outside any database transaction, so no row stays locked while Erzap answers.
+        try {
+            $result = $this->erzap->sendOrder($cart);
+            $error = null;
+        } catch (ErzapException $e) {
+            [$result, $error] = [null, $e];
+        }
+
+        // 3. Record the outcome, unless something else settled the row meanwhile (e.g. Erzap's own status 5).
+        return DB::transaction(function () use ($sync, $actor, $cart, $code, $result, $error) {
+            $sync = IntegrationSync::lockForUpdate()->findOrFail($sync->id);
+            if ($sync->status !== 'sending') {
+                return $sync->status;
+            }
+            if ($error?->notConfigured) {
+                $sync->update(['status' => 'waiting_config', 'last_error' => 'Erzap settings are not complete.', 'next_attempt_at' => now()->addMinutes(self::PARK_MINUTES)]);
+
+                return 'waiting_config';
+            }
+            if ($error) {
                 $attempts = $sync->attempts + 1;
                 $sync->update([
-                    'status' => 'failed', 'attempts' => $attempts, 'payload' => $cart, 'last_error' => mb_substr($e->getMessage(), 0, 500),
+                    'status' => 'failed', 'attempts' => $attempts, 'last_error' => mb_substr($error->getMessage(), 0, 500),
                     'next_attempt_at' => $attempts < IntegrationSync::MAX_AUTO_ATTEMPTS ? now()->addMinutes(self::BACKOFF[$attempts - 1]) : null,
                 ]);
                 Audit::log('erzap.sync_failed', 'integration_syncs', $sync->id, ['attempts' => $attempts, 'error' => $sync->last_error], $actor);
@@ -96,19 +126,19 @@ class ErzapSync
             }
             $sync->update([
                 'status' => 'synced', 'attempts' => $sync->attempts + 1, 'payload' => $cart, 'response' => $result['body'],
-                'external_ref' => $order->order_code, 'last_error' => null, 'next_attempt_at' => null, 'synced_at' => now(),
+                'external_ref' => $code, 'last_error' => null, 'next_attempt_at' => null, 'synced_at' => now(),
             ]);
-            Audit::log('erzap.synced', 'integration_syncs', $sync->id, ['order' => $order->order_code], $actor);
+            Audit::log('erzap.synced', 'integration_syncs', $sync->id, ['order' => $code], $actor);
 
             return 'synced';
-        });
+        }, 3);
     }
 
     /** Syncs the scheduler should try now: new rows, then failed or parked rows whose next attempt is due. */
     public function due(int $limit = 50)
     {
-        return IntegrationSync::where('provider', 'erzap')->where('type', self::TYPE)->whereIn('status', IntegrationSync::RUNNABLE)
-            // New rows run at once; failed and parked rows (settings or mapping missing) only when their time comes, so they cannot fill every batch.
+        return IntegrationSync::where('provider', 'erzap')->where('type', self::TYPE)->whereIn('status', [...IntegrationSync::RUNNABLE, 'sending'])
+            // New rows run at once; failed, parked (settings or mapping missing) and abandoned "sending" rows only when their time comes.
             ->where(fn ($q) => $q->where('status', 'pending')->orWhere(fn ($q) => $q->whereNotNull('next_attempt_at')->where('next_attempt_at', '<=', now())))
             ->orderBy('id')->limit($limit)->get();
     }
@@ -187,7 +217,7 @@ class ErzapSync
             'ongkos_kirim' => $money($delivery ? $order->delivery_fee : 0), 'nominal_gratis_ongkir' => '0.0',
             'telepon' => $order->customer->whatsapp, 'telepon_pengiriman' => $order->customer->whatsapp,
             'tempat_penjemputan' => $delivery ? null : $order->outlet_name_snapshot,
-            'total_pembayaran' => $money($payment?->amount ?? $order->total),
+            'total_pembayaran' => $money($order->total),
             'total_pesanan' => $money($order->subtotal),
             'pelanggan_kecamatan' => '', 'pelanggan_kota' => '', 'pelanggan_country' => '', 'pelanggan_provinsi' => '',
             'pelanggan_kecamatan_pengiriman' => '', 'pelanggan_kota_pengiriman' => '', 'pelanggan_country_pengiriman' => '', 'pelanggan_provinsi_pengiriman' => '',
