@@ -172,11 +172,11 @@ class ErzapAndApiTest extends TestCase
 
     public function test_rest_api_serves_public_catalog_and_token_protected_orders(): void
     {
-        $this->outlet->update(['is_delivery_hub' => true]);
+        $this->outlet->update(['delivers' => true]);
         $this->getJson('/api/v1/products')->assertOk()->assertJsonPath('data.0.name', 'Berry')->assertJsonPath('data.0.variant', 'Fullsize')->assertJsonMissingPath('data.0.sku');
         $this->getJson('/api/v1/outlets')->assertOk()->assertJsonPath('data.0.code', 'O');
         $this->getJson('/api/v1/categories')->assertOk()->assertJsonCount(1, 'data');
-        $this->getJson('/api/v1/schedule')->assertOk()->assertJsonPath('data.earliest_date', '2030-01-02')->assertJsonPath('data.cutoff_label', 'H-1 pukul 18.00 WITA');
+        $this->getJson('/api/v1/schedule')->assertOk()->assertJsonPath('data.earliest_date', '2030-01-02')->assertJsonPath('data.cutoff_label', 'H-1 pukul 19.00 WITA');
         $this->getJson('/api/v1/products?outlet_id=999')->assertNotFound();
 
         $order = $this->paidOrder();

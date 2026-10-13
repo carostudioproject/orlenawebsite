@@ -16,10 +16,11 @@ defineOptions({ layout: AdminLayout });
 interface Review { id: number; actor_name: string | null; note: string; previous_delivery_fee: number | null; delivery_fee: number | null; previous_schedule: string | null; schedule: string | null; created_at: string }
 interface Addition { id: number; items: { name: string; variant: string | null; quantity: number; subtotal: number }[]; subtotal_added: number; previous_total: number; new_total: number; created_at: string }
 const props = defineProps<{ order: Preorder; reviews: Paginated<Review>; history: StatusChange[]; payments: PaymentAttempt[]; canCancelPaid: boolean; additions: Addition[]; received: number; dokuEnabled: boolean; paymentMode: string; customerChooses: boolean; manualMethods: Record<string, string>;
-    dayLoad: { orders: number; capacity: number | null; closed: string | null };
+    dayLoad: { orders: number; capacity: number | null; closed: string | null }; outlets: { id: number; name: string; delivers: boolean }[];
     erzapSync: { id: number; type: string; status: string; attempts: number; last_error: string | null; synced_at: string | null; next_attempt_at: string | null; external_ref: string | null } | null;
 }>();
 const page = usePage<AdminProps>();
+const poCutoff = computed(() => page.props.poCutoff);
 const can = computed(() => page.props.auth.can);
 const errors = computed(() => page.props.errors as Record<string, string>);
 
@@ -35,10 +36,10 @@ const overpaid = computed(() => (props.received > props.order.total ? props.rece
 
 const form = useForm({
     review_version: props.order.review_version, delivery_fee: props.order.delivery_fee ?? '' as number | string, note: '',
-    requested_date: props.order.requested_date, requested_time: props.order.requested_time?.slice(0, 5) ?? '',
+    requested_date: props.order.requested_date, requested_time: props.order.requested_time?.slice(0, 5) ?? '', outlet_id: props.order.outlet_id,
 });
 watch(() => props.order.review_version, () => {
-    form.review_version = props.order.review_version; form.delivery_fee = props.order.delivery_fee ?? '';
+    form.review_version = props.order.review_version; form.delivery_fee = props.order.delivery_fee ?? ''; form.outlet_id = props.order.outlet_id;
     form.requested_date = props.order.requested_date; form.requested_time = props.order.requested_time?.slice(0, 5) ?? '';
 });
 const feeLabel = (fee: number | null) => fee === null ? 'Not set' : rupiah(Number(fee));
@@ -114,6 +115,17 @@ const whatsappLink = computed(() => {
     return `https://wa.me/${props.order.customer.whatsapp}?text=${encodeURIComponent(text)}`;
 });
 
+const waitingMinutes = computed(() => Math.floor((Date.now() - new Date(props.order.created_at).getTime()) / 60000));
+// Paid after the H-1 cutoff: the server moved the date; staff tell the customer (no WhatsApp API).
+const idDate = (date: string) => new Intl.DateTimeFormat('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${date}T00:00:00Z`));
+const movedLink = computed(() => {
+    if (!props.order.moved_from_date) return null;
+    const what = props.order.fulfillment_method === 'delivery' ? 'pengiriman' : 'pengambilan';
+    const time = props.order.requested_time ? `, jam ${props.order.requested_time.slice(0, 5).replace(':', '.')} WITA (tetap)` : '';
+    const text = `Halo ${props.order.customer.name}, pembayaran pesanan ${props.order.order_code} sudah kami terima. Terima kasih!\n\nKarena pembayaran masuk setelah batas produksi (${poCutoff.value.replace('D-1 at', 'H-1 pukul').replace(':', '.')}), jadwal ${what} kami pindahkan dari ${idDate(props.order.moved_from_date)} ke *${idDate(props.order.requested_date)}*${time}.\n\nCek status pesanan: ${window.location.origin}/cek-pesanan?code=${props.order.order_code}`;
+    return `https://wa.me/${props.order.customer.whatsapp}?text=${encodeURIComponent(text)}`;
+});
+
 // Webhooks update MySQL; polling keeps the open page current without a WebSocket server.
 let timer: ReturnType<typeof setInterval> | undefined;
 onMounted(() => {
@@ -127,20 +139,26 @@ onBeforeUnmount(() => clearInterval(timer));
 <template>
     <Head :title="`${order.order_code} · Orlena`" /><Link href="/admin/orders" class="admin-back"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i>Back to orders</Link><h1 class="my-5 break-all text-3xl font-bold">{{ order.order_code }}</h1>
     <div class="mb-6 flex flex-wrap gap-2"><StatusBadge kind="order" :status="order.order_status" /><StatusBadge kind="payment" :status="order.payment_status" /></div>
+    <p v-if="order.order_status === 'pending_review' && waitingMinutes > 60" role="alert" class="admin-alert admin-alert-error mb-6"><i class="fa-solid fa-stopwatch" aria-hidden="true"></i> Waiting for review for {{ waitingMinutes >= 120 ? `${Math.floor(waitingMinutes / 60)} hours` : `${waitingMinutes} minutes` }}. Orders should be confirmed within 1 hour.</p>
     <p v-if="!can.review" class="admin-alert admin-alert-info mb-6">Read-only mode. Your account can view orders and payments but cannot change them.</p>
-    <p v-if="['pending_review', 'confirmed'].includes(order.order_status) && (dayLoad.closed || (dayLoad.capacity && dayLoad.orders > dayLoad.capacity))" class="admin-alert admin-alert-error mb-6"><i class="fa-solid fa-calendar-xmark" aria-hidden="true"></i> {{ dayLoad.closed ?? `This PO date is over capacity: ${dayLoad.orders} orders for a capacity of ${dayLoad.capacity}.` }} Make sure production can handle it or agree on another date with the customer.</p>
-    <p v-else-if="order.order_status === 'pending_review' && dayLoad.capacity" class="admin-muted mb-4 text-sm"><i class="fa-solid fa-calendar-day" aria-hidden="true"></i> {{ dayLoad.orders }} of {{ dayLoad.capacity }} orders for this PO date.</p>
+    <p v-if="['pending_review', 'confirmed'].includes(order.order_status) && (dayLoad.closed || (dayLoad.capacity && dayLoad.orders > dayLoad.capacity))" class="admin-alert admin-alert-error mb-6"><i class="fa-solid fa-calendar-xmark" aria-hidden="true"></i> {{ dayLoad.closed ?? `${order.outlet_name_snapshot} is over its daily quota on this date: ${dayLoad.orders} orders for a quota of ${dayLoad.capacity}.` }} Make sure production can handle it or agree on another date with the customer.</p>
+    <p v-else-if="order.order_status === 'pending_review' && dayLoad.capacity" class="admin-muted mb-4 text-sm"><i class="fa-solid fa-calendar-day" aria-hidden="true"></i> {{ dayLoad.orders }} of {{ dayLoad.capacity }} orders at {{ order.outlet_name_snapshot }} on this PO date (daily quota).</p>
     <p v-if="additions.length && order.order_status === 'pending_review'" class="admin-alert admin-alert-info mb-6"><i class="fa-solid fa-cart-plus" aria-hidden="true"></i> The customer added items {{ additions.length }} time(s), last on {{ witaTime(additions[0].created_at) }}. Items and total below include the additions; check availability again before confirming.</p>
+    <div v-if="order.moved_from_date && order.order_status !== 'cancelled'" class="admin-alert admin-alert-info mb-6 flex flex-wrap items-center justify-between gap-3">
+        <p class="m-0"><i class="fa-solid fa-calendar-plus" aria-hidden="true"></i> Paid after the cut-off for <strong>{{ order.moved_from_date }}</strong>, so the order moved to <strong>{{ order.requested_date }}</strong> (same time). Let the customer know.</p>
+        <a v-if="movedLink" :href="movedLink" target="_blank" rel="noopener noreferrer" class="admin-secondary"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i>Tell the customer</a>
+    </div>
+    <p v-if="order.nearest_outlet && ['pending_review', 'confirmed'].includes(order.order_status)" class="admin-alert admin-alert-info mb-6"><i class="fa-solid fa-location-crosshairs" aria-hidden="true"></i> The customer asked Orlena to choose the <strong>nearest outlet</strong>. It is set to {{ order.outlet_name_snapshot }} for now; check the location and change the outlet in the review form if needed.</p>
     <p v-if="paidAfterCancel" role="alert" class="admin-alert admin-alert-error mb-6">This order was cancelled but payment was received. Refund it manually in DOKU and record the result.</p>
     <p v-if="shortfall > 0" role="alert" class="admin-alert admin-alert-error mb-6"><i class="fa-solid fa-scale-unbalanced" aria-hidden="true"></i> Received {{ rupiah(received) }} of {{ rupiah(order.total) }}: an older payment link was paid after the total changed. Collect the remaining {{ rupiah(shortfall) }} (Mark as paid records only the difference) or adjust the order.</p>
     <p v-if="overpaid > 0" role="alert" class="admin-alert admin-alert-error mb-6"><i class="fa-solid fa-scale-unbalanced" aria-hidden="true"></i> Received {{ rupiah(received) }}, which is {{ rupiah(overpaid) }} more than the total {{ rupiah(order.total) }}. Refund the difference to the customer.</p>
-    <div class="grid grid-cols-1 gap-6 xl:grid-cols-2"><section class="admin-card"><h2 class="mb-5 text-xl">Customer and fulfillment</h2><dl class="space-y-4 text-sm"><div><dt class="font-bold">Name</dt><dd>{{ order.customer.name }}</dd></div><div><dt class="font-bold">WhatsApp</dt><dd>{{ order.customer.whatsapp }}</dd></div><div v-if="order.customer.email"><dt class="font-bold">Email</dt><dd>{{ order.customer.email }}</dd></div><div><dt class="font-bold">Fulfillment</dt><dd>{{ order.fulfillment_method === 'delivery' ? `Delivery (Gojek/Grab) from ${order.outlet_name_snapshot}` : `Pickup at ${order.outlet_name_snapshot}` }}</dd></div><div><dt class="font-bold">Requested date / time</dt><dd>{{ order.requested_date }} {{ order.requested_time?.slice(0,5) }} WITA</dd></div><div v-if="order.delivery_address"><dt class="font-bold">Address</dt><dd class="whitespace-pre-wrap">{{ order.delivery_address }}</dd></div><div v-if="order.customer_note"><dt class="font-bold">Customer note</dt><dd class="whitespace-pre-wrap">{{ order.customer_note }}</dd></div><div v-if="order.card_message"><dt class="font-bold"><i class="fa-solid fa-envelope-open-text" aria-hidden="true"></i> Greeting card</dt><dd class="whitespace-pre-wrap rounded-lg bg-cream p-3">{{ order.card_message }}</dd></div></dl></section><section class="admin-card"><h2 class="mb-5 text-xl">Order items</h2><OrderSummary :order="order" lang="en" /></section></div>
+    <div class="grid grid-cols-1 gap-6 xl:grid-cols-2"><section class="admin-card"><h2 class="mb-5 text-xl">Customer and fulfillment</h2><dl class="space-y-4 text-sm"><div><dt class="font-bold">Name</dt><dd>{{ order.customer.name }}</dd></div><div><dt class="font-bold">WhatsApp</dt><dd>{{ order.customer.whatsapp }}</dd></div><div v-if="order.customer.email"><dt class="font-bold">Email</dt><dd>{{ order.customer.email }}</dd></div><div><dt class="font-bold">Fulfillment</dt><dd>{{ order.fulfillment_method === 'delivery' ? `Delivery (Gojek/Grab) from ${order.outlet_name_snapshot}` : `Pickup at ${order.outlet_name_snapshot}` }}</dd></div><div><dt class="font-bold">Requested date / time</dt><dd>{{ order.requested_date }} {{ order.requested_time?.slice(0,5) }} WITA</dd></div><div v-if="order.delivery_address"><dt class="font-bold">Address</dt><dd class="whitespace-pre-wrap">{{ order.delivery_address }}</dd></div><div v-if="order.location_url"><dt class="font-bold">Location</dt><dd><a :href="order.location_url" target="_blank" rel="noopener noreferrer" class="break-all underline"><i class="fa-solid fa-map-location-dot" aria-hidden="true"></i> Open in Google Maps</a></dd></div><div v-if="order.recipient_whatsapp"><dt class="font-bold">Recipient WhatsApp</dt><dd><a :href="`https://wa.me/${order.recipient_whatsapp}`" target="_blank" rel="noopener noreferrer" class="underline">{{ order.recipient_whatsapp }}</a></dd></div><div v-if="order.customer_note"><dt class="font-bold">Customer note</dt><dd class="whitespace-pre-wrap">{{ order.customer_note }}</dd></div><div v-if="order.card_message"><dt class="font-bold"><i class="fa-solid fa-envelope-open-text" aria-hidden="true"></i> Greeting card</dt><dd class="whitespace-pre-wrap rounded-lg bg-cream p-3">{{ order.card_message }}</dd></div></dl></section><section class="admin-card"><h2 class="mb-5 text-xl">Order items</h2><OrderSummary :order="order" lang="en" /></section></div>
 
     <section class="admin-card mt-6">
         <h2 class="mb-4 text-xl">Payment</h2>
         <p v-if="errors.payment" role="alert" class="admin-alert admin-alert-error mb-4">{{ errors.payment }}</p>
         <div v-if="can.review && order.order_status === 'pending_review'" class="space-y-3 text-sm">
-            <p v-if="dokuEnabled">Check products, production capacity, schedule and delivery fee. Confirming creates a {{ linkKind }} for <strong>{{ rupiah(order.total) }}</strong>, valid for 24 hours (until {{ $page.props.poCutoff }} at the latest).</p>
+            <p v-if="dokuEnabled">Check products, production capacity, schedule and delivery fee. Confirming creates a {{ linkKind }} for <strong>{{ rupiah(order.total) }}</strong>, valid for 2 hours (until {{ $page.props.poPaymentClose }} at the latest; still unpaid then, the order is cancelled automatically).</p>
             <p v-else>Check products, production capacity, schedule and delivery fee, then confirm. <strong>Online payment (DOKU) is off</strong>: ask the customer to pay {{ rupiah(order.total) }} by transfer and mark the order as paid when it arrives.</p>
             <p v-if="order.delivery_fee === null" class="admin-error-text">Set the delivery fee in the review form before confirming.</p>
             <button class="admin-primary" :disabled="busy || order.delivery_fee === null" @click="confirmOrder"><i class="fa-solid fa-circle-check" aria-hidden="true"></i>{{ busy ? 'Processing…' : dokuEnabled ? confirmPaymentLabel : 'Confirm order' }}</button>
@@ -210,10 +228,11 @@ onBeforeUnmount(() => clearInterval(timer));
             <Field v-if="order.fulfillment_method === 'delivery'" id="delivery_fee" label="Gojek/Grab delivery fee (Rp)" :error="form.errors.delivery_fee"><template #default="{ describedBy }"><input id="delivery_fee" v-model="form.delivery_fee" type="number" min="0" max="999999999" step="1" placeholder="Not set" :aria-describedby="describedBy" :disabled="form.processing"></template></Field>
             <p class="text-sm text-chocolate/65">{{ order.fulfillment_method === 'delivery' ? 'Leave empty if not decided yet. Enter 0 only for free delivery.' : 'Pickup has no delivery fee.' }}</p>
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field id="review_outlet" class="sm:col-span-2" :label="order.fulfillment_method === 'delivery' ? 'Ships from outlet' : 'Pickup outlet'" :hint="order.nearest_outlet ? 'The customer asked for the nearest outlet: check the address and location link, then choose it here. Item prices stay as quoted.' : 'Item prices stay as quoted when the outlet changes.'" :error="form.errors.outlet_id"><template #default="{ describedBy }"><select id="review_outlet" v-model="form.outlet_id" :aria-describedby="describedBy" :disabled="form.processing"><option v-for="outlet in outlets.filter(item => order.fulfillment_method !== 'delivery' || item.delivers || item.id === order.outlet_id)" :key="outlet.id" :value="outlet.id">{{ outlet.name }}</option></select></template></Field>
                 <Field id="requested_date" label="PO date" :error="form.errors.requested_date"><template #default="{ describedBy }"><input id="requested_date" v-model="form.requested_date" type="date" required :aria-describedby="describedBy" :disabled="form.processing"></template></Field>
                 <Field id="requested_time" label="Time (optional)" :error="form.errors.requested_time"><template #default="{ describedBy }"><input id="requested_time" v-model="form.requested_time" type="time" :aria-describedby="describedBy" :disabled="form.processing"></template></Field>
             </div>
-            <p class="text-xs text-chocolate/65">Change the schedule only after agreeing with the customer. The new date follows the order deadline ({{ $page.props.poCutoff }}) and the closed dates in PO schedule.</p>
+            <p class="text-xs text-chocolate/65">Change the schedule only after agreeing with the customer. The new date follows the order deadline ({{ $page.props.poCutoff }}), the closed dates in PO schedule and the outlet's daily and hourly quota.</p>
             <Field id="review_note" label="Internal review note" :error="form.errors.note"><template #default="{ describedBy }"><textarea id="review_note" v-model="form.note" required maxlength="2000" rows="3" :aria-describedby="describedBy" :disabled="form.processing" placeholder="Product and schedule check results, or why the delivery fee changed"></textarea></template></Field>
             <p class="text-xs text-chocolate/65">Notes are visible to the team only. Saving a review updates the order total but does not create a payment.</p>
             <button class="admin-primary" :disabled="form.processing"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>{{ form.processing ? 'Saving…' : 'Save review' }}</button>

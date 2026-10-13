@@ -115,10 +115,7 @@ class CatalogController extends Controller
             $record->fill($data);
             $changes = $record->getDirty();
             $record->save();
-            // Only one outlet ships delivery orders.
-            if ($record instanceof Outlet && $record->is_delivery_hub) {
-                Outlet::whereKeyNot($record->id)->where('is_delivery_hub', true)->update(['is_delivery_hub' => false]);
-            }
+
             if ($record instanceof Product) {
                 $record->outletPrices()->delete();
                 $record->outletPrices()->createMany($prices);

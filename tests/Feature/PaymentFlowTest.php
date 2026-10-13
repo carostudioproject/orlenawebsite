@@ -107,7 +107,7 @@ class PaymentFlowTest extends TestCase
         $this->post('/admin/orders/'.$order->id.'/confirm', ['review_version' => $order->fresh()->review_version])->assertSessionHasNoErrors();
     }
 
-    public function test_confirmation_creates_one_signed_doku_link_capped_by_twenty_four_hours(): void
+    public function test_confirmation_creates_one_signed_doku_link_valid_for_two_hours(): void
     {
         $this->fakeDoku();
         $order = $this->order();
@@ -121,7 +121,7 @@ class PaymentFlowTest extends TestCase
         $payment = Payment::sole();
         $this->assertSame([$order->order_code.'-P1', 'pending', 175000, 'doku'], [$payment->provider_order_id, $payment->status, $payment->amount, $payment->provider]);
         $this->assertSame(['https://sandbox.doku.com/checkout-link-v2/doku-token', 'session-1'], [$payment->payment_url, $payment->transaction_id]);
-        $this->assertSame('2030-01-02 12:00:00', $payment->expires_at->format('Y-m-d H:i:s'));
+        $this->assertSame('2030-01-01 14:00:00', $payment->expires_at->format('Y-m-d H:i:s'));
         Http::assertSent(function (HttpRequest $request) use ($order, $payment) {
             $items = collect($request['order']['line_items']);
             $components = 'Client-Id:'.self::CLIENT."\nRequest-Id:".$payment->provider_request_id."\nRequest-Timestamp:2030-01-01T04:00:00Z"
@@ -132,7 +132,7 @@ class PaymentFlowTest extends TestCase
                 && $request->header('Request-Timestamp') === ['2030-01-01T04:00:00Z']
                 && $request->header('Signature') === ['HMACSHA256='.base64_encode(hash_hmac('sha256', $components, self::KEY, true))]
                 && $request['order']['invoice_number'] === $order->order_code.'-P1' && $request['order']['amount'] === 175000
-                && $request['payment'] === ['payment_due_date' => 1440]
+                && $request['payment'] === ['payment_due_date' => 120]
                 && $request['customer']['phone'] === '6281234567890'
                 && $items->sum(fn ($item) => $item['price'] * $item['quantity']) === 175000;
         });
@@ -162,16 +162,18 @@ class PaymentFlowTest extends TestCase
             ->where('payment.checkout_url', 'https://sandbox.doku.com/checkout-link-v2/doku-token')->where('payment.qr', null));
     }
 
-    public function test_link_expiry_stops_at_cutoff_and_closed_dates_must_be_rescheduled(): void
+    public function test_link_expiry_stops_at_payment_close_and_closed_dates_must_be_rescheduled(): void
     {
         $this->fakeDoku();
         $this->actingAs(User::factory()->create());
+        // Confirmed at 20.00 for tomorrow: the 2-hour link stops at H-1 21.00.
+        $this->travelTo(CarbonImmutable::parse('2030-01-01 20:00:00', 'Asia/Makassar'));
         $order = $this->order(['requested_date' => '2030-01-02']);
         $this->confirm($order);
-        $this->assertSame('2030-01-01 18:00:00', Payment::sole()->expires_at->format('Y-m-d H:i:s'));
-        Http::assertSent(fn (HttpRequest $request) => $request['payment'] === ['payment_due_date' => 360]);
+        $this->assertSame('2030-01-01 21:00:00', Payment::sole()->expires_at->format('Y-m-d H:i:s'));
+        Http::assertSent(fn (HttpRequest $request) => $request['payment'] === ['payment_due_date' => 60]);
 
-        $this->travelTo(CarbonImmutable::parse('2030-01-01 17:50:00', 'Asia/Makassar'));
+        $this->travelTo(CarbonImmutable::parse('2030-01-01 20:50:00', 'Asia/Makassar'));
         $late = $this->order(['requested_date' => '2030-01-02']);
         $this->post('/admin/orders/'.$late->id.'/confirm', ['review_version' => 0])->assertSessionHasErrors('payment');
         $this->assertSame('pending_review', $late->fresh()->order_status);

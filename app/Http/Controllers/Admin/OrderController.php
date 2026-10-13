@@ -12,6 +12,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ReviewOrderRequest;
 use App\Models\IntegrationSync;
 use App\Models\Order;
+use App\Models\Outlet;
 use App\Models\Payment;
 use App\Services\Doku\DokuException;
 use App\Services\Payments\PaymentGateways;
@@ -57,16 +58,17 @@ class OrderController extends Controller
         $payments = $order->payments()->with('creator:id,name')->orderByDesc('attempt')->get();
 
         return Inertia::render('Admin/Orders/Show', [
-            'order' => $order->load('customer', 'items'), 'reviews' => $reviews, 'history' => $history, 'payments' => $payments,
+            'order' => $order->load('customer', 'items'),
+            'outlets' => Outlet::takingPreorders()->orderBy('position')->orderBy('name')->get(['id', 'name', 'delivers']), 'reviews' => $reviews, 'history' => $history, 'payments' => $payments,
             'additions' => $order->additions()->latest('id')->get(['id', 'items', 'subtotal_added', 'previous_total', 'new_total', 'created_at']),
             'canCancelPaid' => request()->user()->can('cancel-paid-orders'),
             // Money received on all attempts, to flag an order paid less (or more) than its current total.
             'received' => (int) $payments->where('status', 'paid')->sum('amount'),
             'dokuEnabled' => PaymentGateways::enabled(), 'paymentMode' => PaymentGateways::mode(), 'customerChooses' => PaymentGateways::customerChooses(), 'manualMethods' => RecordManualPayment::METHODS,
-            // Staff check capacity by hand; this only warns when the date is busy or closed.
+            // The outlet's load on this date against its daily quota, and whether the date is closed.
             'dayLoad' => [
-                'orders' => Order::whereDate('requested_date', $order->requested_date)->where('order_status', '!=', 'cancelled')->count(),
-                'capacity' => app(PreorderDate::class)->dailyCapacity(), 'closed' => app(PreorderDate::class)->closedReason($order->requested_date->toDateString(), english: true),
+                'orders' => Order::where('outlet_id', $order->outlet_id)->whereDate('requested_date', $order->requested_date)->where('order_status', '!=', 'cancelled')->count(),
+                'capacity' => $order->outlet?->daily_quota, 'closed' => app(PreorderDate::class)->closedReason($order->requested_date->toDateString(), english: true),
             ],
             'erzapSync' => IntegrationSync::where('provider', 'erzap')->where('subject_type', 'orders')->where('subject_id', $order->id)->latest('id')
                 ->first(['id', 'type', 'status', 'attempts', 'last_error', 'synced_at', 'next_attempt_at', 'external_ref']),

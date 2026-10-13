@@ -41,6 +41,10 @@ class OrderWhatsApp
             '*Penerimaan:* '.($delivery ? 'Delivery via Gojek/Grab dari '.$order->outlet_name_snapshot : 'Pickup di '.$order->outlet_name_snapshot),
             '*Jadwal:* '.$schedule,
         ];
+        // The address, recipient and location stay out of the wa.me link (it is stored in browser history); staff read them on the order page.
+        if ($delivery && $order->nearest_outlet) {
+            $lines[] = '_Outlet pengirim dipilihkan Orlena (terdekat)._';
+        }
         if ($order->customer_note) {
             $lines[] = '*Catatan:* '.$order->customer_note;
         }

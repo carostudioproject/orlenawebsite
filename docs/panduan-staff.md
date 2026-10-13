@@ -20,7 +20,7 @@ Login di `/admin/login` dengan **username** dan kata sandi. Ganti nama, username
 1. **Pesanan masuk** berstatus *Awaiting review*. Buka **Orders**, lalu klik **View**.
 2. **Periksa** produk, tanggal, ketersediaan, dan kapasitas produksi. Bila tanggal PO penuh atau tutup, muncul peringatan merah di atas pesanan.
 3. **Delivery**: isi ongkir Gojek/Grab di form pemeriksaan. Jadwal bisa diubah bila sudah disepakati dengan pelanggan.
-4. Klik **Confirm & Create Payment**. Link pembayaran DOKU dibuat (berlaku 24 jam, paling lambat batas pemesanan H-1). Kirim link ke pelanggan dengan tombol **Send via WhatsApp** atau **Copy payment link**.
+4. Klik **Confirm & Create Payment**. Link pembayaran DOKU dibuat (berlaku 2 jam, paling lambat H-1 pukul 21.00). Pesanan yang dibayar setelah H-1 19.00 otomatis pindah ke tanggal buka berikutnya; kabari pelanggan dengan tombol **Tell the customer** di halaman pesanan. Pesanan yang belum dibayar pada H-1 21.00 dibatalkan otomatis. Kirim link ke pelanggan dengan tombol **Send via WhatsApp** atau **Copy payment link**.
 5. Setelah pelanggan membayar, status berubah otomatis menjadi **Paid**.
    *Selama DOKU belum diaktifkan (`DOKU_ENABLED=false`)*: tombolnya bernama **Confirm order** dan tidak membuat link. Minta pelanggan transfer, lalu di bagian Payment pilih metode (Bank transfer, Cash, QRIS outlet), isi catatan, dan klik **Mark as paid**. Pesanan menjadi Paid dan otomatis dikirim ke Erzap. Bila belum berubah, klik **Check status in DOKU**.
 6. Lanjutkan **Start processing → Mark as ready → Mark as out for delivery / completed**.
@@ -41,7 +41,9 @@ Pelanggan masih bisa **menambah produk** sendiri selama pesanan belum dikonfirma
 
 ## PO schedule
 
-- **Order deadline** (batas pemesanan): jam terakhir memesan untuk suatu tanggal, sehari sebelumnya (H-1, default 18.00 WITA).
+- **Order deadline** (batas pemesanan): jam terakhir memesan untuk suatu tanggal, sehari sebelumnya (H-1, default 19.00 WITA).
+- **Payment close** (batas pembayaran): H-1 default 21.00 WITA. Dibayar antara batas pemesanan dan jam ini → pindah ke tanggal berikutnya; belum dibayar pada jam ini → dibatalkan otomatis.
+- **Order up to**: berapa hari ke depan pelanggan boleh memesan (default 30).
 - **Closed every week** dan **Closed dates** (libur/acara): pelanggan tidak bisa memilih tanggal tersebut. Pesanan yang sudah ada tidak berubah.
 - **Orders per day capacity**: hanya peringatan untuk staff, tidak menolak pesanan.
 

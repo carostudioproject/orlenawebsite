@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\PaymentController;
 use App\Http\Controllers\Admin\PostController;
 use App\Http\Controllers\Admin\ProductImportController;
+use App\Http\Controllers\Admin\ProductionController;
 use App\Http\Controllers\Admin\ProfileController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\ScheduleController;
@@ -37,6 +38,7 @@ Route::get('/robots.txt', [PublicPageController::class, 'robots']);
 Route::middleware(PrivateOrderResponse::class)->group(function () {
     Route::get('/order', [CheckoutController::class, 'index'])->block(10, 10);
     Route::post('/order', [CheckoutController::class, 'store'])->middleware('throttle:preorder-submit')->block(10, 10);
+    Route::get('/order/jadwal', [CheckoutController::class, 'availability'])->middleware('throttle:60,1');
     Route::redirect('/products', '/order');
     Route::redirect('/products/{product}', '/order')->whereNumber('product');
     Route::redirect('/cart', '/order');
@@ -78,6 +80,9 @@ Route::middleware(['auth', 'active-staff'])->prefix('admin')->group(function () 
         Route::get('/customers', [CustomerController::class, 'index']);
         Route::get('/customers/{whatsapp}', [CustomerController::class, 'show']);
         Route::get('/payments', [PaymentController::class, 'index']);
+        // Rekap CK: what the central kitchen produces for a date (page, PDF, WhatsApp).
+        Route::get('/production', [ProductionController::class, 'index']);
+        Route::get('/production/pdf', [ProductionController::class, 'pdf'])->middleware('throttle:report-export');
     });
     Route::middleware('can:view-reports')->prefix('/reports')->group(function () {
         Route::get('/', [ReportController::class, 'index']);

@@ -32,6 +32,7 @@ class HandleInertiaRequests extends Middleware
                 ],
             ],
             'poCutoff' => fn () => app(PreorderDate::class)->cutoffLabel(english: true),
+            'poPaymentClose' => fn () => app(PreorderDate::class)->paymentCloseLabel(english: true),
             'flash' => ['success' => fn () => $request->session()->get('success')],
         ];
     }

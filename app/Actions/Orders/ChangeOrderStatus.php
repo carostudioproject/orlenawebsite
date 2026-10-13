@@ -41,25 +41,25 @@ class ChangeOrderStatus
         }, 3);
     }
 
-    /** Returns false when an open DOKU link could not be closed and may still accept payment. */
-    public function cancel(Order $order, string $from, string $reason, User $actor): bool
+    /** Returns false when an open DOKU link could not be closed and may still accept payment. A null actor is the system (unpaid at payment close). */
+    public function cancel(Order $order, string $from, string $reason, ?User $actor): bool
     {
         $closing = DB::transaction(function () use ($order, $from, $reason, $actor) {
             $locked = $this->lock($order, $from);
             if (in_array($from, ['completed', 'cancelled'], true)) {
                 $this->fail('Completed or cancelled orders cannot be cancelled.');
             }
-            if ($locked->payment_status === 'paid' && ! $actor->can('cancel-paid-orders')) {
+            if ($locked->payment_status === 'paid' && ! $actor?->can('cancel-paid-orders')) {
                 $this->fail('Paid orders can only be cancelled by an Admin because they need a refund.');
             }
             $open = Payment::where('order_id', $locked->id)->whereIn('status', Payment::OPEN)->lockForUpdate()->get();
             foreach ($open as $payment) {
                 $payment->update(['status' => 'cancelled', 'open_order_id' => null]);
-                Audit::record('payment.cancelled', $payment, ['attempt' => $payment->attempt], $actor->id);
+                Audit::record('payment.cancelled', $payment, ['attempt' => $payment->attempt], $actor?->id);
             }
             $locked->update(['order_status' => 'cancelled'] + ($locked->payment_status === 'pending' ? ['payment_status' => 'cancelled'] : []));
-            OrderHistory::record($locked, $from, 'cancelled', $actor->id, $reason);
-            Audit::record('order.cancelled', $locked, ['from' => $from, 'payment_status' => $locked->payment_status], $actor->id);
+            OrderHistory::record($locked, $from, 'cancelled', $actor?->id, $reason);
+            Audit::record('order.cancelled', $locked, ['from' => $from, 'payment_status' => $locked->payment_status], $actor?->id);
 
             return $open;
         }, 3);

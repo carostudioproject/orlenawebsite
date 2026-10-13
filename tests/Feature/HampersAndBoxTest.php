@@ -7,7 +7,9 @@ use App\Models\Category;
 use App\Models\Order;
 use App\Models\Outlet;
 use App\Models\Product;
+use App\Models\Setting;
 use App\Models\User;
+use App\Services\Reports\ProductionRecap;
 use App\Support\OrderWhatsApp;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -62,7 +64,7 @@ class HampersAndBoxTest extends TestCase
         $this->cheese = $product($mini, 'MN0002', 'Mini Cheese', 'Mini', 0, false);
         $this->box = $product($mini, 'MB0001', 'Mini Size Box', 'Box 2x2', 60000, true, ['content_type' => 'box', 'content_count' => 4, 'content_pricing' => 'included']);
         $this->box->contentOptions()->sync([$this->choco->id, $this->cheese->id]);
-        $this->outlet = Outlet::create(['code' => 'T', 'name' => 'Test Outlet', 'address' => 'Jl', 'is_active' => true, 'is_delivery_hub' => true]);
+        $this->outlet = Outlet::create(['code' => 'T', 'name' => 'Test Outlet', 'address' => 'Jl', 'is_active' => true, 'delivers' => true]);
         config(['services.erzap.enabled' => false]);
     }
 
@@ -72,7 +74,7 @@ class HampersAndBoxTest extends TestCase
 
         return [
             'checkout_key' => session('checkout_key'), 'items' => $items, 'name' => 'Sinta', 'whatsapp' => '081234567890', 'outlet_id' => $this->outlet->id,
-            'fulfillment_method' => 'pickup', 'requested_date' => '2030-01-02', 'requested_time' => '14:30', 'card_message' => 'Selamat Galungan',
+            'fulfillment_method' => 'pickup', 'requested_date' => '2030-01-02', 'requested_time' => '14:00', 'card_message' => 'Selamat Galungan',
         ];
     }
 
@@ -268,5 +270,59 @@ class HampersAndBoxTest extends TestCase
         // "3x MN0003, 1x MN0001": a fixed box keeps how many of each flavour.
         $fixed = Product::where('sku', 'MB0003')->sole();
         $this->assertSame(['set', 4, ['MN0001' => 1, 'MN0003' => 3]], [$fixed->content_type, $fixed->content_count, $fixed->contentOptions()->orderBy('sku')->get()->mapWithKeys(fn ($option) => [$option->sku => $option->pivot->quantity])->all()]);
+    }
+
+    public function test_the_kitchen_recap_counts_paid_orders_with_their_contents(): void
+    {
+        $lines = [
+            ['product_id' => $this->hampers->id, 'quantity' => 2, 'quoted_price' => 110000, 'contents' => [$this->berry->id]],
+            ['product_id' => $this->box->id, 'quantity' => 1, 'quoted_price' => 60000, 'contents' => [$this->choco->id, $this->choco->id, $this->choco->id, $this->cheese->id]],
+            ['product_id' => $this->berry->id, 'quantity' => 1, 'quoted_price' => 100000],
+        ];
+        $this->post('/order', $this->payload($lines))->assertSessionHasNoErrors();
+        $this->post('/order', $this->payload([['product_id' => $this->berry->id, 'quantity' => 5, 'quoted_price' => 100000]]))->assertSessionHasNoErrors();
+        $this->post('/order', $this->payload([['product_id' => $this->berry->id, 'quantity' => 7, 'quoted_price' => 100000]]))->assertSessionHasNoErrors();
+        [$paid, $unpaid, $cancelled] = Order::orderBy('id')->get()->all();
+        $paid->update(['payment_status' => 'paid', 'order_status' => 'confirmed']);
+        $unpaid->update(['order_status' => 'confirmed']);
+        $cancelled->update(['payment_status' => 'paid', 'order_status' => 'cancelled']);
+
+        $recap = app(ProductionRecap::class)->build('2030-01-02');
+        // Contents count as products to bake (2 hampers x 1 Berry + 1 Berry); hampers and boxes are packaging.
+        $this->assertFalse($recap['final']);
+        $this->assertSame(['orders' => 1, 'pickup' => 1, 'delivery' => 0, 'pieces' => 7], $recap['summary']);
+        $this->assertSame([['Berry Cheese', 3], ['Mini Cheese', 1], ['Mini Choco', 3]], array_map(fn ($row) => [$row['name'], $row['quantity']], $recap['products']));
+        $this->assertSame(['Test Outlet' => 3], $recap['products'][0]['by_outlet']);
+        $this->assertSame([['Hampers Galungan', 2], ['Mini Size Box', 1]], array_map(fn ($row) => [$row['name'], $row['quantity']], $recap['packages']));
+        $this->assertSame(1, $recap['unpaid']);
+        $this->assertSame(['2× Berry Cheese (Fullsize)'], $recap['orders'][0]['orders'][0]['items'][0]['contents']);
+
+        $text = app(ProductionRecap::class)->whatsappText($recap);
+        $this->assertStringContainsString("*Total produksi*\n- 3x Berry Cheese (Fullsize)", $text);
+        $this->assertStringContainsString('SEMENTARA', $text);
+
+        // Final after the D-1 cutoff; the CK number from the schedule settings goes into the wa.me link.
+        $this->travelTo(CarbonImmutable::parse('2030-01-01 19:00:01', 'Asia/Makassar'));
+        Setting::put(['ck.whatsapp' => '6281234567890']);
+        $this->actingAs(User::factory()->create(['role' => 'admin']))->get('/admin/production?date=2030-01-02')->assertInertia(fn (Assert $page) => $page->component('Admin/Production')
+            ->where('recap.final', true)->where('recap.summary.pieces', 7)->where('whatsappUrl', fn ($url) => str_starts_with($url, 'https://wa.me/6281234567890?text=')));
+        $this->get('/admin/production/pdf?date=2030-01-02')->assertOk()->assertHeader('Content-Type', 'application/pdf')
+            ->assertHeader('Content-Disposition', 'attachment; filename="rekap-ck-orlena-2030-01-02.pdf"');
+        $this->get('/admin/production?date=02-01-2030')->assertSessionHasErrors('date');
+
+        $this->actingAs(User::factory()->create(['role' => 'content_editor']))->get('/admin/production')->assertForbidden();
+    }
+
+    public function test_the_kitchen_whatsapp_number_is_set_on_the_schedule_page(): void
+    {
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
+        $base = ['cutoff_time' => '19:00', 'payment_close_time' => '21:00', 'max_days' => 30, 'closed_weekdays' => [], 'delivery_tolerance' => 60];
+        $this->put('/admin/schedule', [...$base, 'ck_whatsapp' => '0812 3456'])->assertSessionHasErrors('ck_whatsapp');
+        $this->put('/admin/schedule', [...$base, 'ck_whatsapp' => '6281234567890'])->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame('6281234567890', Setting::get('ck.whatsapp'));
+        $this->get('/admin/schedule')->assertInertia(fn (Assert $page) => $page->where('settings.ck_whatsapp', '6281234567890')->where('settings.delivery_tolerance', 60));
+        // Clearing a value (no CK number) removes it instead of failing on the NOT NULL column.
+        $this->put('/admin/schedule', [...$base, 'ck_whatsapp' => ''])->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertNull(Setting::get('ck.whatsapp'));
     }
 }

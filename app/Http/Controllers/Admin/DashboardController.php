@@ -44,6 +44,8 @@ class DashboardController extends Controller
 
         return [
             'pending_review' => Order::where('order_status', 'pending_review')->count(),
+            // Rules Order Website: staff confirm within 1 hour of the order coming in.
+            'overdue_review' => Order::where('order_status', 'pending_review')->where('created_at', '<', now()->subHour())->count(),
             'awaiting_payment' => Order::where('order_status', 'confirmed')->where('payment_status', 'pending')->count(),
             'to_process' => Order::whereIn('order_status', self::ACTIVE)->where('payment_status', 'paid')->count(),
             'tomorrow' => Order::whereDate('requested_date', now()->addDay())->where('order_status', '!=', 'cancelled')->count(),
@@ -57,7 +59,7 @@ class DashboardController extends Controller
             'needs_action' => Order::with('customer:id,name')
                 ->where(fn ($q) => $q->where('order_status', 'pending_review')->orWhere(fn ($q) => $q->whereIn('order_status', self::ACTIVE)->where('payment_status', 'paid')))
                 ->orderBy('requested_date')->orderBy('id')->limit(6)
-                ->get(['id', 'order_code', 'customer_id', 'requested_date', 'total', 'order_status', 'payment_status']),
+                ->get(['id', 'order_code', 'customer_id', 'requested_date', 'total', 'order_status', 'payment_status', 'created_at']),
         ];
     }
 }

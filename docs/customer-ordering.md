@@ -21,7 +21,7 @@ Staff review now supports manual delivery fees and internal notes with an immuta
 
 - Product IDs and quantities are submitted with the form. The server rejects duplicate products, empty selections, quantities outside 1-99, and more than 50 distinct products. Prices and totals are calculated from the database.
 - Order creation rechecks product/outlet active flags, reads authoritative prices, locks the relevant rows, and compares displayed unit prices against current database prices. Price changes require review and resubmission. No stock quantity is read, reserved, or decremented.
-- Cutoff uses `Asia/Makassar`: exactly H-1 18:00:00 is accepted; later times move the earliest date forward. The server checks again at submission even if checkout was opened earlier.
+- Cutoff uses `Asia/Makassar`: exactly H-1 19:00:00 is accepted (default, set in PO schedule); dates go up to 30 days ahead; later times move the earliest date forward. The server checks again at submission even if checkout was opened earlier.
 - A unique checkout UUID and session ownership hash make matching retries return the existing order after submission. A changed payload under a committed key is rejected. Session locks serialize shopping requests; database unique constraints independently prevent duplicate checkout keys.
 - Public Order Code format is currently `ORL-YYMMDD-XXXXXXXXXX` (10 random alphanumeric characters). This is a technical default, not a final business formatting commitment. The code contains no personal information.
 - Orders preserve product name, category/size, SKU, price, quantity, outlet name, and total snapshots. Later catalog changes do not rewrite historical orders.
@@ -66,7 +66,8 @@ Next milestone: Confirm & Create Payment (built; now DOKU Checkout, see payments
 
 - Flow: choose a **category** → **product** → **size** (Fullsize/Halfsize, only for products that have sizes) → **quantity** → **Tambah** into the cart shown beside the form (sticky on desktop, a bottom bar on mobile). Then customer details, then fulfillment and schedule.
 - Sizes are a product attribute (`products.size`). Products with the same name in the same category are shown as one item with size choices. The owner's FULLSIZE/HALFSIZE BROWNIES categories were merged into **Brownies** with sizes; SKUs, prices, and active flags did not change. Orders keep the size in `order_items.variant_snapshot`.
-- **Pickup** asks for an outlet. **Delivery (Gojek/Grab)** has no outlet choice: it always ships from the outlet marked **Outlet pengiriman delivery** in the Outlet menu (one outlet only), and its prices apply. If that outlet is inactive or not taking PO, delivery is unavailable.
+- **Pickup** asks for an outlet. **Delivery (Gojek/Grab)** asks for an outlet marked **Ships delivery**, or **Pilihkan outlet terdekat** (staff choose it during review), plus the delivery address, a Google Maps link and the recipient WhatsApp. Prices follow the outlet. If no outlet ships delivery, delivery is unavailable.
+- The date is picked on a calendar per outlet: dates past the cutoff, closed or full are greyed out (tap one to see why), then an hourly slot (pickup shows places left; delivery times are estimates).
 - Requested time is now required.
 - The WhatsApp message is formatted with bold labels, one line per item (with size), subtotal, delivery/pickup, schedule in Indonesian date format, and the note. Address and email are still left out.
 - Instagram/TikTok links and the WhatsApp number come from **Konten website → Sosial media & WhatsApp** and are used by the header, mobile menu, footer, floating WhatsApp button, and the order handoff. An empty social link hides it.

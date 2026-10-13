@@ -9,13 +9,14 @@ import { rupiah } from '../../Support/money';
 defineOptions({ layout: ShopLayout });
 interface PayOrder {
     order_code: string; order_status: OrderStatus; payment_status: PaymentStatus; fulfillment_method: 'pickup' | 'delivery'; outlet_name_snapshot: string;
-    requested_date: string; requested_time: string | null; subtotal: number; delivery_fee: number | null; total: number;
+    requested_date: string; moved_from_date: string | null; requested_time: string | null; subtotal: number; delivery_fee: number | null; total: number;
     items: Pick<OrderItem, 'id' | 'parent_item_id' | 'product_name_snapshot' | 'category_snapshot' | 'variant_snapshot' | 'quantity' | 'subtotal'>[];
 }
 type Method = 'va_bca' | 'qris';
 interface OpenPayment { qr: string | null; va: string | null; method: Method | 'checkout'; amount: number; expires_at: string | null; demo?: boolean; checkout_url?: string | null }
 interface MethodOption { value: Method; label: string }
-const props = defineProps<{ order: PayOrder; payment: OpenPayment | null; methods: MethodOption[]; dueAt: string | null; whatsappUrl: string | null }>();
+const props = defineProps<{ order: PayOrder; payment: OpenPayment | null; methods: MethodOption[]; dueAt: string | null; paymentClose: string; deliveryTolerance: number; whatsappUrl: string | null }>();
+const poCutoff = computed(() => (usePage().props.poCutoff as string | undefined) ?? 'H-1 pukul 19.00 WITA');
 
 const paymentStatus = ref<PaymentStatus>(props.order.payment_status);
 const orderStatus = ref<OrderStatus>(props.order.order_status);
@@ -56,6 +57,8 @@ async function check() {
         payment.value = data.payment;
         methods.value = data.methods ?? [];
         if (paid.value || !data.payment) window.clearInterval(poll);
+        // Paid after the cutoff moves the date: reload the order to show it.
+        if (paid.value) router.reload({ only: ['order'] });
     } catch {
         // Offline for a moment: try again on the next tick.
     }
@@ -109,6 +112,7 @@ const message = computed(() => {
             <span class="mx-auto flex size-16 items-center justify-center rounded-full bg-matcha text-2xl text-white"><i class="fa-solid fa-check" aria-hidden="true"></i></span>
             <h2 class="mt-4 text-2xl">Pembayaran diterima</h2>
             <p class="admin-muted mt-2 text-sm">Terima kasih! Pesanan Anda sedang disiapkan sesuai jadwal.</p>
+            <p v-if="order.moved_from_date" class="admin-alert admin-alert-info mt-4 text-left text-sm"><i class="fa-solid fa-calendar-plus" aria-hidden="true"></i> Pembayaran masuk setelah batas produksi ({{ poCutoff }}), jadi jadwal dipindah ke <strong>{{ schedule }}</strong>. Hubungi Orlena bila ingin tanggal lain.</p>
             <Link :href="`/cek-pesanan?code=${order.order_code}`" class="admin-secondary mt-5"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>Cek status pesanan</Link>
         </section>
 
@@ -206,6 +210,7 @@ const message = computed(() => {
                 <p class="m-0 text-3xl font-bold tabular-nums">{{ rupiah(order.total) }}</p>
                 <p class="mt-3 text-sm text-chocolate/75">Pilih <strong>Virtual Account BCA</strong> atau <strong>QRIS</strong> di atas. Nomor VA atau kode QR dibuat setelah Anda memilih.</p>
                 <p v-if="dueLabel" class="mt-2 text-sm">Bayar sebelum <strong>{{ dueLabel }}</strong></p>
+                <p class="mt-3 rounded-xl bg-cream p-3 text-xs text-chocolate/80">Bayar sebelum {{ poCutoff }} agar diproduksi sesuai tanggal. Pembayaran setelah itu sampai {{ paymentClose }} dipindah ke tanggal buka berikutnya; belum dibayar pada {{ paymentClose }} dibatalkan otomatis.</p>
             </section>
 
             <section v-else class="admin-card mt-6" role="status">
@@ -221,6 +226,7 @@ const message = computed(() => {
                 <div><dt class="font-bold">Penerimaan</dt><dd>{{ order.fulfillment_method === 'pickup' ? `Pickup di ${order.outlet_name_snapshot}` : `Delivery (Gojek/Grab) dari ${order.outlet_name_snapshot}` }}</dd></div>
                 <div><dt class="font-bold">Jadwal</dt><dd>{{ schedule }}</dd></div>
             </dl>
+            <p v-if="order.fulfillment_method === 'delivery'" class="mt-4 rounded-xl bg-cream p-3 text-xs text-chocolate/80"><i class="fa-solid fa-clock" aria-hidden="true"></i> Jam kirim adalah perkiraan. Kurir Gojek/Grab dipesankan Orlena, dengan toleransi keterlambatan hingga {{ deliveryTolerance }} menit tanpa kompensasi.</p>
         </section>
 
         <a v-if="whatsappUrl" :href="whatsappUrl" target="_blank" rel="noopener noreferrer" class="admin-secondary mt-6 w-full"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i>Tanya Orlena via WhatsApp</a>

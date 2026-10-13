@@ -29,10 +29,12 @@ class CatalogSeeder extends Seeder
                 $record->forceFill(['position' => $position])->save();
             }
         }
-        // Fresh installs need a delivery outlet too; the first outlet ships until staff choose another (never overrides a choice).
-        if (! Outlet::where('is_delivery_hub', true)->exists()) {
-            Outlet::orderBy('position')->orderBy('id')->first()?->update(['is_delivery_hub' => true]);
+        // Fresh installs need a delivery outlet too; the first outlet ships until staff choose others (never overrides a choice).
+        if (! Outlet::where('delivers', true)->exists()) {
+            Outlet::orderBy('position')->orderBy('id')->first()?->update(['delivers' => true]);
         }
+        // Rules Order Website: mall outlets take 30 orders a day.
+        Outlet::where('daily_quota', 100)->where(fn ($query) => $query->where('name', 'like', '%Living World%')->orWhere('name', 'like', '%Galeria%'))->update(['daily_quota' => 30]);
         // Marketing categories are not SKUs. Do not invent sellable products or prices.
     }
 }

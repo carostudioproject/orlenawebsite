@@ -5,7 +5,13 @@ Payments use **DOKU Checkout** (non-SNAP API). Midtrans was replaced on 29 Septe
 ## Decisions
 
 - Customers pay the full order total (subtotal + delivery fee) in one DOKU Checkout transaction. No deposits.
-- A payment link is valid for 24 hours, but always closes by the order deadline (H-1, default 18:00 WITA) for the requested date. A link with less than 15 minutes left is refused. Staff must agree a new date with the customer first.
+- A payment link is valid for 2 hours, but always closes by the payment close (H-1, default 21:00 WITA) for the requested date. A link with less than 15 minutes left is refused. Staff must agree a new date with the customer first.
+- Paid after the order deadline (H-1, default 19:00 WITA): the order moves to the next open date, same time (`orders.moved_from_date`, a review row and `order.moved_after_cutoff` audit). This happens before the Erzap sync, so Erzap gets the new date. The order page shows a **Tell the customer** WhatsApp button.
+- Still unpaid at the payment close: `orders:cancel-unpaid` (every minute) checks open links at DOKU, then cancels the order with the reason in the status history. Partly paid orders are left for staff.
+- Dates go up to 30 days ahead (PO schedule → Order up to), checked on the order form, at submit and when staff change the schedule.
+- Capacity per outlet (Outlets → Capacity and pickup hours): a daily quota (100, 30 at the malls) for pickup and delivery from the outlet, and at most 20 pickups per hourly slot. Slots run from the first slot (13:00) until an hour before closing. Cancelled orders free their place. The order form calendar (`GET /order/jadwal`) greys out dates past the cutoff, closed or full, and shows the places left per slot; `CreatePreorder` checks again under a lock on the outlet. Staff changing the date, time or outlet in the review form are held to the same quota.
+- Delivery: the customer chooses an outlet that ships delivery (Outlets → Ships delivery) or **Pilihkan outlet terdekat**. A nearest-outlet order starts at the first delivery outlet and is flagged on the order page; staff pick the outlet in the review form (item prices stay as quoted). The recipient's WhatsApp and a Google Maps link are required; the delivery tolerance (PO schedule, default 60 minutes) is shown on the form and the payment page.
+- Orders waiting for review longer than 1 hour are flagged on the dashboard and the order page.
 - Staff may create a new link after the previous one failed, expired, or was cancelled. A reason is required. The old attempt stays in the history.
 
 ## Working flow
@@ -48,7 +54,7 @@ Until DOKU is configured, **Confirm order** only confirms the order (no payment 
 
 Same page as below, with two buttons: **Virtual Account BCA** and **QRIS** (`DOKU_METHODS`). Both use the DOKU Direct API (SNAP) with the same token and signing.
 
-- No default method: **Confirm order** only confirms and sets the payment deadline (`orders.payment_due_at`, 24 hours capped by the PO cutoff). Staff send `/bayar/{code}` (copy or WhatsApp button); the VA number or QR is created when the customer picks a method. Cek Pesanan's "Bayar sekarang" opens the same page.
+- No default method: **Confirm order** only confirms and sets the payment deadline (`orders.payment_due_at`, 2 hours capped by the H-1 payment close). Staff send `/bayar/{code}` (copy or WhatsApp button); the VA number or QR is created when the customer picks a method. Cek Pesanan's "Bayar sekarang" opens the same page.
 - After the deadline the page no longer offers the choice; staff use **Create new payment link** (with a reason) to reopen it with a new deadline.
 - With only one method in `DOKU_METHODS`, confirming creates that code right away (no choice step).
 

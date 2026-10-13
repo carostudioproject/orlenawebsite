@@ -108,7 +108,7 @@ class VaPaymentTest extends TestCase
         $this->actingAs($admin)->get('/admin/orders/'.$order->id)->assertInertia(fn (Assert $page) => $page->where('customerChooses', true)->has('order.payment_due_at'));
         auth()->logout();
         $order->refresh();
-        $this->assertSame(['confirmed', 'not_created', '2030-01-02 12:00'], [$order->order_status, $order->payment_status, $order->payment_due_at->setTimezone('Asia/Makassar')->format('Y-m-d H:i')]);
+        $this->assertSame(['confirmed', 'not_created', '2030-01-01 14:00'], [$order->order_status, $order->payment_status, $order->payment_due_at->setTimezone('Asia/Makassar')->format('Y-m-d H:i')]);
         $this->assertSame(0, Payment::count());
         Http::assertNothingSent();
 
@@ -162,7 +162,7 @@ class VaPaymentTest extends TestCase
                 && $request['partnerServiceId'] === '   19008' && $request['customerNo'] === '0' && $request['virtualAccountNo'] === '   190080'
                 && $request['trxId'] === $order->order_code.'-P1' && $request['totalAmount'] === ['value' => '175000.00', 'currency' => 'IDR']
                 && $request['virtualAccountTrxType'] === 'C' && $request['additionalInfo']['channel'] === 'VIRTUAL_ACCOUNT_BCA'
-                && $request['virtualAccountName'] === 'Sinta Private' && $request['expiredDate'] === '2030-01-02T11:00:00+07:00';
+                && $request['virtualAccountName'] === 'Sinta Private' && $request['expiredDate'] === '2030-01-01T13:00:00+07:00';
         });
 
         $this->get('/bayar/'.$order->order_code)->assertOk()

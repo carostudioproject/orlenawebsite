@@ -12,6 +12,7 @@ use App\Models\Order;
 use App\Models\Outlet;
 use App\Models\Payment;
 use App\Models\Product;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\Payments\PaymentGateways;
 use Carbon\CarbonImmutable;
@@ -46,7 +47,7 @@ class AuditFixesTest extends TestCase
     {
         $category = Category::firstOrCreate(['name' => 'Brownies']);
         $product = Product::create(['category_id' => $category->id, 'sku' => 'SKU-'.Str::random(5), 'barcode' => 'BC-'.Str::random(6), 'name' => 'Berry', 'price' => 80000, 'is_active' => true]);
-        $outlet = Outlet::firstOrCreate(['code' => 'T'], ['name' => 'Test Outlet', 'address' => 'Jl', 'is_active' => true, 'is_delivery_hub' => true]);
+        $outlet = Outlet::firstOrCreate(['code' => 'T'], ['name' => 'Test Outlet', 'address' => 'Jl', 'is_active' => true, 'delivers' => true]);
         $customer = Customer::create(['name' => 'Sinta', 'whatsapp' => '6281234567890', 'email' => null]);
         $order = Order::create([
             'order_code' => 'ORL-300101-'.strtoupper(Str::random(10)), 'checkout_key' => (string) Str::uuid(), 'owner_hash' => str_repeat('a', 64), 'request_hash' => str_repeat('b', 64),
@@ -77,18 +78,20 @@ class AuditFixesTest extends TestCase
         $this->assertSame([true, 'demo', true], [PaymentGateways::demo(), PaymentGateways::mode(), PaymentGateways::enabled()]);
     }
 
-    public function test_rescheduling_keeps_the_payment_deadline_before_the_new_cutoff(): void
+    public function test_rescheduling_keeps_the_payment_deadline_before_the_new_payment_close(): void
     {
         config(['services.doku.enabled' => false, 'services.doku.mode' => 'demo', 'services.doku.methods' => ['va_bca', 'qris']]);
+        Setting::put(['po.payment_close_time' => '19:00']);
+        $this->travelTo(CarbonImmutable::parse('2030-01-01 18:00:00', 'Asia/Makassar'));
         $order = $this->order();
         $staff = User::factory()->create(['role' => 'staff']);
         $this->actingAs($staff)->post('/admin/orders/'.$order->id.'/confirm', ['review_version' => 0])->assertSessionHasNoErrors();
-        $this->assertSame('2030-01-02 12:00', $order->fresh()->payment_due_at->setTimezone('Asia/Makassar')->format('Y-m-d H:i'));
+        $this->assertSame('2030-01-01 20:00', $order->fresh()->payment_due_at->setTimezone('Asia/Makassar')->format('Y-m-d H:i'));
 
-        // Moved to 2 January: its H-1 cutoff (1 January 18:00 WITA) comes before the 24-hour deadline.
+        // Moved to 2 January: its H-1 payment close (set to 1 January 19:00 WITA here) comes before the 2-hour deadline.
         $this->post('/admin/orders/'.$order->id.'/review', ['review_version' => 0, 'delivery_fee' => 0, 'note' => 'Earlier', 'requested_date' => '2030-01-02', 'requested_time' => '10:00'])
             ->assertSessionHasNoErrors();
-        $this->assertSame('2030-01-01 18:00', $order->fresh()->payment_due_at->setTimezone('Asia/Makassar')->format('Y-m-d H:i'));
+        $this->assertSame('2030-01-01 19:00', $order->fresh()->payment_due_at->setTimezone('Asia/Makassar')->format('Y-m-d H:i'));
     }
 
     public function test_the_mapping_page_rejects_duplicate_and_spaced_barcodes(): void

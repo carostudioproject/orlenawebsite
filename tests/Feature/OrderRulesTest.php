@@ -1,0 +1,194 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Actions\Payments\ApplyPaymentStatus;
+use App\Models\Category;
+use App\Models\ClosedDate;
+use App\Models\Customer;
+use App\Models\Order;
+use App\Models\Outlet;
+use App\Models\Payment;
+use App\Models\Product;
+use App\Models\User;
+use App\Services\Ordering\Capacity;
+use Carbon\CarbonImmutable;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Inertia\Testing\AssertableInertia as Assert;
+use Tests\TestCase;
+
+/** Rules Order Website (Revisi 2): cutoff H-1 19.00, payment close H-1 21.00, 2-hour links, at most 30 days ahead. */
+class OrderRulesTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function beforeRefreshingDatabase(): void
+    {
+        if (config('database.connections.mysql.database') !== 'orlena_test') {
+            throw new \RuntimeException('Only orlena_test is allowed.');
+        }
+    }
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config(['services.doku.enabled' => false, 'services.erzap.enabled' => false]);
+        $this->travelTo(CarbonImmutable::parse('2030-01-01 12:00:00', 'Asia/Makassar'));
+    }
+
+    private function order(array $overrides = []): Order
+    {
+        $category = Category::firstOrCreate(['name' => 'Brownies']);
+        $product = Product::create(['category_id' => $category->id, 'sku' => 'SKU-'.Str::random(6), 'name' => 'Brownie', 'price' => 80000, 'is_active' => true]);
+        $outlet = Outlet::firstOrCreate(['code' => 'TEST'], ['name' => 'Test Outlet', 'address' => 'Address', 'is_active' => true]);
+        $customer = Customer::create(['name' => 'Sinta', 'whatsapp' => '6281234567890']);
+        $order = Order::create([
+            'order_code' => 'ORL-300101-'.strtoupper(Str::random(10)), 'checkout_key' => (string) Str::uuid(), 'owner_hash' => str_repeat('a', 64),
+            'request_hash' => str_repeat('b', 64), 'customer_id' => $customer->id, 'outlet_id' => $outlet->id, 'outlet_name_snapshot' => $outlet->name,
+            'fulfillment_method' => 'pickup', 'requested_date' => '2030-01-02', 'requested_time' => '14:00', 'subtotal' => 80000, 'delivery_fee' => 0, 'total' => 80000,
+            'order_status' => 'confirmed', 'payment_status' => 'pending', ...$overrides,
+        ]);
+        $order->items()->create([
+            'product_id' => $product->id, 'product_name_snapshot' => 'Brownie', 'category_snapshot' => 'Brownies', 'sku_snapshot' => $product->sku,
+            'unit_price_snapshot' => 80000, 'quantity' => 1, 'subtotal' => 80000,
+        ]);
+
+        return $order;
+    }
+
+    /** A payment row outside DOKU (no gateway to ask), like a link waiting to be paid. */
+    private function payment(Order $order, string $status = 'pending', ?int $amount = null): Payment
+    {
+        $attempt = (int) Payment::where('order_id', $order->id)->max('attempt') + 1;
+
+        return Payment::create([
+            'order_id' => $order->id, 'attempt' => $attempt, 'provider' => 'manual', 'provider_order_id' => $order->order_code.'-P'.$attempt,
+            'open_order_id' => $status === 'pending' ? $order->id : null, 'amount' => $amount ?? $order->total, 'status' => $status,
+        ]);
+    }
+
+    private function pay(Payment $payment): string
+    {
+        return app(ApplyPaymentStatus::class)->handle(['order_id' => $payment->provider_order_id, 'transaction_status' => 'SUCCESS', 'gross_amount' => (string) $payment->amount, 'payment_type' => 'TEST'], 'test');
+    }
+
+    public function test_paid_before_the_cutoff_keeps_the_date(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2030-01-01 18:59:00', 'Asia/Makassar'));
+        $order = $this->order();
+        $this->pay($this->payment($order));
+        $this->assertSame(['paid', '2030-01-02', null], [$order->fresh()->payment_status, $order->fresh()->requested_date->toDateString(), $order->fresh()->moved_from_date]);
+    }
+
+    public function test_paid_after_the_cutoff_moves_to_the_next_open_date(): void
+    {
+        ClosedDate::create(['date' => '2030-01-03', 'reason' => 'Libur']);
+        $order = $this->order();
+        $payment = $this->payment($order);
+        // 20.30 on D-1: production for 2 January is closed; 3 January is closed too, so 4 January.
+        $this->travelTo(CarbonImmutable::parse('2030-01-01 20:30:00', 'Asia/Makassar'));
+        $this->assertSame('applied', $this->pay($payment));
+
+        $order->refresh();
+        $this->assertSame(['paid', '2030-01-04', '2030-01-02', 1], [$order->payment_status, $order->requested_date->toDateString(), $order->moved_from_date->toDateString(), $order->review_version]);
+        $this->assertDatabaseHas('order_reviews', ['order_id' => $order->id, 'actor_id' => null, 'previous_schedule' => '2030-01-02 14:00', 'schedule' => '2030-01-04 14:00']);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'order.moved_after_cutoff']);
+
+        $this->actingAs(User::factory()->create())->get('/admin/orders/'.$order->id)
+            ->assertInertia(fn (Assert $page) => $page->where('order.moved_from_date', '2030-01-02')->where('order.requested_date', '2030-01-04')->where('poPaymentClose', 'D-1 at 21:00 WITA'));
+        $this->get('/bayar/'.$order->order_code)->assertInertia(fn (Assert $page) => $page->where('order.moved_from_date', '2030-01-02')->where('paymentClose', 'H-1 pukul 21.00 WITA'));
+    }
+
+    public function test_unpaid_orders_are_cancelled_at_payment_close(): void
+    {
+        $waiting = $this->order(['order_status' => 'pending_review', 'payment_status' => 'not_created']);
+        $linked = $this->order();
+        $this->payment($linked);
+        $paid = $this->order(['payment_status' => 'paid']);
+        $this->payment($paid, 'paid');
+        $partly = $this->order(['payment_status' => 'pending']);
+        $this->payment($partly, 'paid', 50000);
+        $later = $this->order(['requested_date' => '2030-01-03']);
+
+        $this->travelTo(CarbonImmutable::parse('2030-01-01 20:59:00', 'Asia/Makassar'));
+        $this->artisan('orders:cancel-unpaid')->expectsOutputToContain('Cancelled 0')->assertSuccessful();
+
+        $this->travelTo(CarbonImmutable::parse('2030-01-01 21:00:00', 'Asia/Makassar'));
+        $this->artisan('orders:cancel-unpaid')->expectsOutputToContain('Cancelled 2')->assertSuccessful();
+        $this->assertSame(['cancelled', 'not_created'], [$waiting->fresh()->order_status, $waiting->fresh()->payment_status]);
+        $this->assertSame(['cancelled', 'cancelled'], [$linked->fresh()->order_status, $linked->fresh()->payment_status]);
+        $this->assertSame(['cancelled', null], [Payment::where('order_id', $linked->id)->sole()->status, Payment::where('order_id', $linked->id)->sole()->open_order_id]);
+        $this->assertSame('confirmed', $paid->fresh()->order_status);
+        // Partly paid: staff collect the rest or refund; never cancelled automatically.
+        $this->assertSame('confirmed', $partly->fresh()->order_status);
+        $this->assertSame('confirmed', $later->fresh()->order_status);
+        $this->assertSame([null, 'Otomatis: belum dibayar sampai batas pembayaran (H-1 pukul 21.00 WITA).'],
+            array_values((array) DB::table('order_status_histories')->where('order_id', $linked->id)->where('to_status', 'cancelled')->sole(['actor_id', 'note'])));
+
+        // A payment arriving after the cancellation is still recorded, and the order is not moved.
+        $this->travelTo(CarbonImmutable::parse('2030-01-01 21:05:00', 'Asia/Makassar'));
+        $this->pay(Payment::where('order_id', $linked->id)->sole());
+        $this->assertSame(['cancelled', 'paid', null], [$linked->fresh()->order_status, $linked->fresh()->payment_status, $linked->fresh()->moved_from_date]);
+    }
+
+    public function test_dates_go_up_to_thirty_days_ahead(): void
+    {
+        $order = $this->order(['order_status' => 'pending_review', 'payment_status' => 'not_created', 'requested_date' => '2030-01-03']);
+        $this->actingAs(User::factory()->create());
+        $review = ['review_version' => 0, 'delivery_fee' => 0, 'note' => 'Customer asked', 'requested_time' => '14:00'];
+        $this->post('/admin/orders/'.$order->id.'/review', [...$review, 'requested_date' => '2030-02-01'])->assertSessionHasErrors('requested_date');
+        $this->post('/admin/orders/'.$order->id.'/review', [...$review, 'requested_date' => '2030-01-31'])->assertSessionHasNoErrors();
+        // The order form calendar ends at the same limit.
+        $this->getJson('/order/jadwal?outlet_id='.$order->outlet_id.'&method=pickup')->assertOk()->assertJsonPath('days.29.date', '2030-01-31')->assertJsonCount(30, 'days');
+    }
+
+    public function test_the_21st_pickup_in_an_hour_and_the_31st_order_at_a_mall_are_refused(): void
+    {
+        $mall = Outlet::create(['code' => 'LW', 'name' => 'Living World', 'address' => 'Mall', 'is_active' => true, 'daily_quota' => 30]);
+        $make = fn (int $count, array $attributes) => collect(range(1, $count))->each(fn () => $this->order(['order_status' => 'pending_review', 'payment_status' => 'not_created', ...$attributes]));
+        $make(20, ['outlet_id' => $mall->id, 'requested_date' => '2030-01-05', 'requested_time' => '14:00']);
+        $capacity = app(Capacity::class);
+        $this->assertSame('Slot jam 14.00 di Living World sudah penuh. Pilih jam lain.', $capacity->problem($mall, '2030-01-05', '14:00', 'pickup'));
+        $this->assertNull($capacity->problem($mall, '2030-01-05', '15:00', 'pickup'));
+        // Delivery times are estimates: no hourly limit, only the daily quota.
+        $this->assertNull($capacity->problem($mall, '2030-01-05', '14:00', 'delivery'));
+        $day = collect($this->getJson('/order/jadwal?outlet_id='.$mall->id.'&method=pickup')->json('days'))->firstWhere('date', '2030-01-05');
+        $this->assertSame(['open', ['time' => '14:00', 'left' => 0], ['time' => '15:00', 'left' => 20]], [$day['status'], $day['slots'][1], $day['slots'][2]]);
+
+        $make(10, ['outlet_id' => $mall->id, 'requested_date' => '2030-01-05', 'requested_time' => '16:00', 'fulfillment_method' => 'delivery']);
+        $this->assertSame('Kuota Living World untuk tanggal ini sudah penuh. Pilih tanggal atau outlet lain.', $capacity->problem($mall, '2030-01-05', '17:00', 'pickup'));
+        $this->assertSame('full', collect($this->getJson('/order/jadwal?outlet_id='.$mall->id.'&method=pickup')->json('days'))->firstWhere('date', '2030-01-05')['status']);
+        // Another outlet on the same date still has room; a cancelled order frees its place.
+        $this->assertNull($capacity->problem(Outlet::where('code', 'TEST')->sole(), '2030-01-05', '14:00', 'pickup'));
+        Order::where('outlet_id', $mall->id)->latest('id')->first()->update(['order_status' => 'cancelled']);
+        $this->assertNull($capacity->problem($mall, '2030-01-05', '17:00', 'pickup'));
+    }
+
+    public function test_staff_choose_the_nearest_outlet_within_its_quota(): void
+    {
+        $order = $this->order(['order_status' => 'pending_review', 'payment_status' => 'not_created', 'fulfillment_method' => 'delivery', 'nearest_outlet' => true, 'delivery_fee' => null, 'requested_date' => '2030-01-05']);
+        $pickupOnly = Outlet::create(['code' => 'PO', 'name' => 'Pickup Only', 'address' => 'A', 'is_active' => true]);
+        $near = Outlet::create(['code' => 'NEAR', 'name' => 'Near Outlet', 'address' => 'B', 'is_active' => true, 'delivers' => true, 'daily_quota' => 1]);
+        $this->order(['outlet_id' => $near->id, 'requested_date' => '2030-01-05']);
+        $this->actingAs(User::factory()->create());
+        $this->get('/admin/orders/'.$order->id)->assertInertia(fn (Assert $page) => $page->where('order.nearest_outlet', true)->has('outlets', 3));
+        $review = ['review_version' => 0, 'delivery_fee' => 20000, 'note' => 'Nearest outlet'];
+        $this->post('/admin/orders/'.$order->id.'/review', [...$review, 'outlet_id' => $pickupOnly->id])->assertSessionHasErrors('outlet_id');
+        $this->post('/admin/orders/'.$order->id.'/review', [...$review, 'outlet_id' => $near->id])->assertSessionHasErrors('requested_date');
+        $near->update(['daily_quota' => 2]);
+        $this->post('/admin/orders/'.$order->id.'/review', [...$review, 'outlet_id' => $near->id])->assertSessionHasNoErrors();
+        $order->refresh();
+        $this->assertSame([$near->id, 'Near Outlet', false, 20000], [$order->outlet_id, $order->outlet_name_snapshot, $order->nearest_outlet, $order->delivery_fee]);
+    }
+
+    public function test_orders_waiting_more_than_an_hour_are_flagged(): void
+    {
+        $this->order(['order_status' => 'pending_review', 'payment_status' => 'not_created']);
+        $this->actingAs(User::factory()->create());
+        $this->get('/admin')->assertInertia(fn (Assert $page) => $page->where('orders.overdue_review', 0));
+        $this->travel(61)->minutes();
+        $this->get('/admin')->assertInertia(fn (Assert $page) => $page->where('orders.overdue_review', 1));
+    }
+}

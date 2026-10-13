@@ -11,6 +11,7 @@ use App\Models\Order;
 use App\Models\Payment;
 use App\Services\Doku\DokuException;
 use App\Services\Payments\PaymentGateways;
+use App\Support\PreorderDate;
 use App\Support\ShopPage;
 use App\Support\SiteContent;
 use Illuminate\Http\Request;
@@ -29,12 +30,13 @@ class PaymentPageController extends Controller
         return ShopPage::render($request, 'Payment', 'Pembayaran', [
             'order' => [
                 ...$order->only('order_code', 'order_status', 'payment_status', 'fulfillment_method', 'outlet_name_snapshot', 'requested_time', 'subtotal', 'delivery_fee', 'total'),
-                'requested_date' => $order->requested_date->toDateString(),
+                'requested_date' => $order->requested_date->toDateString(), 'moved_from_date' => $order->moved_from_date?->toDateString(),
                 'items' => $order->items->map(fn ($item) => $item->only('id', 'parent_item_id', 'product_name_snapshot', 'category_snapshot', 'variant_snapshot', 'quantity', 'subtotal'))->values(),
             ],
             'payment' => $this->payment($order),
             'methods' => $this->methods($order),
             'dueAt' => $order->payment_due_at?->toIso8601String(),
+            'paymentClose' => app(PreorderDate::class)->paymentCloseLabel(), 'deliveryTolerance' => app(PreorderDate::class)->deliveryTolerance(),
             'whatsappUrl' => preg_match('/^[1-9][0-9]{7,14}$/', $number)
                 ? 'https://wa.me/'.$number.'?text='.rawurlencode('Halo Orlena, saya ingin menanyakan pembayaran pesanan '.$order->order_code.'.') : null,
         ]);

@@ -43,7 +43,12 @@ class CatalogRequest extends FormRequest
                 'maps_url' => ['nullable', 'url:https', 'max:1000'],
                 'is_active' => ['required', 'boolean'],
                 'accepts_preorder' => ['sometimes', 'boolean'],
-                'is_delivery_hub' => ['sometimes', 'boolean'],
+                'delivers' => ['sometimes', 'boolean'],
+                // Rules Order Website: daily quota (100, 30 at malls), pickups per hourly slot, and the slot hours.
+                'daily_quota' => ['sometimes', 'required', 'integer', 'min:1', 'max:10000'],
+                'hourly_quota' => ['sometimes', 'required', 'integer', 'min:1', 'max:1000'],
+                'first_slot' => ['sometimes', 'required', 'date_format:H:i'],
+                'closes_at' => ['sometimes', 'required', 'date_format:H:i', 'after:first_slot'],
                 'upload' => ContentImage::RULES,
             ],
             'products' => [

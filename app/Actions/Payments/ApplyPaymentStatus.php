@@ -5,8 +5,10 @@ namespace App\Actions\Payments;
 use App\Actions\Integrations\ErzapSync;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Services\Ordering\Capacity;
 use App\Services\Payments\PaymentGateways;
 use App\Support\Audit;
+use App\Support\PreorderDate;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -82,7 +84,8 @@ class ApplyPaymentStatus
                 return ['underpaid', 'Diterima Rp '.number_format($received, 0, ',', '.').' dari total Rp '.number_format($order->total, 0, ',', '.')];
             }
             $order->update(['payment_status' => 'paid']);
-            // Paid orders go to Erzap; sent later by the scheduler, never inside this transaction.
+            $this->moveIfLate($order);
+            // Paid orders go to Erzap (with the final date); sent later by the scheduler, never inside this transaction.
             ErzapSync::queue($order);
             $this->closeOtherLinks($order, $payment);
         } elseif ($target === 'refunded') {
@@ -96,6 +99,28 @@ class ApplyPaymentStatus
         }
 
         return ['applied', null];
+    }
+
+    /**
+     * Rules Order Website: paid after the H-1 cutoff, the order misses that day's production and moves to the next open date
+     * (usually H+2), same time. Staff then tell the customer with the WhatsApp button on the order page.
+     */
+    private function moveIfLate(Order $order): void
+    {
+        $dates = app(PreorderDate::class);
+        $from = $order->requested_date->toDateString();
+        if ($order->order_status === 'cancelled' || now('Asia/Makassar')->lessThanOrEqualTo($dates->cutoff($from))) {
+            return;
+        }
+        $to = app(Capacity::class)->nextOpenDate($order);
+        $time = $order->requested_time ? ' '.substr($order->requested_time, 0, 5) : '';
+        $order->update(['requested_date' => $to, 'moved_from_date' => $from, 'review_version' => $order->review_version + 1]);
+        DB::table('order_reviews')->insert([
+            'order_id' => $order->id, 'actor_id' => null, 'previous_delivery_fee' => $order->delivery_fee, 'delivery_fee' => $order->delivery_fee,
+            'note' => 'Paid after the cut-off ('.$dates->cutoffLabel(english: true).'): moved to the next open date.',
+            'previous_schedule' => $from.$time, 'schedule' => $to.$time, 'created_at' => now(),
+        ]);
+        Audit::record('order.moved_after_cutoff', $order, ['from' => $from, 'to' => $to]);
     }
 
     /** Once the order is paid, other open links are closed so the customer cannot pay twice (at DOKU after commit). */

@@ -17,7 +17,8 @@ use Illuminate\Validation\ValidationException;
 
 class CreatePaymentLink
 {
-    private const LIFETIME_MINUTES = 24 * 60;
+    /** Rules Order Website: a payment link is valid for 2 hours, and never past H-1 payment close. */
+    private const LIFETIME_MINUTES = 120;
 
     private const MINIMUM_MINUTES = 15;
 
@@ -185,8 +186,8 @@ class CreatePaymentLink
             if (Payment::where('open_order_id', $locked->id)->exists()) {
                 $this->fail('A payment link is being created or is still open. Wait a moment, then reload the page.');
             }
-            // A kept deadline still stops at the current date's H-1 cutoff (the schedule may have changed).
-            $deadline = $deadline?->min($this->dates->cutoff($locked->requested_date->toDateString()));
+            // A kept deadline still stops at the current date's H-1 payment close (the schedule may have changed).
+            $deadline = $deadline?->min($this->dates->paymentClose($locked->requested_date->toDateString()));
             if ($deadline && ! $deadline->isFuture()) {
                 $this->fail('Batas waktu pembayaran sudah lewat. Hubungi Orlena melalui WhatsApp untuk link baru.');
             }
@@ -254,9 +255,9 @@ class CreatePaymentLink
     private function expiry(Order $order): CarbonImmutable
     {
         $now = CarbonImmutable::now('Asia/Makassar')->startOfMinute();
-        $expiresAt = $now->addMinutes(self::LIFETIME_MINUTES)->min($this->dates->cutoff($order->requested_date->toDateString()));
+        $expiresAt = $now->addMinutes(self::LIFETIME_MINUTES)->min($this->dates->paymentClose($order->requested_date->toDateString()));
         if ($now->diffInMinutes($expiresAt, false) < self::MINIMUM_MINUTES) {
-            $this->fail('The payment deadline for this PO date has passed ('.$this->dates->cutoffLabel(english: true).'). Change the schedule in the review form or cancel the order.');
+            $this->fail('The payment deadline for this PO date has passed ('.$this->dates->paymentCloseLabel(english: true).'). Change the schedule in the review form or cancel the order.');
         }
 
         return $expiresAt;

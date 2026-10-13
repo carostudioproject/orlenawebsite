@@ -36,7 +36,7 @@ class PreorderFlowTest extends TestCase
         CarbonImmutable::setTestNow(CarbonImmutable::parse('2030-01-01 12:00:00', 'Asia/Makassar'));
         $category = Category::create(['name' => 'FULLSIZE TEST']);
         $product = Product::create(['category_id' => $category->id, 'sku' => 'TEST-PO', 'name' => 'Test Brownie', 'price' => 80000, 'is_active' => true]);
-        $outlet = Outlet::create(['code' => 'TEST-PO', 'name' => 'Test Outlet', 'address' => 'Outlet address', 'is_active' => true, 'is_delivery_hub' => true]);
+        $outlet = Outlet::create(['code' => 'TEST-PO', 'name' => 'Test Outlet', 'address' => 'Outlet address', 'is_active' => true, 'delivers' => true]);
 
         return [$product, $outlet];
     }
@@ -48,7 +48,8 @@ class PreorderFlowTest extends TestCase
         return [
             'checkout_key' => session('checkout_key'), 'items' => [['product_id' => $product->id, 'quantity' => 2, 'quoted_price' => $product->priceAt($outlet)]],
             'name' => 'Customer Test', 'whatsapp' => '081234567890', 'email' => null, 'outlet_id' => $outlet->id,
-            'fulfillment_method' => 'pickup', 'requested_date' => '2030-01-02', 'requested_time' => '14:30',
+            'fulfillment_method' => 'pickup', 'requested_date' => '2030-01-02', 'requested_time' => '14:00',
+            'recipient_whatsapp' => '081298765432', 'location_url' => 'https://maps.app.goo.gl/AbC123xyz',
             'customer_note' => 'Test note',
         ];
     }
@@ -146,7 +147,7 @@ class PreorderFlowTest extends TestCase
         [$product, $outlet] = $this->catalog();
         $payload = $this->checkout($product, $outlet);
         $this->post('/order', [...$payload, 'requested_date' => '2030-01-01'])->assertSessionHasErrors('requested_date');
-        CarbonImmutable::setTestNow(CarbonImmutable::parse('2030-01-01 18:00:01', 'Asia/Makassar'));
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2030-01-01 19:00:01', 'Asia/Makassar'));
         $this->post('/order', $payload)->assertSessionHasErrors('requested_date');
         $this->post('/order', [...$payload, 'requested_date' => '2030-01-03'])->assertSessionHasNoErrors();
         $this->assertDatabaseCount('orders', 1);
@@ -270,7 +271,7 @@ class PreorderFlowTest extends TestCase
         DB::table('outlet_prices')->insert(['product_id' => $full->id, 'outlet_id' => $outlet->id, 'price' => 120000, 'created_at' => now(), 'updated_at' => now()]);
 
         $this->get('/order')->assertInertia(fn (Assert $page) => $page->has('categories', 2)->has('products', 3)->where('selectedOutlet', null)
-            ->where('deliveryOutlet.id', $outlet->id)
+            ->where('nearestOutlet', $outlet->id)->where('outlets.0.delivers', true)
             ->where('products', fn ($products) => collect($products)->every(fn ($product) => ! isset($product['sku']))
                 && collect($products)->where('name', 'Berry')->pluck('variant')->sort()->values()->all() === ['Fullsize', 'Halfsize']
                 && collect($products)->firstWhere('id', $full->id)['price'] === 115000));
@@ -279,22 +280,36 @@ class PreorderFlowTest extends TestCase
             ->where('products', fn ($products) => collect($products)->firstWhere('id', $full->id)['price'] === 120000));
     }
 
-    public function test_delivery_ships_from_the_delivery_outlet_and_time_is_required(): void
+    public function test_delivery_ships_from_a_delivery_outlet_or_the_nearest_and_time_is_required(): void
     {
         [$product, $outlet] = $this->catalog();
         $other = Outlet::create(['code' => 'OTHER', 'name' => 'Other Outlet', 'address' => 'Other', 'is_active' => true]);
         $payload = $this->checkout($product, $outlet);
         $this->post('/order', [...$payload, 'requested_time' => ''])->assertSessionHasErrors('requested_time');
         $this->post('/order', [...$payload, 'fulfillment_method' => 'pickup', 'outlet_id' => null])->assertSessionHasErrors('outlet_id');
+        // Pickup times are hourly slots between the first slot and an hour before closing.
+        $this->post('/order', [...$payload, 'requested_time' => '14:30'])->assertSessionHasErrors('requested_time');
+        $this->post('/order', [...$payload, 'requested_time' => '21:00'])->assertSessionHasErrors('requested_time');
 
-        // Any outlet sent with a delivery order is ignored; the delivery outlet fulfils it.
-        $this->post('/order', [...$payload, 'fulfillment_method' => 'delivery', 'outlet_id' => $other->id, 'delivery_address' => 'Jl. Delivery'])->assertSessionHasNoErrors();
+        // Delivery needs the recipient's WhatsApp and a Google Maps link, and an outlet that ships delivery (5 submits a minute per visitor).
+        $this->travel(2)->minutes();
+        $delivery = [...$payload, 'fulfillment_method' => 'delivery', 'delivery_address' => 'Jl. Delivery'];
+        $this->post('/order', [...$delivery, 'location_url' => 'https://example.test/maps', 'recipient_whatsapp' => '12'])->assertSessionHasErrors(['location_url', 'recipient_whatsapp']);
+        $this->post('/order', [...$delivery, 'outlet_id' => $other->id])->assertSessionHasErrors('outlet_id');
+        // "Nearest outlet": the first delivery outlet ships it until staff choose; the outlet sent is ignored.
+        $this->post('/order', [...$delivery, 'outlet_id' => $other->id, 'nearest_outlet' => true])->assertSessionHasNoErrors();
         $order = Order::sole();
-        $this->assertSame([$outlet->id, 'Test Outlet', null], [$order->outlet_id, $order->outlet_name_snapshot, $order->delivery_fee]);
+        $this->assertSame([$outlet->id, 'Test Outlet', null, true, '6281298765432', 'https://maps.app.goo.gl/AbC123xyz'],
+            [$order->outlet_id, $order->outlet_name_snapshot, $order->delivery_fee, $order->nearest_outlet, $order->recipient_whatsapp, $order->location_url]);
 
-        $outlet->update(['is_delivery_hub' => false]);
-        $this->get('/order')->assertInertia(fn (Assert $page) => $page->where('deliveryOutlet', null));
-        $this->post('/order', [...$this->checkout($product, $outlet), 'fulfillment_method' => 'delivery', 'delivery_address' => 'Jl. Delivery'])->assertSessionHasErrors('fulfillment_method');
+        $other->update(['delivers' => true]);
+        $this->travel(2)->minutes();
+        $this->post('/order', [...$this->checkout($product, $outlet), 'fulfillment_method' => 'delivery', 'outlet_id' => $other->id, 'delivery_address' => 'Jl. Delivery'])->assertSessionHasNoErrors();
+        $this->assertSame([$other->id, false], [Order::latest('id')->first()->outlet_id, Order::latest('id')->first()->nearest_outlet]);
+
+        Outlet::query()->update(['delivers' => false]);
+        $this->get('/order')->assertInertia(fn (Assert $page) => $page->where('nearestOutlet', null));
+        $this->post('/order', [...$this->checkout($product, $outlet), 'fulfillment_method' => 'delivery', 'delivery_address' => 'Jl. Delivery', 'nearest_outlet' => true])->assertSessionHasErrors('fulfillment_method');
     }
 
     public function test_whatsapp_message_is_readable_and_uses_the_number_from_website_content(): void
@@ -314,7 +329,7 @@ class PreorderFlowTest extends TestCase
         // Emoji and typographic symbols do not survive every WhatsApp client, so the message stays plain ASCII.
         $this->assertDoesNotMatchRegularExpression('/[^\x{0}-\x{7F}]/u', $message);
         foreach (['*Order Code:* '.$order->order_code, '- 2x Test Brownie (Halfsize) = Rp 160.000', '*Subtotal:* Rp 160.000', '*Penerimaan:* Pickup di Test Outlet',
-            '*Jadwal:* Rabu, 2 Januari 2030, 14:30 WITA', '*Catatan:* Tulis: Happy Birthday'] as $line) {
+            '*Jadwal:* Rabu, 2 Januari 2030, 14:00 WITA', '*Catatan:* Tulis: Happy Birthday'] as $line) {
             $this->assertStringContainsString($line, $message);
         }
         $this->assertStringNotContainsString('Outlet address', $message);

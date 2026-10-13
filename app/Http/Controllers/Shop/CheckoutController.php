@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\CheckoutRequest;
 use App\Models\Order;
 use App\Models\Outlet;
+use App\Services\Ordering\Capacity;
 use App\Services\Ordering\OrderPricing;
 use App\Support\OrderAccess;
 use App\Support\OrderCatalog;
@@ -22,10 +23,9 @@ class CheckoutController extends Controller
     public function index(Request $request, PreorderDate $date)
     {
         $request->validate(['outlet_id' => ['nullable', 'integer', 'min:1']]);
-        $outlets = Outlet::takingPreorders()->orderBy('position')->orderBy('name')->get(['id', 'name', 'address', 'image']);
-        $hub = Outlet::deliveryHub();
-        // Prices follow the outlet that fulfils the order: the chosen pickup outlet, or the delivery outlet.
-        $pricing = $outlets->firstWhere('id', $request->integer('outlet_id')) ?? ($hub?->id === $request->integer('outlet_id') ? $hub : null);
+        $outlets = Outlet::takingPreorders()->orderBy('position')->orderBy('name')->get(['id', 'name', 'address', 'image', 'delivers', 'closes_at']);
+        // Prices follow the outlet that fulfils the order (a "nearest outlet" delivery is priced at the first delivery outlet).
+        $pricing = $outlets->firstWhere('id', $request->integer('outlet_id'));
         if (! $request->session()->has('order_owner')) {
             $request->session()->put('order_owner', Str::random(64));
         }
@@ -35,9 +35,19 @@ class CheckoutController extends Controller
 
         return ShopPage::render($request, 'OrderForm', 'Form pre-order', [
             ...OrderCatalog::for($pricing),
-            'outlets' => $outlets, 'deliveryOutlet' => $hub?->only('id', 'name', 'address'), 'selectedOutlet' => $pricing?->id,
-            'earliestDate' => $date->earliest(), 'closedDates' => $date->upcomingClosedDates(), 'closedWeekdays' => $date->closedWeekdays(), 'checkoutKey' => $request->session()->get('checkout_key'),
+            'outlets' => $outlets->map(fn (Outlet $outlet) => [...$outlet->only('id', 'name', 'address', 'image', 'delivers'), 'closes_at' => substr($outlet->closes_at, 0, 5)]),
+            'nearestOutlet' => $outlets->where('delivers', true)->first()?->id, 'selectedOutlet' => $pricing?->id,
+            'paymentClose' => $date->paymentCloseLabel(), 'deliveryTolerance' => $date->deliveryTolerance(), 'checkoutKey' => $request->session()->get('checkout_key'),
         ]);
+    }
+
+    /** The order form calendar: which dates and hourly slots the outlet can still take (the server checks again on submit). */
+    public function availability(Request $request, Capacity $capacity)
+    {
+        $data = $request->validate(['outlet_id' => ['required', 'integer', 'min:1'], 'method' => ['required', 'in:pickup,delivery']]);
+        $outlet = Outlet::takingPreorders()->when($data['method'] === 'delivery', fn ($query) => $query->where('delivers', true))->findOrFail($data['outlet_id']);
+
+        return response()->json(['days' => $capacity->calendar($outlet, $data['method'])])->header('Cache-Control', 'no-store');
     }
 
     public function store(CheckoutRequest $request, OrderPricing $pricing, CreatePreorder $create)

@@ -69,3 +69,25 @@ label.order-content-option:has(input:checked) { border-color: var(--admin-chocol
 .order-tile-photo { display: flex; aspect-ratio: 1; align-items: center; justify-content: center; overflow: hidden; border-radius: .6rem; background: #f6e3dc; color: #3b030440; font-size: 1.25rem; }
 /* Category chips stay reachable while scrolling the products (top set from the header height). */
 .order-category-bar { position: sticky; z-index: 20; margin: -.5rem -1.5rem 0; background: white; padding: .5rem 1.5rem .6rem; box-shadow: 0 10px 14px -14px #3b030440; }
+
+/* PO calendar (order form): dates past the cutoff, closed or full stay visible but unavailable. */
+.po-calendar { border: 1px solid #3b030420; border-radius: 1rem; padding: .9rem; background: #fff; }
+.po-calendar.is-disabled { opacity: .55; pointer-events: none; }
+.po-calendar-nav { display: inline-flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.25rem; border-radius: 999px; border: 1px solid #3b030420; background: #fff; }
+.po-calendar-nav:disabled { opacity: .3; cursor: default; }
+.po-calendar-day { aspect-ratio: 1; min-height: 2.5rem; border-radius: .75rem; border: 1px solid transparent; font-size: .9rem; font-weight: 700; font-variant-numeric: tabular-nums; transition: background-color .15s, border-color .15s; }
+.po-calendar-day.is-open { background: var(--color-cream); color: var(--color-chocolate); }
+.po-calendar-day.is-open:hover { border-color: var(--color-chocolate); }
+.po-calendar-day.is-full { background: #db3e4c14; color: #db3e4c99; text-decoration: line-through; }
+.po-calendar-day.is-closed, .po-calendar-day.is-cutoff, .po-calendar-day.is-out { color: #3b030440; cursor: default; }
+.po-calendar-day.is-selected { background: var(--color-chocolate); color: #fff; }
+.po-calendar-day:focus-visible { outline: 2px solid var(--color-chocolate); outline-offset: 2px; }
+.po-calendar-key { display: inline-block; width: .7rem; height: .7rem; border-radius: .2rem; margin-right: .35rem; vertical-align: -1px; }
+.po-calendar-key.is-open { background: var(--color-cream); border: 1px solid #3b030420; }
+.po-calendar-key.is-full { background: #db3e4c33; }
+.po-calendar-key.is-closed { background: #3b030414; }
+.po-slot { display: inline-flex; flex-direction: column; align-items: center; min-width: 5.25rem; border: 1px solid #3b030429; border-radius: .9rem; padding: .45rem .7rem; font-size: .85rem; font-weight: 700; background: #fff; transition: background-color .15s, border-color .15s; }
+.po-slot small { font-size: .7rem; font-weight: 400; color: #3b0304a6; }
+.po-slot[aria-pressed="true"] { border-color: var(--color-chocolate); background: var(--color-chocolate); color: #fff; }
+.po-slot[aria-pressed="true"] small { color: #ffffffcc; }
+.po-slot:disabled { opacity: .4; text-decoration: line-through; cursor: default; }

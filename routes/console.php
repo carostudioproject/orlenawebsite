@@ -12,3 +12,5 @@ Artisan::command('inspire', function () {
 Schedule::command('payments:reconcile')->everyTenMinutes()->withoutOverlapping();
 // Sends paid transactions to Erzap; rows wait quietly while Erzap is not configured yet.
 Schedule::command('erzap:sync')->everyFiveMinutes()->withoutOverlapping();
+// Rules Order Website: still unpaid at H-1 payment close (21.00) → cancelled, so the slot is free again.
+Schedule::command('orders:cancel-unpaid')->everyMinute()->withoutOverlapping();

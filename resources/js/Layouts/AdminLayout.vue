@@ -13,6 +13,7 @@ const groups = computed(() => [
         { label: 'Overview', href: '/admin', icon: 'fa-gauge-high', visible: true },
         { label: 'Orders', href: '/admin/orders', icon: 'fa-receipt', visible: can.value.orders },
         { label: 'Payments', href: '/admin/payments', icon: 'fa-credit-card', visible: can.value.orders },
+        { label: 'Rekap CK', href: '/admin/production', icon: 'fa-kitchen-set', visible: can.value.orders },
         { label: 'Customers', href: '/admin/customers', icon: 'fa-user-group', visible: can.value.orders },
         { label: 'Reports', href: '/admin/reports', icon: 'fa-chart-column', visible: can.value.reports },
     ] },
