@@ -24,7 +24,7 @@ class ScheduleController extends Controller
             ->map(fn ($row) => ['date' => $row->requested_date->toDateString(), 'total' => (int) $row->total]);
 
         return Inertia::render('Admin/Schedule', [
-            'settings' => ['cutoff_time' => $dates->cutoffTime(), 'closed_weekdays' => $dates->closedWeekdays(), 'delivery_tolerance' => $dates->deliveryTolerance(),
+            'settings' => ['cutoff_time' => $dates->cutoffTime(), 'closed_weekdays' => $dates->closedWeekdays(), 'delivery_tolerance' => $dates->deliveryTolerance(), 'delivery_min_order' => $dates->deliveryMinOrder(), 'delivery_radius' => $dates->deliveryRadius(),
                 'payment_close_time' => $dates->paymentCloseTime(), 'max_days' => $dates->maxDays(), 'ck_whatsapp' => Setting::get('ck.whatsapp')],
             'weekdays' => collect(PreorderDate::WEEKDAYS_EN)->map(fn ($label, $value) => ['value' => $value, 'label' => $label])->values(),
             'closedDates' => ClosedDate::whereDate('date', '>=', $today)->orderBy('date')->get(['id', 'date', 'reason']),
@@ -41,10 +41,13 @@ class ScheduleController extends Controller
             'closed_weekdays' => ['present', 'array', 'max:6'],
             'closed_weekdays.*' => ['integer', 'distinct', Rule::in(array_keys(PreorderDate::WEEKDAYS))],
             'delivery_tolerance' => ['required', 'integer', 'min:0', 'max:600'],
+            'delivery_min_order' => ['nullable', 'integer', 'min:1', 'max:100000000'],
+            'delivery_radius' => ['nullable', 'integer', 'min:1', 'max:200'],
             // Where "Send via WhatsApp" on Rekap CK goes (international format, e.g. 6281234567890).
             'ck_whatsapp' => ['nullable', 'regex:/^62[0-9]{8,13}$/'],
         ], ['payment_close_time.after_or_equal' => 'Payment close must be at or after the order deadline (both on D-1).', 'ck_whatsapp.regex' => 'Use the international format without + or spaces, e.g. 6281234567890.', 'closed_weekdays.max' => 'At least one day a week must stay open for PO.', 'cutoff_time.date_format' => 'The order deadline must be in HH:MM format, e.g. 18:00.']);
         $values = ['po.cutoff_time' => $data['cutoff_time'], 'po.closed_weekdays' => array_map('intval', $data['closed_weekdays']), 'delivery.tolerance_minutes' => (int) $data['delivery_tolerance'],
+            'delivery.min_order' => $data['delivery_min_order'] ?? null, 'delivery.max_radius_km' => $data['delivery_radius'] ?? null,
             'po.payment_close_time' => $data['payment_close_time'], 'po.max_days' => (int) $data['max_days'],
             'ck.whatsapp' => $data['ck_whatsapp'] ?? null];
         Setting::put($values);

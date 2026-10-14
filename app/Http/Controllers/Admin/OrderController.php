@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Actions\Integrations\ErzapSync;
 use App\Actions\Orders\ChangeOrderStatus;
+use App\Actions\Orders\RescheduleOrder;
 use App\Actions\Orders\ReviewOrder;
 use App\Actions\Payments\CreatePaymentLink;
 use App\Actions\Payments\ReconcilePayment;
@@ -16,6 +17,7 @@ use App\Models\Outlet;
 use App\Models\Payment;
 use App\Services\Doku\DokuException;
 use App\Services\Payments\PaymentGateways;
+use App\Support\Audit;
 use App\Support\PreorderDate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -59,7 +61,9 @@ class OrderController extends Controller
 
         return Inertia::render('Admin/Orders/Show', [
             'order' => $order->load('customer', 'items'),
-            'outlets' => Outlet::takingPreorders()->orderBy('position')->orderBy('name')->get(['id', 'name', 'delivers']), 'reviews' => $reviews, 'history' => $history, 'payments' => $payments,
+            'outlets' => Outlet::takingPreorders()->orderBy('position')->orderBy('name')->get(['id', 'name', 'delivers']),
+            // Paid orders: one reschedule by staff before the current date's cutoff.
+            'reschedule' => ['blocker' => app(RescheduleOrder::class)->blocker($order), 'deadline' => app(PreorderDate::class)->cutoff($order->requested_date->toDateString())->toIso8601String()], 'reviews' => $reviews, 'history' => $history, 'payments' => $payments,
             'additions' => $order->additions()->latest('id')->get(['id', 'items', 'subtotal_added', 'previous_total', 'new_total', 'created_at']),
             'canCancelPaid' => request()->user()->can('cancel-paid-orders'),
             // Money received on all attempts, to flag an order paid less (or more) than its current total.
@@ -152,6 +156,26 @@ class OrderController extends Controller
         $status->advance($order, $data['from'], $data['to'], $request->user());
 
         return back()->with('success', 'Order status updated.');
+    }
+
+    public function reschedule(Request $request, Order $order, RescheduleOrder $reschedule)
+    {
+        $data = $request->validate([
+            'requested_date' => ['required', 'date_format:Y-m-d'], 'requested_time' => ['required', 'date_format:H:i'], 'note' => ['required', 'string', 'max:1000'],
+        ], ['note.required' => 'Write why the customer asked to reschedule.']);
+        $reschedule->handle($order, $data['requested_date'], $data['requested_time'], $data['note'], $request->user());
+
+        return back()->with('success', 'Order rescheduled. Let the customer know.');
+    }
+
+    /** A cancelled sale that was already in Erzap has been voided there by hand. */
+    public function erzapVoided(Request $request, Order $order)
+    {
+        abort_unless($order->order_status === 'cancelled' && $order->erzap_voided_at === null, 422);
+        $order->update(['erzap_voided_at' => now()]);
+        Audit::record('order.erzap_voided', $order, ['order_code' => $order->order_code], $request->user()->id);
+
+        return back()->with('success', 'Marked as cancelled in Erzap.');
     }
 
     public function cancel(Request $request, Order $order, ChangeOrderStatus $status)

@@ -15,7 +15,7 @@ export interface Preorder {
     id: number; order_code: string; customer: { name: string; whatsapp: string; email: string | null };
     items: OrderItem[]; outlet_name_snapshot: string; fulfillment_method: 'pickup' | 'delivery'; requested_date: string;
     requested_time: string | null; delivery_address: string | null; recipient_whatsapp?: string | null; location_url?: string | null; outlet_id?: number; nearest_outlet?: boolean; customer_note: string | null; card_message?: string | null;
-    subtotal: number; delivery_fee: number | null; total: number; order_status: OrderStatus; payment_status: PaymentStatus; payment_due_at?: string | null; moved_from_date?: string | null; created_at: string;
+    subtotal: number; delivery_fee: number | null; total: number; order_status: OrderStatus; payment_status: PaymentStatus; payment_due_at?: string | null; moved_from_date?: string | null; rescheduled_from?: string | null; rescheduled_at?: string | null; erzap_voided_at?: string | null; created_at: string;
 }
 export interface PaymentAttempt {
     id: number; attempt: number; provider?: string; method?: string | null; status: PaymentStatus | 'creating' | 'creation_failed'; amount: number; payment_url: string | null;

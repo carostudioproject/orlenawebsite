@@ -35,6 +35,8 @@ class IntegrationController extends Controller
         return Inertia::render('Admin/Integrations/Index', [
             'configured' => $erzap->configured(), 'missingSettings' => $erzap->missingSettings(), 'defaultOutlet' => filled(config('services.erzap.default_outlet_id')), 'syncs' => $syncs, 'filters' => $filters, 'labels' => IntegrationSync::LABELS,
             'counts' => IntegrationSync::where('provider', 'erzap')->selectRaw('status, COUNT(*) as total')->groupBy('status')->pluck('total', 'status'),
+            // Refunds: sales already in Erzap that staff still have to cancel there by hand.
+            'toVoid' => Order::needsErzapVoid()->with('customer:id,name')->latest('updated_at')->limit(20)->get(['id', 'order_code', 'customer_id', 'total', 'updated_at']),
             'mapping' => [
                 'outlets' => ['mapped' => Outlet::whereNotNull('erzap_outlet_id')->count(), 'total' => Outlet::count()],
                 'products' => ['mapped' => Product::whereNotNull('barcode')->where('barcode', '!=', '')->count(), 'total' => Product::count()],

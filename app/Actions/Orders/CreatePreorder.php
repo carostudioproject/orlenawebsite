@@ -52,6 +52,10 @@ class CreatePreorder
                 }
             }
             $quote = $pricing->quote($data['items'], $outlet);
+            $minimum = app(PreorderDate::class)->deliveryMinOrder();
+            if ($data['fulfillment_method'] === 'delivery' && $minimum && $quote['subtotal'] < $minimum) {
+                throw ValidationException::withMessages(['fulfillment_method' => 'Minimum belanja untuk delivery Rp '.number_format($minimum, 0, ',', '.').'. Tambah produk atau pilih pickup.']);
+            }
             $dates = app(PreorderDate::class);
             $earliest = $dates->earliest();
             if ($data['requested_date'] < $earliest) {

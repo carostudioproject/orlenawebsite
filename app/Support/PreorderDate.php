@@ -71,6 +71,22 @@ class PreorderDate
         return array_map('intval', Setting::get('po.closed_weekdays', []));
     }
 
+    /** Minimum subtotal for delivery orders (rupiah), or null for none. */
+    public function deliveryMinOrder(): ?int
+    {
+        $minimum = Setting::get('delivery.min_order');
+
+        return $minimum ? (int) $minimum : null;
+    }
+
+    /** Maximum delivery distance in km, shown to customers and checked by staff during review; null when not set. */
+    public function deliveryRadius(): ?int
+    {
+        $radius = Setting::get('delivery.max_radius_km');
+
+        return $radius ? (int) $radius : null;
+    }
+
     /** Delivery arrival is an estimate: minutes late without compensation, shown before the customer pays. */
     public function deliveryTolerance(): int
     {

@@ -117,6 +117,8 @@ Route::middleware(['auth', 'active-staff'])->prefix('admin')->group(function () 
         Route::post('/payments/{payment}/check', [OrderController::class, 'checkPayment'])->whereNumber('payment')->middleware('throttle:payment-check');
         Route::post('/status', [OrderController::class, 'advance']);
         Route::post('/cancel', [OrderController::class, 'cancel']);
+        Route::post('/reschedule', [OrderController::class, 'reschedule']);
+        Route::post('/erzap-voided', [OrderController::class, 'erzapVoided']);
     });
     // Erzap product export import: preview first, then apply (photos and website settings are never changed).
     Route::middleware('can:manage-catalog')->prefix('/products/import')->group(function () {

@@ -6,10 +6,12 @@ use App\Actions\Payments\ApplyPaymentStatus;
 use App\Models\Category;
 use App\Models\ClosedDate;
 use App\Models\Customer;
+use App\Models\IntegrationSync;
 use App\Models\Order;
 use App\Models\Outlet;
 use App\Models\Payment;
 use App\Models\Product;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\Ordering\Capacity;
 use Carbon\CarbonImmutable;
@@ -181,6 +183,59 @@ class OrderRulesTest extends TestCase
         $this->post('/admin/orders/'.$order->id.'/review', [...$review, 'outlet_id' => $near->id])->assertSessionHasNoErrors();
         $order->refresh();
         $this->assertSame([$near->id, 'Near Outlet', false, 20000], [$order->outlet_id, $order->outlet_name_snapshot, $order->nearest_outlet, $order->delivery_fee]);
+    }
+
+    public function test_staff_reschedule_a_paid_order_once_before_the_cutoff(): void
+    {
+        $order = $this->order(['payment_status' => 'paid', 'requested_date' => '2030-01-04']);
+        $unpaid = $this->order(['requested_date' => '2030-01-04']);
+        $staff = User::factory()->create();
+        $this->actingAs($staff)->get('/admin/orders/'.$order->id)->assertInertia(fn (Assert $page) => $page->where('reschedule.blocker', null));
+        $move = ['requested_date' => '2030-01-06', 'requested_time' => '15:00', 'note' => 'Customer asked by WhatsApp'];
+        $this->post('/admin/orders/'.$unpaid->id.'/reschedule', $move)->assertSessionHasErrors('reschedule');
+        // The new date must have room at the same outlet.
+        $order->outlet->update(['daily_quota' => 1]);
+        $this->order(['requested_date' => '2030-01-06']);
+        $this->post('/admin/orders/'.$order->id.'/reschedule', $move)->assertSessionHasErrors('requested_date');
+        $order->outlet->update(['daily_quota' => 100]);
+
+        $this->post('/admin/orders/'.$order->id.'/reschedule', $move)->assertSessionHasNoErrors();
+        $order->refresh();
+        $this->assertSame(['2030-01-06', '15:00', '2030-01-04', $order->outlet_id], [$order->requested_date->toDateString(), substr($order->requested_time, 0, 5), $order->rescheduled_from->toDateString(), $order->outlet_id]);
+        $this->assertDatabaseHas('order_reviews', ['order_id' => $order->id, 'actor_id' => $staff->id, 'previous_schedule' => '2030-01-04 14:00', 'schedule' => '2030-01-06 15:00']);
+        // Only once, and never again after the cut-off.
+        $this->post('/admin/orders/'.$order->id.'/reschedule', [...$move, 'requested_date' => '2030-01-07'])->assertSessionHasErrors('reschedule');
+        $late = $this->order(['payment_status' => 'paid', 'requested_date' => '2030-01-02']);
+        $this->travelTo(CarbonImmutable::parse('2030-01-01 19:01:00', 'Asia/Makassar'));
+        $this->post('/admin/orders/'.$late->id.'/reschedule', $move)->assertSessionHasErrors('reschedule');
+    }
+
+    public function test_delivery_minimum_order_and_radius_come_from_the_schedule_settings(): void
+    {
+        $this->order();
+        $outlet = Outlet::where('code', 'TEST')->sole();
+        $outlet->update(['delivers' => true]);
+        Setting::put(['delivery.min_order' => 100000, 'delivery.max_radius_km' => 12]);
+        $this->get('/order')->assertInertia(fn (Assert $page) => $page->where('deliveryMinOrder', 100000)->where('deliveryRadius', 12));
+        $product = Product::sole();
+        $payload = fn () => [
+            'checkout_key' => session('checkout_key'), 'items' => [['product_id' => $product->id, 'quantity' => 1, 'quoted_price' => 80000]], 'name' => 'Sinta', 'whatsapp' => '081234567890',
+            'outlet_id' => $outlet->id, 'fulfillment_method' => 'delivery', 'requested_date' => '2030-01-03', 'requested_time' => '14:00', 'delivery_address' => 'Jl. Test',
+            'recipient_whatsapp' => '081234567890', 'location_url' => 'https://maps.app.goo.gl/AbC123',
+        ];
+        $this->post('/order', $payload())->assertSessionHasErrors('fulfillment_method');
+        $this->post('/order', [...$payload(), 'items' => [['product_id' => $product->id, 'quantity' => 2, 'quoted_price' => 80000]]])->assertSessionHasNoErrors();
+    }
+
+    public function test_a_refunded_sale_already_in_erzap_is_listed_until_voided_there(): void
+    {
+        $order = $this->order(['payment_status' => 'paid', 'order_status' => 'cancelled']);
+        IntegrationSync::create(['provider' => 'erzap', 'type' => 'order', 'subject_type' => 'orders', 'subject_id' => $order->id, 'sync_key' => 'erzap:test:'.$order->id, 'status' => 'synced', 'attempts' => 1]);
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
+        $this->get('/admin/integrations')->assertInertia(fn (Assert $page) => $page->has('toVoid', 1)->where('toVoid.0.order_code', $order->order_code));
+        $this->post('/admin/orders/'.$order->id.'/erzap-voided')->assertSessionHasNoErrors();
+        $this->assertNotNull($order->fresh()->erzap_voided_at);
+        $this->get('/admin/integrations')->assertInertia(fn (Assert $page) => $page->has('toVoid', 0));
     }
 
     public function test_orders_waiting_more_than_an_hour_are_flagged(): void

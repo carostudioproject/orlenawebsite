@@ -17,6 +17,7 @@ interface Review { id: number; actor_name: string | null; note: string; previous
 interface Addition { id: number; items: { name: string; variant: string | null; quantity: number; subtotal: number }[]; subtotal_added: number; previous_total: number; new_total: number; created_at: string }
 const props = defineProps<{ order: Preorder; reviews: Paginated<Review>; history: StatusChange[]; payments: PaymentAttempt[]; canCancelPaid: boolean; additions: Addition[]; received: number; dokuEnabled: boolean; paymentMode: string; customerChooses: boolean; manualMethods: Record<string, string>;
     dayLoad: { orders: number; capacity: number | null; closed: string | null }; outlets: { id: number; name: string; delivers: boolean }[];
+    reschedule: { blocker: string | null; deadline: string };
     erzapSync: { id: number; type: string; status: string; attempts: number; last_error: string | null; synced_at: string | null; next_attempt_at: string | null; external_ref: string | null } | null;
 }>();
 const page = usePage<AdminProps>();
@@ -126,6 +127,21 @@ const movedLink = computed(() => {
     return `https://wa.me/${props.order.customer.whatsapp}?text=${encodeURIComponent(text)}`;
 });
 
+// Paid orders: one reschedule by staff before the cutoff (date and time only, the outlet and the Erzap sale stay).
+const rescheduleForm = ref({ requested_date: '', requested_time: props.order.requested_time?.slice(0, 5) ?? '', note: '' });
+function rescheduleOrder() {
+    act('/reschedule', { ...rescheduleForm.value }, () => { rescheduleForm.value = { requested_date: '', requested_time: props.order.requested_time?.slice(0, 5) ?? '', note: '' }; });
+}
+const rescheduledLink = computed(() => {
+    if (!props.order.rescheduled_from) return null;
+    const what = props.order.fulfillment_method === 'delivery' ? 'pengiriman' : 'pengambilan';
+    const time = props.order.requested_time ? `, jam ${props.order.requested_time.slice(0, 5).replace(':', '.')} WITA` : '';
+    const text = `Halo ${props.order.customer.name}, jadwal ${what} pesanan ${props.order.order_code} sudah kami ubah sesuai permintaan Anda, dari ${idDate(props.order.rescheduled_from)} menjadi *${idDate(props.order.requested_date)}*${time}.\n\nPerubahan jadwal setelah pembayaran hanya bisa 1 kali.\n\nCek status pesanan: ${window.location.origin}/cek-pesanan?code=${props.order.order_code}`;
+    return `https://wa.me/${props.order.customer.whatsapp}?text=${encodeURIComponent(text)}`;
+});
+// A refunded sale already in Erzap is cancelled there by hand (no cancel API), then marked here.
+const needsErzapVoid = computed(() => props.order.order_status === 'cancelled' && ['paid', 'refunded'].includes(props.order.payment_status) && props.erzapSync?.status === 'synced' && !props.order.erzap_voided_at);
+
 // Webhooks update MySQL; polling keeps the open page current without a WebSocket server.
 let timer: ReturnType<typeof setInterval> | undefined;
 onMounted(() => {
@@ -149,6 +165,14 @@ onBeforeUnmount(() => clearInterval(timer));
         <a v-if="movedLink" :href="movedLink" target="_blank" rel="noopener noreferrer" class="admin-secondary"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i>Tell the customer</a>
     </div>
     <p v-if="order.nearest_outlet && ['pending_review', 'confirmed'].includes(order.order_status)" class="admin-alert admin-alert-info mb-6"><i class="fa-solid fa-location-crosshairs" aria-hidden="true"></i> The customer asked Orlena to choose the <strong>nearest outlet</strong>. It is set to {{ order.outlet_name_snapshot }} for now; check the location and change the outlet in the review form if needed.</p>
+    <div v-if="order.rescheduled_from && order.order_status !== 'cancelled'" class="admin-alert admin-alert-info mb-6 flex flex-wrap items-center justify-between gap-3">
+        <p class="m-0"><i class="fa-solid fa-calendar-check" aria-hidden="true"></i> Rescheduled after payment from <strong>{{ order.rescheduled_from }}</strong> to <strong>{{ order.requested_date }}</strong> (used the 1 allowed change).<template v-if="erzapSync?.status === 'synced'"> Optional: update the note of {{ order.order_code }} in Erzap; the sale itself stays the same.</template></p>
+        <a v-if="rescheduledLink" :href="rescheduledLink" target="_blank" rel="noopener noreferrer" class="admin-secondary"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i>Tell the customer</a>
+    </div>
+    <div v-if="needsErzapVoid" role="alert" class="admin-alert admin-alert-error mb-6 flex flex-wrap items-center justify-between gap-3">
+        <p class="m-0"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> This sale is already in Erzap<template v-if="erzapSync?.external_ref"> (ref {{ erzapSync.external_ref }})</template>. Erzap has no cancel API: cancel or return order <strong>{{ order.order_code }}</strong> in Erzap by hand, then mark it here.</p>
+        <button v-if="can.review" type="button" class="admin-secondary" :disabled="busy" @click="act('/erzap-voided', {})"><i class="fa-solid fa-check" aria-hidden="true"></i>Done in Erzap</button>
+    </div>
     <p v-if="paidAfterCancel" role="alert" class="admin-alert admin-alert-error mb-6">This order was cancelled but payment was received. Refund it manually in DOKU and record the result.</p>
     <p v-if="shortfall > 0" role="alert" class="admin-alert admin-alert-error mb-6"><i class="fa-solid fa-scale-unbalanced" aria-hidden="true"></i> Received {{ rupiah(received) }} of {{ rupiah(order.total) }}: an older payment link was paid after the total changed. Collect the remaining {{ rupiah(shortfall) }} (Mark as paid records only the difference) or adjust the order.</p>
     <p v-if="overpaid > 0" role="alert" class="admin-alert admin-alert-error mb-6"><i class="fa-solid fa-scale-unbalanced" aria-hidden="true"></i> Received {{ rupiah(received) }}, which is {{ rupiah(overpaid) }} more than the total {{ rupiah(order.total) }}. Refund the difference to the customer.</p>
@@ -219,6 +243,19 @@ onBeforeUnmount(() => clearInterval(timer));
             </form>
         </details>
         <p v-else-if="can.review && !finished" class="mt-4 text-xs text-chocolate/65">Paid orders can only be cancelled by an Admin.</p>
+        <details v-if="can.review && !reschedule.blocker" class="mt-5 text-sm"><summary class="cursor-pointer font-bold"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i> Reschedule (once after payment)</summary>
+            <form class="mt-3 space-y-3" @submit.prevent="rescheduleOrder">
+                <p class="text-chocolate/70">Only when the customer asks. Possible until {{ witaTime(reschedule.deadline) }} (the current date's cut-off), once per order. The outlet stays the same and the new date must have room at {{ order.outlet_name_snapshot }}. The sale in Erzap is not sent again.</p>
+                <p v-if="errors.reschedule" role="alert" class="admin-error-text">{{ errors.reschedule }}</p>
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Field id="reschedule_date" label="New date" :error="errors.requested_date"><template #default="{ describedBy }"><input id="reschedule_date" v-model="rescheduleForm.requested_date" type="date" required :aria-describedby="describedBy"></template></Field>
+                    <Field id="reschedule_time" label="New time (WITA)" :error="errors.requested_time"><template #default="{ describedBy }"><input id="reschedule_time" v-model="rescheduleForm.requested_time" type="time" step="3600" required :aria-describedby="describedBy"></template></Field>
+                </div>
+                <Field id="reschedule_note" label="Reason / customer request" :error="errors.note"><template #default="{ describedBy }"><textarea id="reschedule_note" v-model="rescheduleForm.note" required maxlength="1000" rows="2" :aria-describedby="describedBy"></textarea></template></Field>
+                <button class="admin-primary" :disabled="busy"><i class="fa-solid fa-calendar-check" aria-hidden="true"></i>Reschedule order</button>
+            </form>
+        </details>
+        <p v-else-if="can.review && order.payment_status === 'paid' && !finished" class="mt-4 text-xs text-chocolate/65"><i class="fa-solid fa-lock" aria-hidden="true"></i> Reschedule: {{ reschedule.blocker }}</p>
     </section>
 
     <section v-if="can.review" class="admin-card mt-6">

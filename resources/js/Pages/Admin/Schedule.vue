@@ -5,7 +5,7 @@ import AdminLayout from '../../Layouts/AdminLayout.vue';
 import Field from '../../Components/Field.vue';
 import { confirmDialog } from '../../Support/dialog';
 defineOptions({ layout: AdminLayout });
-interface Settings { cutoff_time: string; payment_close_time: string; max_days: number; closed_weekdays: number[]; delivery_tolerance: number; ck_whatsapp: string | null }
+interface Settings { cutoff_time: string; payment_close_time: string; max_days: number; closed_weekdays: number[]; delivery_tolerance: number; delivery_min_order: number | null; delivery_radius: number | null; ck_whatsapp: string | null }
 const props = defineProps<{
     settings: Settings; weekdays: { value: number; label: string }[]; earliest: string;
     closedDates: { id: number; date: string; reason: string | null }[]; load: { date: string; total: number }[];
@@ -13,7 +13,7 @@ const props = defineProps<{
 
 const values = (settings: Settings) => ({
     cutoff_time: settings.cutoff_time, payment_close_time: settings.payment_close_time, max_days: settings.max_days, closed_weekdays: [...settings.closed_weekdays],
-    delivery_tolerance: settings.delivery_tolerance, ck_whatsapp: settings.ck_whatsapp ?? '',
+    delivery_tolerance: settings.delivery_tolerance, delivery_min_order: settings.delivery_min_order ?? ('' as number | ''), delivery_radius: settings.delivery_radius ?? ('' as number | ''), ck_whatsapp: settings.ck_whatsapp ?? '',
 });
 const form = useForm(values(props.settings));
 watch(() => props.settings, settings => { form.defaults(values(settings)); form.reset(); });
@@ -48,6 +48,10 @@ async function reopen(closed: { id: number; date: string }) {
                     <p class="admin-muted m-0 text-xs">Selected days cannot be chosen as a pickup/delivery date.</p>
                 </fieldset>
                 <Field id="delivery_tolerance" label="Delivery tolerance (minutes)" hint="Shown on the order form and payment page: delivery may arrive this late after the estimated time, without compensation. Daily and hourly quotas are set per outlet." :error="form.errors.delivery_tolerance"><template #default="{ describedBy }"><input id="delivery_tolerance" v-model="form.delivery_tolerance" type="number" required min="0" max="600" class="max-w-40" :aria-describedby="describedBy" :aria-invalid="!!form.errors.delivery_tolerance"></template></Field>
+                <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                    <Field id="delivery_min_order" label="Delivery minimum order (Rp, optional)" hint="Delivery orders below this subtotal are refused on the order form. Empty: no minimum." :error="form.errors.delivery_min_order"><template #default="{ describedBy }"><input id="delivery_min_order" v-model="form.delivery_min_order" type="number" min="1" step="1000" placeholder="No minimum" :aria-describedby="describedBy" :aria-invalid="!!form.errors.delivery_min_order"></template></Field>
+                    <Field id="delivery_radius" label="Delivery radius (km, optional)" hint="Shown on the order form. Staff check the distance from the location link during review." :error="form.errors.delivery_radius"><template #default="{ describedBy }"><input id="delivery_radius" v-model="form.delivery_radius" type="number" min="1" max="200" placeholder="Not set" :aria-describedby="describedBy" :aria-invalid="!!form.errors.delivery_radius"></template></Field>
+                </div>
                 <Field id="ck_whatsapp" label="Central kitchen (CK) WhatsApp" hint="Rekap CK → Send via WhatsApp opens a chat with this number. International format, e.g. 6281234567890. Empty: choose the contact each time." :error="form.errors.ck_whatsapp"><template #default="{ describedBy }"><input id="ck_whatsapp" v-model.trim="form.ck_whatsapp" inputmode="numeric" maxlength="16" class="max-w-60" placeholder="62…" :aria-describedby="describedBy" :aria-invalid="!!form.errors.ck_whatsapp"></template></Field>
                 <button class="admin-primary" :disabled="form.processing || !form.isDirty"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>{{ form.processing ? 'Saving…' : 'Save rules' }}</button>
             </form>

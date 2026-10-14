@@ -15,7 +15,7 @@ class Order extends Model
 
     protected function casts(): array
     {
-        return ['requested_date' => 'date:Y-m-d', 'payment_due_at' => 'datetime', 'moved_from_date' => 'date:Y-m-d', 'nearest_outlet' => 'boolean', 'subtotal' => 'integer', 'delivery_fee' => 'integer', 'total' => 'integer'];
+        return ['requested_date' => 'date:Y-m-d', 'payment_due_at' => 'datetime', 'moved_from_date' => 'date:Y-m-d', 'nearest_outlet' => 'boolean', 'rescheduled_from' => 'date:Y-m-d', 'rescheduled_at' => 'datetime', 'erzap_voided_at' => 'datetime', 'subtotal' => 'integer', 'delivery_fee' => 'integer', 'total' => 'integer'];
     }
 
     public function customer(): BelongsTo
@@ -68,6 +68,13 @@ class Order extends Model
         }
 
         return null;
+    }
+
+    /** Cancelled after the sale reached Erzap and not yet voided there by hand (Erzap has no cancel API). */
+    public function scopeNeedsErzapVoid($query): void
+    {
+        $query->where('order_status', 'cancelled')->whereIn('payment_status', ['paid', 'refunded'])->whereNull('erzap_voided_at')
+            ->whereIn('id', IntegrationSync::where('provider', 'erzap')->where('subject_type', 'orders')->where('status', 'synced')->select('subject_id'));
     }
 
     public function outlet(): BelongsTo

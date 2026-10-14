@@ -44,6 +44,13 @@ Pelanggan masih bisa **menambah produk** sendiri selama pesanan belum dikonfirma
 - **Order deadline** (batas pemesanan): jam terakhir memesan untuk suatu tanggal, sehari sebelumnya (H-1, default 19.00 WITA).
 - **Payment close** (batas pembayaran): H-1 default 21.00 WITA. Dibayar antara batas pemesanan dan jam ini → pindah ke tanggal berikutnya; belum dibayar pada jam ini → dibatalkan otomatis.
 - **Order up to**: berapa hari ke depan pelanggan boleh memesan (default 30).
+- **Delivery minimum order / radius** (opsional): minimum belanja delivery ditolak otomatis; radius hanya ditampilkan, staf mengecek jarak dari link lokasi saat review.
+
+### Reschedule setelah lunas
+Hanya bila pelanggan meminta, **1×**, sebelum batas pemesanan tanggal lama (H-1 19.00). Buka pesanan → bagian *Order status* → **Reschedule (once after payment)**, isi tanggal, jam, dan alasan. Outlet tidak bisa diganti. Pesanan tidak dikirim ulang ke Erzap; bila perlu, ubah catatan pesanan di Erzap secara manual. Lalu kabari pelanggan dengan tombol **Tell the customer**.
+
+### Refund pesanan yang sudah masuk Erzap
+Setelah Admin membatalkan pesanan lunas, batalkan/retur transaksinya **manual di Erzap** (Erzap tidak punya API pembatalan), lalu tekan **Done in Erzap** di halaman pesanan. Daftar yang belum diselesaikan ada di menu Erzap → *Cancel in Erzap by hand*.
 - **Closed every week** dan **Closed dates** (libur/acara): pelanggan tidak bisa memilih tanggal tersebut. Pesanan yang sudah ada tidak berubah.
 - **Orders per day capacity**: hanya peringatan untuk staff, tidak menolak pesanan.
 
