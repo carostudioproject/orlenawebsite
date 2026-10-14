@@ -44,7 +44,7 @@ php artisan optimize
 cd /home/<user>/<project> && php artisan schedule:run >> /dev/null 2>&1
 ```
 
-This reconciles expired DOKU links (every 10 minutes) and sends Erzap syncs (every 5 minutes).
+This cancels orders still unpaid at the payment close (every minute), checks DOKU payments (every 10 minutes) and sends Erzap syncs (every 5 minutes). Developer tools shows when the cron last ran; red means it is not set up. The full go-live order is in [Go-live](go-live.md).
 
 ## 6. DOKU
 

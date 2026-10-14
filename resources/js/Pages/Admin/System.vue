@@ -7,7 +7,7 @@ import { witaTime } from '../../Support/orderStatus';
 import type { AdminProps } from '../../Types/admin';
 defineOptions({ layout: AdminLayout });
 interface Failure { provider_order_id?: string; provider?: string; subject_id?: number; status: string; attempts?: number; last_error: string | null; updated_at: string }
-defineProps<{
+const props = defineProps<{
     app: { env: string; debug: boolean; url: string; indexable: boolean; timezone: string; php: string; laravel: string };
     payments: {
         online: boolean; mode: string; production: boolean; clientId: boolean; secret: boolean; qrisMerchant: boolean; qrisTerminal: boolean;
@@ -20,12 +20,14 @@ defineProps<{
         inboundToken: boolean; inbound: { url: string; last: { at: string } | null }[];
     };
     api: { tokens: number; base: string };
-    cron: string;
+    cron: string; schedulerLastRun: string | null;
     tasks: { key: string; label: string }[];
     log: { file: string | null; lines: string[] };
     queue: { failedJobs: number };
 }>();
 const page = usePage<AdminProps>();
+// The cron runs every minute; more than 3 minutes without a heartbeat means it is not set up or stopped.
+const schedulerOk = computed(() => !!props.schedulerLastRun && Date.now() - new Date(props.schedulerLastRun).getTime() < 3 * 60_000);
 const errors = computed(() => page.props.errors as Record<string, string>);
 
 const running = ref<string | null>(null);
@@ -59,6 +61,8 @@ const check = (ok: boolean) => (ok ? 'fa-circle-check text-matcha' : 'fa-circle-
             </dl>
             <div>
                 <p class="m-0 font-bold">Cron (every minute)</p>
+                <p class="m-0 mt-1 text-xs" :class="schedulerOk ? 'text-matcha' : 'admin-error-text'" role="status"><i class="fa-solid" :class="schedulerOk ? 'fa-circle-check' : 'fa-triangle-exclamation'" aria-hidden="true"></i>
+                    {{ schedulerOk ? `Running · last run ${witaTime(schedulerLastRun)}` : schedulerLastRun ? `Not running since ${witaTime(schedulerLastRun)}: check the cron job below.` : 'Never ran: add the cron job below in hPanel → Advanced → Cron Jobs. Without it there is no auto-cancel at 21:00, no DOKU check and no Erzap sending.' }}</p>
                 <div class="mt-1 flex items-start gap-2"><code class="block flex-1 break-all rounded-lg bg-cream p-2 text-xs">{{ cron }}</code><button type="button" class="admin-action" @click="copy('cron', cron)"><i class="fa-solid fa-copy" aria-hidden="true"></i>{{ copied === 'cron' ? 'Copied' : 'Copy' }}</button></div>
             </div>
             <div>

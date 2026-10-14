@@ -62,6 +62,7 @@ class SystemController extends Controller
             ],
             'api' => ['tokens' => count(config('services.api.tokens', [])), 'base' => url('/api/v1')],
             'cron' => 'cd '.base_path().' && php artisan schedule:run >> /dev/null 2>&1',
+            'schedulerLastRun' => Cache::get('scheduler:last-run'),
             'tasks' => collect(self::TASKS)->map(fn ($task, $key) => ['key' => $key, 'label' => $task[1]])->values(),
             'log' => $this->logTail(),
             'queue' => ['failedJobs' => DB::table('failed_jobs')->count()],
