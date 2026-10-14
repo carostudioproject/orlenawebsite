@@ -13,7 +13,7 @@ defineOptions({ layout: ShopLayout });
 interface ShopOutlet { id: number; name: string; address: string; delivers: boolean; closes_at: string }
 const props = defineProps<{
     categories: OrderCategory[]; products: OrderProduct[]; outlets: ShopOutlet[]; nearestOutlet: number | null;
-    selectedOutlet: number | null; paymentClose: string; deliveryTolerance: number; checkoutKey: string;
+    selectedOutlet: number | null; paymentClose: string; deliveryTolerance: number; deliveryMinOrder: number | null; deliveryRadius: number | null; checkoutKey: string;
 }>();
 const cutoffLabel = computed(() => (usePage().props.poCutoff as string) ?? 'H-1 pukul 19.00 WITA');
 const deliveryOutlets = computed(() => props.outlets.filter(outlet => outlet.delivers));
@@ -107,6 +107,7 @@ function clientErrors(): Record<string, string> {
     if (!/^[0-9+\s()-]{8,}$/.test(form.whatsapp.trim())) found.whatsapp = 'Masukkan nomor WhatsApp yang valid, misalnya 081234567890.';
     if (!form.outlet_id) found.outlet_id = form.fulfillment_method === 'delivery' ? 'Pilih outlet pengirim atau "Pilihkan outlet terdekat".' : 'Pilih outlet pickup.';
     if (form.fulfillment_method === 'delivery') {
+        if (props.deliveryMinOrder && subtotal.value < props.deliveryMinOrder) found.fulfillment_method = `Minimum belanja untuk delivery ${rupiah(props.deliveryMinOrder)}. Tambah produk atau pilih pickup.`;
         if (!form.delivery_address.trim()) found.delivery_address = 'Alamat pengiriman wajib diisi.';
         if (!/^[0-9+\s()-]{8,}$/.test(form.recipient_whatsapp.trim())) found.recipient_whatsapp = 'Masukkan nomor WhatsApp penerima, misalnya 081234567890.';
         if (!/^https:\/\/((www\.)?google\.[a-z.]+\/maps|maps\.google\.[a-z.]+|maps\.app\.goo\.gl|goo\.gl\/maps)([/?#]|$)/i.test(form.location_url.trim())) found.location_url = 'Tempel link lokasi dari Google Maps (diawali https://maps.app.goo.gl/ atau https://www.google.com/maps/).';
@@ -180,9 +181,10 @@ const panelLines = computed<PanelLine[]>(() => cart.value.map(row => ({
                 <Field id="delivery_address" label="Alamat pengiriman lengkap" :error="form.errors.delivery_address"><template #default="{ describedBy }"><textarea id="delivery_address" v-model="form.delivery_address" required rows="3" maxlength="2000" autocomplete="street-address" placeholder="Nama jalan, nomor rumah, patokan" :aria-describedby="describedBy" :aria-invalid="!!form.errors.delivery_address"></textarea></template></Field>
                 <Field id="location_url" label="Link lokasi Google Maps" hint="Buka Google Maps, tekan lama titik lokasi penerima, lalu Bagikan → Salin link, dan tempel di sini." :error="form.errors.location_url"><template #default="{ describedBy }"><input id="location_url" v-model.trim="form.location_url" type="url" inputmode="url" required maxlength="500" placeholder="https://maps.app.goo.gl/…" :aria-describedby="describedBy" :aria-invalid="!!form.errors.location_url"></template></Field>
                 <Field id="recipient_whatsapp" label="Nomor WhatsApp penerima" hint="Dihubungi kurir saat mengantar." :error="form.errors.recipient_whatsapp"><template #default="{ describedBy }"><div class="flex flex-wrap gap-2"><input id="recipient_whatsapp" v-model="form.recipient_whatsapp" type="tel" required autocomplete="tel" placeholder="08…" maxlength="30" class="min-w-0 flex-1" :aria-describedby="describedBy" :aria-invalid="!!form.errors.recipient_whatsapp"><button type="button" class="admin-secondary" :disabled="!form.whatsapp" @click="sameAsCustomer">Sama dengan pemesan</button></div></template></Field>
-                <p class="admin-alert admin-alert-info text-sm"><i class="fa-solid fa-clock" aria-hidden="true"></i> Jam kirim adalah <strong>perkiraan</strong>, bukan jam tiba yang dijamin. Kurir Gojek/Grab dipesankan Orlena, sehingga ada toleransi keterlambatan hingga <strong>{{ deliveryTolerance }} menit</strong> tanpa kompensasi. Ongkir mengikuti tarif aplikasi dan dikonfirmasi admin sebelum pembayaran.</p>
+                <p class="admin-alert admin-alert-info text-sm"><i class="fa-solid fa-clock" aria-hidden="true"></i> Jam kirim adalah <strong>perkiraan</strong>, bukan jam tiba yang dijamin. Kurir Gojek/Grab dipesankan Orlena, sehingga ada toleransi keterlambatan hingga <strong>{{ deliveryTolerance }} menit</strong> tanpa kompensasi. Ongkir mengikuti tarif aplikasi dan dikonfirmasi admin sebelum pembayaran.<template v-if="deliveryRadius"> Jangkauan delivery maksimal <strong>{{ deliveryRadius }} km</strong> dari outlet pengirim.</template><template v-if="deliveryMinOrder"> Minimum belanja <strong>{{ rupiah(deliveryMinOrder) }}</strong>.</template></p>
             </template>
-            <fieldset class="space-y-3" :aria-describedby="form.errors.requested_date ? 'requested_date-error' : undefined">
+            <div class="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,23rem)_1fr] lg:items-start">
+            <fieldset class="min-w-0 space-y-3" :aria-describedby="form.errors.requested_date ? 'requested_date-error' : undefined">
                 <legend class="mb-1 text-sm font-bold">Tanggal PO</legend>
                 <p class="admin-muted m-0 text-xs">Batas pemesanan {{ cutoffLabel }}. Paling lama 30 hari ke depan.</p>
                 <p v-if="!effectiveOutlet" class="admin-muted m-0 rounded-xl bg-cream/60 p-3 text-sm">Pilih outlet dulu untuk melihat tanggal dan jam yang tersedia.</p>
@@ -192,7 +194,7 @@ const panelLines = computed<PanelLine[]>(() => cart.value.map(row => ({
                 </div>
                 <p v-if="form.errors.requested_date" id="requested_date-error" class="admin-error-text m-0 text-sm" role="alert">{{ form.errors.requested_date }}</p>
             </fieldset>
-            <fieldset v-if="selectedDay" class="space-y-2">
+            <fieldset v-if="selectedDay" class="min-w-0 space-y-2 lg:pt-7">
                 <legend class="mb-1 text-sm font-bold">{{ form.fulfillment_method === 'delivery' ? 'Perkiraan jam kirim (WITA)' : 'Jam pickup (WITA)' }}</legend>
                 <div id="requested_time" tabindex="-1" class="flex flex-wrap gap-2">
                     <button v-for="slot in selectedDay.slots" :key="slot.time" type="button" class="po-slot" :aria-pressed="form.requested_time === slot.time" :disabled="slot.left === 0 || form.processing" @click="form.requested_time = slot.time">
@@ -202,6 +204,7 @@ const panelLines = computed<PanelLine[]>(() => cart.value.map(row => ({
                 <p v-if="form.fulfillment_method === 'pickup' && outletClosesAt" class="admin-muted m-0 text-xs">Pesanan disimpan di outlet sampai outlet tutup (pukul {{ outletClosesAt }} WITA) di hari pickup.</p>
                 <p v-if="form.errors.requested_time" class="admin-error-text m-0 text-sm" role="alert">{{ form.errors.requested_time }}</p>
             </fieldset>
+            </div>
             <Field v-if="hasHamper" id="card_message" label="Kartu ucapan hampers (opsional)" :hint="`Ditulis di kartu yang disertakan bersama hampers. ${form.card_message.length}/300 karakter.`" :error="form.errors.card_message"><template #default="{ describedBy }"><textarea id="card_message" v-model="form.card_message" rows="3" maxlength="300" placeholder="Contoh: Selamat Hari Raya, semoga selalu diberi berkah. Dari keluarga Sinta." :aria-describedby="describedBy" :aria-invalid="!!form.errors.card_message"></textarea></template></Field>
             <Field id="customer_note" label="Catatan (opsional)" :error="form.errors.customer_note"><template #default="{ describedBy }"><textarea id="customer_note" v-model="form.customer_note" rows="3" maxlength="2000" placeholder="Misalnya tulisan di kue atau permintaan khusus" :aria-describedby="describedBy"></textarea></template></Field>
         </section>

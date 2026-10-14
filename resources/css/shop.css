@@ -71,11 +71,12 @@ label.order-content-option:has(input:checked) { border-color: var(--admin-chocol
 .order-category-bar { position: sticky; z-index: 20; margin: -.5rem -1.5rem 0; background: white; padding: .5rem 1.5rem .6rem; box-shadow: 0 10px 14px -14px #3b030440; }
 
 /* PO calendar (order form): dates past the cutoff, closed or full stay visible but unavailable. */
-.po-calendar { border: 1px solid #3b030420; border-radius: 1rem; padding: .9rem; background: #fff; }
+/* Compact: about 23rem wide on desktop, full width on phones; fixed-height days instead of squares. */
+.po-calendar { max-width: 23rem; border: 1px solid #3b030420; border-radius: 1rem; padding: .75rem; background: #fff; }
 .po-calendar.is-disabled { opacity: .55; pointer-events: none; }
-.po-calendar-nav { display: inline-flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.25rem; border-radius: 999px; border: 1px solid #3b030420; background: #fff; }
+.po-calendar-nav { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: 999px; border: 1px solid #3b030420; background: #fff; }
 .po-calendar-nav:disabled { opacity: .3; cursor: default; }
-.po-calendar-day { aspect-ratio: 1; min-height: 2.5rem; border-radius: .75rem; border: 1px solid transparent; font-size: .9rem; font-weight: 700; font-variant-numeric: tabular-nums; transition: background-color .15s, border-color .15s; }
+.po-calendar-day { height: 2.4rem; border-radius: .6rem; border: 1px solid transparent; font-size: .9rem; font-weight: 700; font-variant-numeric: tabular-nums; transition: background-color .15s, border-color .15s; }
 .po-calendar-day.is-open { background: var(--color-cream); color: var(--color-chocolate); }
 .po-calendar-day.is-open:hover { border-color: var(--color-chocolate); }
 .po-calendar-day.is-full { background: #db3e4c14; color: #db3e4c99; text-decoration: line-through; }
