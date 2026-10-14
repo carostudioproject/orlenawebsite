@@ -61,7 +61,8 @@ class SystemController extends Controller
                     ->map(fn ($path, $key) => ['url' => url('/web_service/'.$path.'/new'), 'last' => Cache::get('erzap-inbound:'.$key)])->values(),
             ],
             'api' => ['tokens' => count(config('services.api.tokens', [])), 'base' => url('/api/v1')],
-            'cron' => 'cd '.base_path().' && php artisan schedule:run >> /dev/null 2>&1',
+            // hPanel cron type PHP (Custom jobs did not run on Orlena's account): the artisan path after /usr/bin/php.
+            'cron' => '/usr/bin/php '.base_path('artisan').' schedule:run',
             'schedulerLastRun' => Cache::get('scheduler:last-run'),
             'tasks' => collect(self::TASKS)->map(fn ($task, $key) => ['key' => $key, 'label' => $task[1]])->values(),
             'log' => $this->logTail(),

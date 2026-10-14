@@ -40,8 +40,10 @@ php artisan optimize
 
 ## 5. Cron (hPanel → Advanced → Cron Jobs), every minute
 
+Type **PHP**, file `domains/<domain>/orlena/artisan schedule:run` after the `/usr/bin/php /home/<user>/` prefix (on Orlena's account a "Custom" job never ran). Equivalent command:
+
 ```
-cd /home/<user>/<project> && php artisan schedule:run >> /dev/null 2>&1
+/usr/bin/php /home/<user>/domains/<domain>/orlena/artisan schedule:run
 ```
 
 This cancels orders still unpaid at the payment close (every minute), checks DOKU payments (every 10 minutes) and sends Erzap syncs (every 5 minutes). Developer tools shows when the cron last ran; red means it is not set up. The full go-live order is in [Go-live](go-live.md).

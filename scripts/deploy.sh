@@ -46,11 +46,13 @@ rm -rf public/build.old
 [[ -d public/build ]] && mv public/build public/build.old
 tar -xzf ../orlena-release.tgz
 rm ../orlena-release.tgz
-composer install --no-dev --optimize-autoloader --no-interaction --quiet
+# Hostinger may disable proc_open for PHP, which Composer scripts need: install without them, then run the one Laravel needs.
+composer install --no-dev --optimize-autoloader --no-interaction --no-scripts --quiet
+php artisan package:discover --quiet
 php artisan migrate --force --no-interaction
 php artisan optimize:clear > /dev/null
 php artisan optimize > /dev/null
 rm -rf public/build.old
-php artisan schedule:list --no-ansi | grep -c "artisan" | xargs -I{} echo "Scheduled commands: {}"
+php artisan schedule:list --no-ansi | grep -c "Next Due" | xargs -I{} echo "Scheduled tasks: {}"
 echo "Deployed."
 REMOTE

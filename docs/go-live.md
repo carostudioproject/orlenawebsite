@@ -24,8 +24,9 @@ mkdir orlena && mv public_html public_html.default && ln -s orlena/public public
 
 - [ ] `scripts/deploy.live.env` from `scripts/deploy.example.env` (host, port 65002, user, key, `DEPLOY_APP_DIR=domains/<domain>/orlena`).
 - [ ] Commit, then `scripts/deploy.sh live`. The first run stops at `migrate` because `.env` is missing; that is expected.
+- [ ] `public/storage` link by hand if PHP's `symlink` is disabled (`php artisan storage:link` then fails): `ln -s ../storage/app/public public/storage`.
 - [ ] On the server, `.env` from `.env.example` (see the deployment guide, section 3): `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL=https://<domain>`, `DB_*`, `SESSION_SECURE_COOKIE=true`, `SITE_INDEXABLE=true` (only when the client approves), **no** `DOKU_ALLOW_DEMO`, `DOKU_ENABLED=false` and `ERZAP_ENABLED=false` until steps 7 and 8.
-- [ ] `php artisan key:generate`, `php artisan migrate --force` (no `--seed`: the catalog comes from dev in step 4), `php artisan storage:link`, then `scripts/deploy.sh live` again; it ends with "Deployed."
+- [ ] `php artisan key:generate`, `php artisan migrate --force` (no `--seed`: the catalog comes from dev in step 4), then `scripts/deploy.sh live` again; it ends with "Deployed."
 
 ## 4. Catalog, content and photos from dev
 
@@ -36,7 +37,7 @@ Only the catalog, website content and settings move (categories, outlets, produc
 php artisan orlena:export-catalog
 tar -czf ~/orlena-photos.tgz -C storage/app/public .
 # copy storage/app/private/catalog-export.json and ~/orlena-photos.tgz to the same places on the live server, then on live:
-php artisan orlena:import-catalog            # add --replace if the database was seeded
+php artisan orlena:import-catalog --replace  # --replace: migrations add default articles
 tar -xzf ~/orlena-photos.tgz -C storage/app/public && php artisan optimize
 ```
 
@@ -51,11 +52,15 @@ tar -xzf ~/orlena-photos.tgz -C storage/app/public && php artisan optimize
 
 ## 6. Cron (hPanel → Advanced → Cron Jobs), every minute
 
+Choose type **PHP** (a "Custom" job never ran on Orlena's account) and, after the fixed `/usr/bin/php /home/<user>/` prefix, enter:
+
 ```
-cd /home/<user>/domains/<domain>/orlena && php artisan schedule:run >> /dev/null 2>&1
+domains/<domain>/orlena/artisan schedule:run
 ```
 
-- [ ] Added. Without it there is no auto-cancel at 21:00, no DOKU status check and no Erzap sending. Check after a few minutes: Developer tools shows the scheduler's last runs, and `php artisan schedule:list` lists `payments:reconcile`, `erzap:sync` and `orders:cancel-unpaid`.
+Every field "Setiap … (*)". The scheduled tasks run inside `schedule:run` (routes/console.php), because Hostinger disables `proc_open` on some accounts.
+
+- [ ] Added. Without it there is no auto-cancel at 21:00, no DOKU status check and no Erzap sending. Check after a few minutes: Developer tools shows the scheduler as running (green), and `php artisan schedule:list` lists `scheduler-heartbeat`, `orders:cancel-unpaid`, `payments:reconcile` and `erzap:sync`.
 
 ## 7. DOKU (production)
 
