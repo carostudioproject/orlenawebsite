@@ -16,3 +16,4 @@
 /qa-artifacts/
 /scripts/deploy.*.env
 !/scripts/deploy.example.env
+/public/assets/images/PNG MENU ORLENA/
