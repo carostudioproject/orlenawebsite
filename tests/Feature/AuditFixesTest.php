@@ -89,7 +89,7 @@ class AuditFixesTest extends TestCase
         $this->assertSame('2030-01-01 20:00', $order->fresh()->payment_due_at->setTimezone('Asia/Makassar')->format('Y-m-d H:i'));
 
         // Moved to 2 January: its H-1 payment close (set to 1 January 19:00 WITA here) comes before the 2-hour deadline.
-        $this->post('/admin/orders/'.$order->id.'/review', ['review_version' => 0, 'delivery_fee' => 0, 'note' => 'Earlier', 'requested_date' => '2030-01-02', 'requested_time' => '10:00'])
+        $this->post('/admin/orders/'.$order->id.'/review', ['review_version' => 0, 'delivery_fee' => 0, 'note' => 'Earlier', 'requested_date' => '2030-01-02', 'requested_time' => '14:00'])
             ->assertSessionHasNoErrors();
         $this->assertSame('2030-01-01 19:00', $order->fresh()->payment_due_at->setTimezone('Asia/Makassar')->format('Y-m-d H:i'));
     }

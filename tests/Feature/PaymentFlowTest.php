@@ -178,8 +178,8 @@ class PaymentFlowTest extends TestCase
         $this->post('/admin/orders/'.$late->id.'/confirm', ['review_version' => 0])->assertSessionHasErrors('payment');
         $this->assertSame('pending_review', $late->fresh()->order_status);
         $this->post('/admin/orders/'.$late->id.'/review', ['review_version' => 0, 'delivery_fee' => 15000, 'note' => 'Moved', 'requested_date' => '2030-01-01'])->assertSessionHasErrors('requested_date');
-        $this->post('/admin/orders/'.$late->id.'/review', ['review_version' => 0, 'delivery_fee' => 15000, 'note' => 'Customer agreed', 'requested_date' => '2030-01-03', 'requested_time' => '10:00'])->assertSessionHasNoErrors();
-        $this->assertDatabaseHas('order_reviews', ['order_id' => $late->id, 'previous_schedule' => '2030-01-02', 'schedule' => '2030-01-03 10:00']);
+        $this->post('/admin/orders/'.$late->id.'/review', ['review_version' => 0, 'delivery_fee' => 15000, 'note' => 'Customer agreed', 'requested_date' => '2030-01-03', 'requested_time' => '14:00'])->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('order_reviews', ['order_id' => $late->id, 'previous_schedule' => '2030-01-02', 'schedule' => '2030-01-03 14:00']);
         $this->confirm($late->fresh());
         $this->assertSame('pending', $late->fresh()->payment_status);
     }

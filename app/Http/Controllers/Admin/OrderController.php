@@ -171,7 +171,7 @@ class OrderController extends Controller
     /** A cancelled sale that was already in Erzap has been voided there by hand. */
     public function erzapVoided(Request $request, Order $order)
     {
-        abort_unless($order->order_status === 'cancelled' && $order->erzap_voided_at === null, 422);
+        abort_unless(Order::needsErzapVoid()->whereKey($order->id)->exists(), 422);
         $order->update(['erzap_voided_at' => now()]);
         Audit::record('order.erzap_voided', $order, ['order_code' => $order->order_code], $request->user()->id);
 

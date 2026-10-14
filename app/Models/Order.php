@@ -70,10 +70,14 @@ class Order extends Model
         return null;
     }
 
-    /** Cancelled after the sale reached Erzap and not yet voided there by hand (Erzap has no cancel API). */
+    /**
+     * A sale already in Erzap that was cancelled after payment or refunded (also after completion, e.g. a damaged product)
+     * and not yet voided there by hand (Erzap has no cancel API).
+     */
     public function scopeNeedsErzapVoid($query): void
     {
-        $query->where('order_status', 'cancelled')->whereIn('payment_status', ['paid', 'refunded'])->whereNull('erzap_voided_at')
+        $query->where(fn ($q) => $q->where('payment_status', 'refunded')->orWhere(fn ($q) => $q->where('order_status', 'cancelled')->where('payment_status', 'paid')))
+            ->whereNull('erzap_voided_at')
             ->whereIn('id', IntegrationSync::where('provider', 'erzap')->where('subject_type', 'orders')->where('status', 'synced')->select('subject_id'));
     }
 

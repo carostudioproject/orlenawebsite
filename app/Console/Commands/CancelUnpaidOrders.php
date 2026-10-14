@@ -48,7 +48,9 @@ class CancelUnpaidOrders extends Command
                 continue;
             }
             try {
-                $closed = $status->cancel($order, $order->order_status, 'Otomatis: belum dibayar sampai batas pembayaran ('.$dates->paymentCloseLabel().').', null);
+                $closed = $status->cancel($order, $order->order_status, 'Otomatis: belum dibayar sampai batas pembayaran ('.$dates->paymentCloseLabel().').', null,
+                    fn (Order $locked) => $locked->payment_status !== 'paid' && $now->greaterThanOrEqualTo($dates->paymentClose($locked->requested_date->toDateString()))
+                        && ! Payment::where('order_id', $locked->id)->where('status', 'paid')->exists());
             } catch (ValidationException) {
                 continue;
             }

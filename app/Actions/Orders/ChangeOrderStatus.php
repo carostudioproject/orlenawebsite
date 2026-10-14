@@ -42,10 +42,14 @@ class ChangeOrderStatus
     }
 
     /** Returns false when an open DOKU link could not be closed and may still accept payment. A null actor is the system (unpaid at payment close). */
-    public function cancel(Order $order, string $from, string $reason, ?User $actor): bool
+    public function cancel(Order $order, string $from, string $reason, ?User $actor, ?callable $guard = null): bool
     {
-        $closing = DB::transaction(function () use ($order, $from, $reason, $actor) {
+        $closing = DB::transaction(function () use ($order, $from, $reason, $actor, $guard) {
             $locked = $this->lock($order, $from);
+            // The system re-checks its reason on the locked row (e.g. staff moved the date meanwhile).
+            if ($guard && ! $guard($locked)) {
+                $this->fail('The order changed; it no longer qualifies for this cancellation.');
+            }
             if (in_array($from, ['completed', 'cancelled'], true)) {
                 $this->fail('Completed or cancelled orders cannot be cancelled.');
             }

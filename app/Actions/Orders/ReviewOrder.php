@@ -48,18 +48,24 @@ class ReviewOrder
             if ($date !== $locked->requested_date->toDateString() && $closed = $dates->closedReason($date, english: true)) {
                 throw ValidationException::withMessages(['requested_date' => $closed.' Reopen it under PO schedule if this was agreed.']);
             }
-            $outlet = $locked->outlet;
+            // Locked like checkout, so two changes cannot both take the last place at an outlet.
+            $outlet = Outlet::lockForUpdate()->find($locked->outlet_id);
             $outletChanged = isset($data['outlet_id']) && (int) $data['outlet_id'] !== $locked->outlet_id;
             if ($outletChanged) {
-                $outlet = Outlet::takingPreorders()->when($locked->fulfillment_method === 'delivery', fn ($query) => $query->where('delivers', true))->find($data['outlet_id']);
+                $outlet = Outlet::takingPreorders()->when($locked->fulfillment_method === 'delivery', fn ($query) => $query->where('delivers', true))->lockForUpdate()->find($data['outlet_id']);
                 if (! $outlet) {
                     throw ValidationException::withMessages(['outlet_id' => $locked->fulfillment_method === 'delivery' ? 'Choose an active outlet that ships delivery.' : 'Choose an active outlet that takes PO.']);
                 }
             }
-            // A new date, time or outlet must fit the outlet's daily quota and hourly pickup slot (this order not counted).
-            if (($outletChanged || $schedule !== $previousSchedule) && $outlet
-                && $full = app(Capacity::class)->problem($outlet, $date, $time, $locked->fulfillment_method, $locked->id, english: true)) {
-                throw ValidationException::withMessages(['requested_date' => $full]);
+            // A new date, time or outlet must use one of the outlet's hourly slots and fit its daily quota and slot (this order not counted).
+            if (($outletChanged || $schedule !== $previousSchedule) && $outlet) {
+                $capacity = app(Capacity::class);
+                if (! in_array(substr((string) $time, 0, 5), $capacity->slots($outlet), true)) {
+                    throw ValidationException::withMessages(['requested_time' => 'Choose one of '.$outlet->name.'\'s hourly slots ('.implode(', ', $capacity->slots($outlet)).').']);
+                }
+                if ($full = $capacity->problem($outlet, $date, $time, $locked->fulfillment_method, $locked->id, english: true)) {
+                    throw ValidationException::withMessages(['requested_date' => $full]);
+                }
             }
             $previous = $locked->delivery_fee;
             // A deadline set while the customer chooses VA BCA or QRIS never passes the new date's H-1 payment close.
@@ -68,7 +74,9 @@ class ReviewOrder
             $locked->update([
                 'delivery_fee' => $fee, 'total' => $locked->subtotal + ($fee ?? 0), 'review_version' => $locked->review_version + 1,
                 'requested_date' => $date, 'requested_time' => $time, 'payment_due_at' => $dueAt,
-            ] + ($outletChanged ? ['outlet_id' => $outlet->id, 'outlet_name_snapshot' => $outlet->name, 'nearest_outlet' => false] : []));
+            ] + ($outletChanged ? ['outlet_id' => $outlet->id, 'outlet_name_snapshot' => $outlet->name] : [])
+                // Saving the review with an outlet is the staff's choice, also when the suggested one is already the nearest.
+                + (isset($data['outlet_id']) ? ['nearest_outlet' => false] : []));
             $changed = $schedule !== $previousSchedule;
             DB::table('order_reviews')->insert([
                 'order_id' => $locked->id, 'actor_id' => $actor, 'previous_delivery_fee' => $previous, 'delivery_fee' => $fee, 'note' => $data['note'],

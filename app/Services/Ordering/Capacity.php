@@ -36,13 +36,14 @@ class Capacity
         $now = CarbonImmutable::now('Asia/Makassar');
         $latest = $this->dates->latest($now);
         [$days, $hours] = $this->load($outlet, $now->addDay()->toDateString(), $latest);
+        $closed = $this->dates->closedReasons($now->addDay()->toDateString(), $latest);
         $calendar = [];
         for ($day = $now->addDay(); $day->toDateString() <= $latest; $day = $day->addDay()) {
             $date = $day->toDateString();
             $slots = $this->slotsLeft($outlet, $method, $hours[$date] ?? []);
             [$status, $reason] = match (true) {
                 $now->greaterThan($this->dates->cutoff($date)) => ['cutoff', 'Lewat batas pemesanan ('.$this->dates->cutoffLabel().').'],
-                ($closed = $this->dates->closedReason($date)) !== null => ['closed', $closed],
+                isset($closed[$date]) => ['closed', $closed[$date]],
                 ($days[$date] ?? 0) >= $outlet->daily_quota || ! array_filter($slots, fn ($left) => $left === null || $left > 0) => ['full', 'Kuota '.$outlet->name.' untuk tanggal ini sudah penuh.'],
                 default => ['open', null],
             };

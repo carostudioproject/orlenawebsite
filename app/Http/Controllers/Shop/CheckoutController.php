@@ -36,7 +36,7 @@ class CheckoutController extends Controller
         return ShopPage::render($request, 'OrderForm', 'Form pre-order', [
             ...OrderCatalog::for($pricing),
             'outlets' => $outlets->map(fn (Outlet $outlet) => [...$outlet->only('id', 'name', 'address', 'image', 'delivers'), 'closes_at' => substr($outlet->closes_at, 0, 5)]),
-            'nearestOutlet' => $outlets->where('delivers', true)->first()?->id, 'selectedOutlet' => $pricing?->id,
+            'nearestOutlet' => Outlet::delivering()->value('id'), 'selectedOutlet' => $pricing?->id,
             'paymentClose' => $date->paymentCloseLabel(), 'deliveryTolerance' => $date->deliveryTolerance(), 'deliveryMinOrder' => $date->deliveryMinOrder(), 'deliveryRadius' => $date->deliveryRadius(), 'checkoutKey' => $request->session()->get('checkout_key'),
         ]);
     }

@@ -6,8 +6,22 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class CheckoutRequest extends FormRequest
 {
-    /** A Google Maps link as shared from the app or browser. */
-    public const MAPS_URL = '~^https://((www\.)?google\.[a-z.]+/maps|maps\.google\.[a-z.]+|maps\.app\.goo\.gl|goo\.gl/maps)([/?#]|$)~i';
+    /** A Google Maps link as shared from the app or browser, checked by exact host (google.attacker.com is not Google). */
+    public static function isMapsUrl(string $url): bool
+    {
+        $parts = parse_url($url);
+        if (($parts['scheme'] ?? '') !== 'https' || isset($parts['user']) || isset($parts['pass']) || isset($parts['port'])) {
+            return false;
+        }
+        $host = strtolower($parts['host'] ?? '');
+        $maps = str_starts_with($parts['path'] ?? '', '/maps');
+
+        return match (true) {
+            in_array($host, ['maps.app.goo.gl', 'maps.google.com', 'maps.google.co.id'], true) => true,
+            in_array($host, ['goo.gl', 'google.com', 'www.google.com', 'google.co.id', 'www.google.co.id'], true) => $maps,
+            default => false,
+        };
+    }
 
     public function authorize(): bool
     {
@@ -65,7 +79,9 @@ class CheckoutRequest extends FormRequest
             'requested_time' => ['required', 'date_format:H:i'],
             'delivery_address' => ['exclude_unless:fulfillment_method,delivery', 'required', 'string', 'max:2000'],
             'recipient_whatsapp' => ['exclude_unless:fulfillment_method,delivery', 'required', 'regex:/^[1-9][0-9]{7,14}$/'],
-            'location_url' => ['exclude_unless:fulfillment_method,delivery', 'required', 'string', 'max:500', 'url:https', 'regex:'.self::MAPS_URL],
+            'location_url' => ['exclude_unless:fulfillment_method,delivery', 'required', 'string', 'max:500', 'url:https',
+                fn (string $attribute, mixed $value, \Closure $fail) => is_string($value) && self::isMapsUrl($value) ? null
+                    : $fail('Tempel link lokasi dari Google Maps (diawali https://maps.app.goo.gl/ atau https://www.google.com/maps/).')],
             'customer_note' => ['nullable', 'string', 'max:2000'],
             'card_message' => ['nullable', 'string', 'max:300'],
         ];
@@ -79,7 +95,7 @@ class CheckoutRequest extends FormRequest
             'whatsapp.regex' => 'Masukkan nomor WhatsApp yang valid, misalnya 081234567890.',
             'recipient_whatsapp.regex' => 'Masukkan nomor WhatsApp penerima yang valid, misalnya 081234567890.',
             'location_url.url' => 'Tempel link lokasi dari Google Maps (diawali https://).',
-            'location_url.regex' => 'Tempel link lokasi dari Google Maps (diawali https://maps.app.goo.gl/ atau https://www.google.com/maps/).',
+
             'items.min' => 'Pilih minimal satu produk.',
             'items.max' => 'Maksimal 50 produk dalam satu pesanan.',
             'items.*.quantity.integer' => 'Jumlah harus berupa bilangan bulat.',

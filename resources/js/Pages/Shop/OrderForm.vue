@@ -91,6 +91,18 @@ watch(effectiveOutlet, outlet => { if (outlet && outlet !== props.selectedOutlet
 const pricesReady = computed(() => !quoting.value && !priceRefreshFailed.value && !!effectiveOutlet.value && props.selectedOutlet === effectiveOutlet.value);
 const pickupOutlet = computed(() => props.outlets.find(outlet => outlet.id === Number(form.outlet_id)));
 function sameAsCustomer() { form.recipient_whatsapp = form.whatsapp; }
+// Same host allowlist as the server (CheckoutRequest::isMapsUrl).
+function isMapsUrl(value: string) {
+    try {
+        const url = new URL(value);
+        if (url.protocol !== 'https:' || url.username || url.password || url.port) return false;
+        const host = url.hostname.toLowerCase();
+        if (['maps.app.goo.gl', 'maps.google.com', 'maps.google.co.id'].includes(host)) return true;
+        return ['goo.gl', 'google.com', 'www.google.com', 'google.co.id', 'www.google.co.id'].includes(host) && url.pathname.startsWith('/maps');
+    } catch {
+        return false;
+    }
+}
 
 const errorSummary = ref<HTMLElement | null>(null);
 const errors = computed(() => form.errors as Record<string, string>);
@@ -110,7 +122,7 @@ function clientErrors(): Record<string, string> {
         if (props.deliveryMinOrder && subtotal.value < props.deliveryMinOrder) found.fulfillment_method = `Minimum belanja untuk delivery ${rupiah(props.deliveryMinOrder)}. Tambah produk atau pilih pickup.`;
         if (!form.delivery_address.trim()) found.delivery_address = 'Alamat pengiriman wajib diisi.';
         if (!/^[0-9+\s()-]{8,}$/.test(form.recipient_whatsapp.trim())) found.recipient_whatsapp = 'Masukkan nomor WhatsApp penerima, misalnya 081234567890.';
-        if (!/^https:\/\/((www\.)?google\.[a-z.]+\/maps|maps\.google\.[a-z.]+|maps\.app\.goo\.gl|goo\.gl\/maps)([/?#]|$)/i.test(form.location_url.trim())) found.location_url = 'Tempel link lokasi dari Google Maps (diawali https://maps.app.goo.gl/ atau https://www.google.com/maps/).';
+        if (!isMapsUrl(form.location_url.trim())) found.location_url = 'Tempel link lokasi dari Google Maps (diawali https://maps.app.goo.gl/ atau https://www.google.com/maps/).';
     }
     if (!form.requested_date) found.requested_date = 'Pilih tanggal PO di kalender.';
     else if (!form.requested_time) found.requested_time = form.fulfillment_method === 'delivery' ? 'Pilih perkiraan jam kirim.' : 'Pilih jam pickup.';

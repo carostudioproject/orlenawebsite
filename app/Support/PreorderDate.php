@@ -103,11 +103,30 @@ class PreorderDate
     /** Why a date takes no PO, or null when it is open. */
     public function closedReason(string $date, bool $english = false): ?string
     {
-        $day = CarbonImmutable::parse($date, 'Asia/Makassar');
-        if (in_array($day->dayOfWeek, $this->closedWeekdays(), true)) {
+        return $this->closedReasons($date, $date, $english)[$date] ?? null;
+    }
+
+    /** Closed weekdays and dates in a range, one query: date => reason. */
+    public function closedReasons(string $from, string $to, bool $english = false): array
+    {
+        $closedDates = ClosedDate::whereDate('date', '>=', $from)->whereDate('date', '<=', $to)->get(['date', 'reason'])->keyBy(fn ($closed) => $closed->date->toDateString());
+        $weekdays = $this->closedWeekdays();
+        $reasons = [];
+        for ($day = CarbonImmutable::parse($from, 'Asia/Makassar'); $day->toDateString() <= $to; $day = $day->addDay()) {
+            $reason = $this->reasonFor($day, $weekdays, $closedDates->get($day->toDateString()), $english);
+            if ($reason !== null) {
+                $reasons[$day->toDateString()] = $reason;
+            }
+        }
+
+        return $reasons;
+    }
+
+    private function reasonFor(CarbonImmutable $day, array $weekdays, ?ClosedDate $closed, bool $english): ?string
+    {
+        if (in_array($day->dayOfWeek, $weekdays, true)) {
             return $english ? 'Orlena takes no PO on '.self::WEEKDAYS_EN[$day->dayOfWeek].'s.' : 'Orlena tidak menerima PO untuk hari '.self::WEEKDAYS[$day->dayOfWeek].'.';
         }
-        $closed = ClosedDate::whereDate('date', $day->toDateString())->first();
         if (! $closed) {
             return null;
         }

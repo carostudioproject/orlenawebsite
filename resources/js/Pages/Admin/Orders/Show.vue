@@ -140,14 +140,14 @@ const rescheduledLink = computed(() => {
     return `https://wa.me/${props.order.customer.whatsapp}?text=${encodeURIComponent(text)}`;
 });
 // A refunded sale already in Erzap is cancelled there by hand (no cancel API), then marked here.
-const needsErzapVoid = computed(() => props.order.order_status === 'cancelled' && ['paid', 'refunded'].includes(props.order.payment_status) && props.erzapSync?.status === 'synced' && !props.order.erzap_voided_at);
+const needsErzapVoid = computed(() => (props.order.payment_status === 'refunded' || (props.order.order_status === 'cancelled' && props.order.payment_status === 'paid')) && props.erzapSync?.status === 'synced' && !props.order.erzap_voided_at);
 
 // Webhooks update MySQL; polling keeps the open page current without a WebSocket server.
 let timer: ReturnType<typeof setInterval> | undefined;
 onMounted(() => {
     timer = setInterval(() => {
         if (document.hidden || busy.value || form.processing || (finished.value && !openPayment.value)) return;
-        router.reload({ only: ['order', 'payments', 'history', 'additions', 'dayLoad', 'erzapSync'] });
+        router.reload({ only: ['order', 'payments', 'history', 'additions', 'dayLoad', 'erzapSync', 'reschedule'] });
     }, 15000);
 });
 onBeforeUnmount(() => clearInterval(timer));
@@ -267,7 +267,7 @@ onBeforeUnmount(() => clearInterval(timer));
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field id="review_outlet" class="sm:col-span-2" :label="order.fulfillment_method === 'delivery' ? 'Ships from outlet' : 'Pickup outlet'" :hint="order.nearest_outlet ? 'The customer asked for the nearest outlet: check the address and location link, then choose it here. Item prices stay as quoted.' : 'Item prices stay as quoted when the outlet changes.'" :error="form.errors.outlet_id"><template #default="{ describedBy }"><select id="review_outlet" v-model="form.outlet_id" :aria-describedby="describedBy" :disabled="form.processing"><option v-for="outlet in outlets.filter(item => order.fulfillment_method !== 'delivery' || item.delivers || item.id === order.outlet_id)" :key="outlet.id" :value="outlet.id">{{ outlet.name }}</option></select></template></Field>
                 <Field id="requested_date" label="PO date" :error="form.errors.requested_date"><template #default="{ describedBy }"><input id="requested_date" v-model="form.requested_date" type="date" required :aria-describedby="describedBy" :disabled="form.processing"></template></Field>
-                <Field id="requested_time" label="Time (optional)" :error="form.errors.requested_time"><template #default="{ describedBy }"><input id="requested_time" v-model="form.requested_time" type="time" :aria-describedby="describedBy" :disabled="form.processing"></template></Field>
+                <Field id="requested_time" label="Time (hourly slot)" :error="form.errors.requested_time"><template #default="{ describedBy }"><input id="requested_time" v-model="form.requested_time" type="time" step="3600" :aria-describedby="describedBy" :disabled="form.processing"></template></Field>
             </div>
             <p class="text-xs text-chocolate/65">Change the schedule only after agreeing with the customer. The new date follows the order deadline ({{ $page.props.poCutoff }}), the closed dates in PO schedule and the outlet's daily and hourly quota.</p>
             <Field id="review_note" label="Internal review note" :error="form.errors.note"><template #default="{ describedBy }"><textarea id="review_note" v-model="form.note" required maxlength="2000" rows="3" :aria-describedby="describedBy" :disabled="form.processing" placeholder="Product and schedule check results, or why the delivery fee changed"></textarea></template></Field>

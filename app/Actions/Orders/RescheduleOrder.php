@@ -3,6 +3,7 @@
 namespace App\Actions\Orders;
 
 use App\Models\Order;
+use App\Models\Outlet;
 use App\Models\User;
 use App\Services\Ordering\Capacity;
 use App\Support\Audit;
@@ -50,7 +51,12 @@ class RescheduleOrder
             if ($closed = $this->dates->closedReason($date, english: true)) {
                 $this->fail('requested_date', $closed);
             }
-            if ($locked->outlet && $full = $this->capacity->problem($locked->outlet, $date, $time, $locked->fulfillment_method, $locked->id, english: true)) {
+            // Locked like checkout, so two changes cannot both take the last place at the outlet.
+            $outlet = Outlet::lockForUpdate()->findOrFail($locked->outlet_id);
+            if (! in_array($time, $this->capacity->slots($outlet), true)) {
+                $this->fail('requested_time', 'Choose one of '.$outlet->name.'\'s hourly slots ('.implode(', ', $this->capacity->slots($outlet)).').');
+            }
+            if ($full = $this->capacity->problem($outlet, $date, $time, $locked->fulfillment_method, $locked->id, english: true)) {
                 $this->fail('requested_date', $full);
             }
             $locked->update([

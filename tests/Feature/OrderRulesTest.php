@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Actions\Payments\ApplyPaymentStatus;
+use App\Http\Requests\CheckoutRequest;
 use App\Models\Category;
 use App\Models\ClosedDate;
 use App\Models\Customer;
@@ -71,9 +72,39 @@ class OrderRulesTest extends TestCase
         ]);
     }
 
-    private function pay(Payment $payment): string
+    private function pay(Payment $payment, ?string $paidAt = null): string
     {
-        return app(ApplyPaymentStatus::class)->handle(['order_id' => $payment->provider_order_id, 'transaction_status' => 'SUCCESS', 'gross_amount' => (string) $payment->amount, 'payment_type' => 'TEST'], 'test');
+        return app(ApplyPaymentStatus::class)->handle(['order_id' => $payment->provider_order_id, 'transaction_status' => 'SUCCESS', 'gross_amount' => (string) $payment->amount, 'payment_type' => 'TEST', 'transaction_date' => $paidAt], 'test');
+    }
+
+    public function test_the_providers_payment_time_decides_the_cutoff_and_extra_receipts_never_move_the_order(): void
+    {
+        $order = $this->order();
+        $payment = $this->payment($order);
+        // Paid at 18:59 WITA (17:59 WIB), notified at 19:01: still produced for the chosen date.
+        $this->travelTo(CarbonImmutable::parse('2030-01-01 19:01:00', 'Asia/Makassar'));
+        $this->pay($payment, '2030-01-01T17:59:00+07:00');
+        $this->assertSame(['paid', '2030-01-02', null], [$order->fresh()->payment_status, $order->fresh()->requested_date->toDateString(), $order->fresh()->moved_from_date]);
+        $this->assertSame('2030-01-01 18:59', $payment->fresh()->paid_at->setTimezone('Asia/Makassar')->format('Y-m-d H:i'));
+        // An older link paid later only adds money: the settled order keeps its date.
+        $older = $this->payment($order, 'cancelled');
+        $this->pay($older, '2030-01-01T19:00:30+08:00');
+        $this->assertSame(['2030-01-02', null], [$order->fresh()->requested_date->toDateString(), $order->fresh()->moved_from_date]);
+
+        // A time without a zone is not trusted (WIB or WITA?): the receipt time counts.
+        $other = $this->order();
+        $this->pay($this->payment($other), '2030-01-01 18:30:00');
+        $this->assertSame('2030-01-03', $other->fresh()->requested_date->toDateString());
+    }
+
+    public function test_only_real_google_maps_links_are_accepted(): void
+    {
+        foreach (['https://maps.app.goo.gl/AbC123', 'https://www.google.com/maps/place/x', 'https://goo.gl/maps/xyz', 'https://maps.google.co.id/?q=1'] as $url) {
+            $this->assertTrue(CheckoutRequest::isMapsUrl($url), $url);
+        }
+        foreach (['https://google.attacker.com/maps', 'http://maps.app.goo.gl/x', 'https://www.google.com/search?q=maps', 'https://maps.app.goo.gl.evil.test/x', 'https://user@maps.app.goo.gl/x'] as $url) {
+            $this->assertFalse(CheckoutRequest::isMapsUrl($url), $url);
+        }
     }
 
     public function test_paid_before_the_cutoff_keeps_the_date(): void
@@ -193,6 +224,9 @@ class OrderRulesTest extends TestCase
         $this->actingAs($staff)->get('/admin/orders/'.$order->id)->assertInertia(fn (Assert $page) => $page->where('reschedule.blocker', null));
         $move = ['requested_date' => '2030-01-06', 'requested_time' => '15:00', 'note' => 'Customer asked by WhatsApp'];
         $this->post('/admin/orders/'.$unpaid->id.'/reschedule', $move)->assertSessionHasErrors('reschedule');
+        // Only the outlet's hourly slots.
+        $this->post('/admin/orders/'.$order->id.'/reschedule', [...$move, 'requested_time' => '15:30'])->assertSessionHasErrors('requested_time');
+        $this->post('/admin/orders/'.$order->id.'/reschedule', [...$move, 'requested_time' => '02:00'])->assertSessionHasErrors('requested_time');
         // The new date must have room at the same outlet.
         $order->outlet->update(['daily_quota' => 1]);
         $this->order(['requested_date' => '2030-01-06']);
@@ -236,6 +270,13 @@ class OrderRulesTest extends TestCase
         $this->post('/admin/orders/'.$order->id.'/erzap-voided')->assertSessionHasNoErrors();
         $this->assertNotNull($order->fresh()->erzap_voided_at);
         $this->get('/admin/integrations')->assertInertia(fn (Assert $page) => $page->has('toVoid', 0));
+        // A completed sale refunded later (damaged product) is listed too; an order never synced is not.
+        $refunded = $this->order(['payment_status' => 'refunded', 'order_status' => 'completed']);
+        IntegrationSync::create(['provider' => 'erzap', 'type' => 'order', 'subject_type' => 'orders', 'subject_id' => $refunded->id, 'sync_key' => 'erzap:test:'.$refunded->id, 'status' => 'synced', 'attempts' => 1]);
+        $this->order(['payment_status' => 'refunded', 'order_status' => 'completed']);
+        $this->get('/admin/integrations')->assertInertia(fn (Assert $page) => $page->has('toVoid', 1)->where('toVoid.0.order_code', $refunded->order_code));
+        $this->post('/admin/orders/'.$refunded->id.'/erzap-voided')->assertSessionHasNoErrors();
+        $this->post('/admin/orders/'.$refunded->id.'/erzap-voided')->assertStatus(422);
     }
 
     public function test_orders_waiting_more_than_an_hour_are_flagged(): void
