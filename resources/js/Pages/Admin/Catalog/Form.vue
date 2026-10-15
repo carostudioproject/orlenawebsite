@@ -29,6 +29,7 @@ const form = useForm({
     content_ids: [...(props.record?.content_ids ?? [])] as number[],
     addon_ids: [...(props.record?.addon_ids ?? [])] as number[],
     sale_starts_on: props.record?.sale_starts_on ?? '', sale_ends_on: props.record?.sale_ends_on ?? '',
+    is_featured: props.record?.is_featured ?? false, featured_label: props.record?.featured_label ?? '', featured_position: props.record?.featured_position ?? 0,
     order_position: props.record?.order_position ?? 100,
     upload: null as File | null,
     outlet_prices: (props.record?.outlet_prices ?? []).map(p => ({ outlet_id: p.outlet_id as number | string, price: p.price as number | string })),
@@ -165,6 +166,14 @@ function submit() {
                     <Field id="sale_ends_on" label="On sale until (optional)" :error="form.errors.sale_ends_on"><template #default="{ describedBy }"><input id="sale_ends_on" v-model="form.sale_ends_on" type="date" :min="form.sale_starts_on || undefined" :aria-describedby="describedBy" :aria-invalid="!!form.errors.sale_ends_on"></template></Field>
                 </div>
                 <p class="admin-muted m-0 text-xs">For event products (e.g. Lebaran hampers). Outside this period the product is hidden from the order form even when active. Leave empty to sell all year.</p>
+            </fieldset>
+            <fieldset class="space-y-3 rounded-xl border border-chocolate/15 p-4">
+                <legend class="px-2 text-sm font-bold">Highlight on the order form</legend>
+                <label class="flex items-start gap-3 text-sm"><input v-model="form.is_featured" type="checkbox" class="mt-0.5"><span><span class="block font-bold">Highlight this {{ noun }}</span><span class="admin-muted text-xs">Shown first on /order (in "Semua" and its category), with a badge, and in the "Sorotan" category chip. Use it for event items so they do not get lost. Only active products on sale are shown.</span></span></label>
+                <div v-if="form.is_featured" class="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_10rem]">
+                    <Field id="featured_label" label="Badge text (optional)" hint="Up to 30 characters, e.g. Spesial Natal, Best Seller. Empty: Pilihan." :error="form.errors.featured_label"><template #default="{ describedBy }"><input id="featured_label" v-model="form.featured_label" maxlength="30" placeholder="Spesial Natal" :aria-describedby="describedBy"></template></Field>
+                    <Field id="featured_position" label="Order" hint="Lower comes first." :error="form.errors.featured_position"><template #default="{ describedBy }"><input id="featured_position" v-model.number="form.featured_position" type="number" min="0" max="999" :aria-describedby="describedBy"></template></Field>
+                </div>
             </fieldset>
             <fieldset class="space-y-3 rounded-xl border border-chocolate/15 p-4"><legend class="px-2 text-sm font-bold">Outlet prices (optional)</legend><p class="text-sm text-chocolate/65">Outlets without their own price use the base price.</p><div v-for="(price,index) in form.outlet_prices" :key="index" class="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto]"><div><label :for="`outlet-${index}`" class="mb-1 block text-xs">Outlet</label><select :id="`outlet-${index}`" v-model="price.outlet_id" required><option value="" disabled>Choose an outlet</option><option v-for="outlet in outlets" :key="outlet.id" :value="outlet.id">{{ outlet.name }}</option></select></div><div><label :for="`outlet-price-${index}`" class="mb-1 block text-xs">Price (Rp)</label><input :id="`outlet-price-${index}`" v-model="price.price" type="number" min="1" max="999999999" step="1" required></div><button type="button" class="admin-secondary self-end" :aria-label="`Remove outlet price ${index + 1}`" @click="form.outlet_prices.splice(index,1)"><i class="fa-solid fa-trash-can" aria-hidden="true"></i>Remove</button></div><button type="button" class="admin-secondary" :disabled="!outlets.length || form.outlet_prices.length >= outlets.length" @click="form.outlet_prices.push({ outlet_id: '', price: '' })">Add outlet price</button></fieldset>
         </template>

@@ -145,6 +145,26 @@ class HampersAndBoxTest extends TestCase
         $this->assertDatabaseCount('orders', 0);
     }
 
+    public function test_highlighted_products_come_first_on_the_order_form(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $form = fn (Product $product, array $changes) => [
+            ...$product->only('name', 'sku', 'category_id', 'variant', 'price', 'is_active', 'content_type', 'content_count', 'content_pricing'),
+            'barcode' => $product->barcode, 'content_ids' => $product->contentOptions()->pluck('products.id')->all(), ...$changes,
+        ];
+        $this->actingAs($admin)->put('/admin/products/'.$this->box->id, $form($this->box, ['is_featured' => true, 'featured_label' => str_repeat('x', 31)]))->assertSessionHasErrors('featured_label');
+        $this->put('/admin/products/'.$this->box->id, $form($this->box, ['is_featured' => true, 'featured_label' => 'Spesial Natal', 'featured_position' => 2]))->assertSessionHasNoErrors();
+        $this->put('/admin/products/'.$this->hampers->id, $form($this->hampers, ['is_featured' => true, 'featured_position' => 1]))->assertSessionHasNoErrors();
+        $this->get('/admin/products?status=featured')->assertInertia(fn (Assert $page) => $page->has('records.data', 2));
+        auth()->logout();
+
+        // Highlighted first, in their own order; the badge text goes with them, other products keep theirs.
+        $this->get('/order?outlet_id='.$this->outlet->id)->assertInertia(fn (Assert $page) => $page
+            ->where('products.0.id', $this->hampers->id)->where('products.0.featured_label', null)
+            ->where('products.1.id', $this->box->id)->where('products.1.featured_label', 'Spesial Natal')
+            ->where('products.2.featured', false));
+    }
+
     public function test_category_extras_are_offered_in_the_popup_and_a_card_keeps_its_message(): void
     {
         $packaging = Category::create(['name' => 'Packaging']);

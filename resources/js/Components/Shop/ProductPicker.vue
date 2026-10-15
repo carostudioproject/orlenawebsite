@@ -8,12 +8,15 @@ import type { ContentOption, OrderCategory, OrderProduct } from '../../Types/ord
 const props = defineProps<{ categories: OrderCategory[]; products: OrderProduct[]; disabled?: boolean }>();
 const emit = defineEmits<{ add: [productId: number, quantity: number, contents: number[]] }>();
 
-// null = "Semua": every product, grouped in the category order.
-const activeCategory = ref<number | null>(null);
+// null = "Semua": every product, grouped in the category order; 'featured' = only the highlighted ones (e.g. an event).
+// Highlighted products always come first; the server already sends them first, in their own order.
+const activeCategory = ref<number | 'featured' | null>(null);
+const featured = computed(() => props.products.filter(product => product.featured));
 const visible = computed(() => {
+    if (activeCategory.value === 'featured') return featured.value;
     if (activeCategory.value !== null) return props.products.filter(product => product.category_id === activeCategory.value);
     const order = new Map(props.categories.map((category, index) => [category.id, index]));
-    return [...props.products].sort((a, b) => (order.get(a.category_id) ?? 0) - (order.get(b.category_id) ?? 0));
+    return [...props.products].sort((a, b) => Number(!!b.featured) - Number(!!a.featured) || (a.featured ? 0 : (order.get(a.category_id) ?? 0) - (order.get(b.category_id) ?? 0)));
 });
 const counts = computed(() => {
     const totals = new Map<number, number>();
@@ -32,7 +35,7 @@ const grid = ref<HTMLElement | null>(null);
 function measure() { stickyTop.value = Math.round(document.querySelector('.header-navbar')?.getBoundingClientRect().height ?? 0); }
 onMounted(() => { measure(); window.addEventListener('resize', measure); });
 onBeforeUnmount(() => window.removeEventListener('resize', measure));
-async function choose(id: number | null, event: MouseEvent) {
+async function choose(id: number | 'featured' | null, event: MouseEvent) {
     activeCategory.value = id;
     expanded.value = false;
     (event.currentTarget as HTMLElement).scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
@@ -128,6 +131,7 @@ function add(product: OrderProduct) {
             <div class="relative">
                 <div id="order-categories" role="group" aria-label="Kategori" class="order-categories -mx-1 flex gap-2 px-1 pb-1 sm:flex-wrap sm:overflow-visible" :class="expanded ? 'flex-wrap' : 'overflow-x-auto'">
                     <button type="button" class="order-category" :aria-pressed="activeCategory === null" @click="choose(null, $event)"><span class="hidden size-9 shrink-0 items-center justify-center rounded-full bg-cream sm:flex"><i class="fa-solid fa-table-cells-large text-xs" aria-hidden="true"></i></span>Semua<span class="order-category-count">{{ products.length }}</span></button>
+                    <button v-if="featured.length" type="button" class="order-category is-featured" :aria-pressed="activeCategory === 'featured'" @click="choose('featured', $event)"><span class="hidden size-9 shrink-0 items-center justify-center rounded-full bg-almond sm:flex"><i class="fa-solid fa-star text-xs" aria-hidden="true"></i></span><i class="fa-solid fa-star text-xs sm:hidden" aria-hidden="true"></i>Sorotan<span class="order-category-count">{{ featured.length }}</span></button>
                     <button v-for="category in categories" :key="category.id" type="button" class="order-category" :aria-pressed="activeCategory === category.id" @click="choose(category.id, $event)">
                         <span class="hidden size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-cream sm:flex"><img v-if="category.image" :src="category.image" alt="" class="size-full object-cover"><i v-else class="fa-solid fa-cookie-bite text-xs" aria-hidden="true"></i></span>{{ category.name }}<span class="order-category-count">{{ counts.get(category.id) ?? 0 }}</span>
                     </button>
@@ -142,6 +146,7 @@ function add(product: OrderProduct) {
                 <!-- Photo fills the card, like a shop grid; the whole card opens the popup. -->
                 <button type="button" class="order-product-photo" tabindex="-1" aria-hidden="true" @click="open(product)">
                     <img v-if="product.image" :src="product.image" alt="" loading="lazy"><i v-else class="fa-solid fa-cookie-bite text-3xl text-chocolate/25"></i>
+                    <span v-if="product.featured" class="order-product-featured"><i class="fa-solid fa-star" aria-hidden="true"></i> {{ product.featured_label || 'Pilihan' }}</span>
                     <span v-if="product.content_type" class="order-product-badge"><i class="fa-solid" :class="product.content_type === 'hampers' ? 'fa-gift' : 'fa-box-open'"></i> {{ product.content_type === 'hampers' ? 'Pilih isi' : product.content_type === 'set' ? 'Isi tetap' : `Pilih ${product.content_count} isi` }}</span>
                 </button>
                 <div class="flex flex-1 flex-col items-center gap-0.5 px-1 pt-3 text-center">

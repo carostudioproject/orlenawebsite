@@ -23,14 +23,14 @@ class Product extends Model
     public const CONTENT_PRICING = ['added' => 'Ditambah', 'included' => 'Termasuk'];
 
     protected $fillable = [
-        'category_id', 'variant', 'sku', 'name', 'description', 'image', 'price', 'is_active',
+        'category_id', 'variant', 'sku', 'name', 'description', 'image', 'price', 'is_active', 'is_featured', 'featured_label', 'featured_position',
         'is_hamper', 'hamper_contents', 'content_type', 'content_count', 'content_pricing', 'sale_starts_on', 'sale_ends_on', 'erzap_product_id', 'erzap_variant_id', 'barcode',
     ];
 
     protected function casts(): array
     {
         return [
-            'is_active' => 'boolean', 'is_hamper' => 'boolean', 'price' => 'integer', 'content_count' => 'integer',
+            'is_active' => 'boolean', 'is_featured' => 'boolean', 'featured_position' => 'integer', 'is_hamper' => 'boolean', 'price' => 'integer', 'content_count' => 'integer',
             'sale_starts_on' => 'date:Y-m-d', 'sale_ends_on' => 'date:Y-m-d',
         ];
     }

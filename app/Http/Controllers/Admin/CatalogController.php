@@ -19,7 +19,7 @@ class CatalogController extends Controller
 {
     private const MODELS = ['products' => Product::class, 'outlets' => Outlet::class, 'categories' => Category::class];
 
-    private const FILTER_RULES = ['search' => ['nullable', 'string', 'max:100'], 'status' => ['nullable', 'in:active,inactive'], 'type' => ['nullable', 'in:regular,hampers']];
+    private const FILTER_RULES = ['search' => ['nullable', 'string', 'max:100'], 'status' => ['nullable', 'in:active,inactive,featured'], 'type' => ['nullable', 'in:regular,hampers']];
 
     public function index(Request $request)
     {
@@ -30,7 +30,7 @@ class CatalogController extends Controller
             $query->with('category');
         }
         $sort = TableSort::apply($query, $request, match ($resource) {
-            'products' => ['name' => 'name', 'code' => 'sku', 'price' => 'price', 'status' => 'is_active',
+            'products' => ['name' => 'name', 'code' => 'sku', 'price' => 'price', 'status' => 'is_active', 'featured' => 'is_featured',
                 'category' => fn ($q, $dir) => $q->orderBy(Category::select('name')->whereColumn('categories.id', 'products.category_id'), $dir)],
             'outlets' => ['name' => 'name', 'address' => 'address', 'status' => 'is_active'],
             default => ['name' => 'name', 'status' => 'is_active'],
@@ -228,7 +228,7 @@ class CatalogController extends Controller
             $query->where('name', 'like', '%'.$filters['search'].'%');
         }
         if (! empty($filters['status'])) {
-            $query->where('is_active', $filters['status'] === 'active');
+            $filters['status'] === 'featured' && $resource === 'products' ? $query->where('is_featured', true) : $query->where('is_active', $filters['status'] === 'active');
         }
         if ($resource === 'products' && ! empty($filters['type'])) {
             $hampers = fn ($q) => $q->where('is_hamper', true)->orWhere('content_type', 'hampers');

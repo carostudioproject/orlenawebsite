@@ -22,6 +22,7 @@ class OrderCatalog
         $rows = $products->map(fn (Product $product) => [
             'id' => $product->id, 'name' => $product->name, 'category_id' => $product->category_id, 'description' => $product->description,
             'image' => $product->image, 'variant' => $product->variant,
+            'featured' => $product->is_featured, 'featured_label' => $product->is_featured ? $product->featured_label : null, 'featured_position' => $product->featured_position,
             'is_hamper' => $product->is_hamper || $product->content_type === 'hampers', 'is_card' => $product->isGreetingCard(),
             'hamper_items' => $product->hamperItems(), 'sale_ends_on' => $product->sale_ends_on?->toDateString(),
             'price' => $price($product),
@@ -38,7 +39,9 @@ class OrderCatalog
                 ])->all() : [],
         ])
             // A hampers or box without any available contents cannot be ordered.
-            ->filter(fn (array $row) => ! in_array($row['content_type'], ['hampers', 'box'], true) || $row['contents'])->values();
+            ->filter(fn (array $row) => ! in_array($row['content_type'], ['hampers', 'box'], true) || $row['contents'])
+            // Highlighted products first (their own order), the rest as before (stable sort).
+            ->sortBy([['featured', 'desc'], ['featured_position', 'asc']])->values();
         $categoryIds = $rows->pluck('category_id')->unique();
         $orderable = $rows->pluck('id')->flip();
 

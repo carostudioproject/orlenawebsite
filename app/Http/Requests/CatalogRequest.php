@@ -71,6 +71,10 @@ class CatalogRequest extends FormRequest
                 'content_pricing' => [Rule::excludeIf(! in_array($type, ['hampers', 'box'], true)), 'required', Rule::in(array_keys(Product::CONTENT_PRICING))],
                 'content_ids' => [Rule::excludeIf(! $withContents), 'required', 'array', 'min:1', 'max:500'],
                 'content_ids.*' => ['integer', ...($type === 'set' ? [] : ['distinct']), $contentRule],
+                // Highlighted on the order form (first, with an optional badge such as "Spesial Natal").
+                'is_featured' => ['sometimes', 'boolean'],
+                'featured_label' => ['nullable', 'string', 'max:30'],
+                'featured_position' => ['sometimes', 'integer', 'min:0', 'max:999'],
                 'sale_starts_on' => ['nullable', 'date_format:Y-m-d'],
                 'sale_ends_on' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:sale_starts_on'],
                 'description' => ['nullable', 'string', 'max:5000'],
