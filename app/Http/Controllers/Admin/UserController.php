@@ -22,7 +22,7 @@ class UserController extends Controller
                 ->orWhere('username', 'like', '%'.$search.'%')->orWhere('email', 'like', '%'.$search.'%')))
             ->when($filters['role'] ?? null, fn ($q, $role) => $q->where('role', $role));
         $sort = TableSort::apply($query, $request, ['name' => 'name', 'username' => 'username', 'email' => 'email', 'role' => 'role', 'status' => 'is_active']);
-        $users = ($sort['sort'] ? $query : $query->orderBy('name'))->paginate(10)->withQueryString();
+        $users = ($sort['sort'] ? $query : $query->latest('id'))->paginate(10)->withQueryString();
 
         return Inertia::render('Admin/Users/Index', ['users' => $users, 'filters' => $filters, 'sort' => $sort]);
     }

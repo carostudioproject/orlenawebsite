@@ -20,7 +20,7 @@ class PostController extends Controller
         $search = $request->validate(['search' => ['nullable', 'string', 'max:100']])['search'] ?? null;
         $query = Post::with('editor:id,name')->when($search, fn ($q) => $q->where('title', 'like', '%'.$search.'%'));
         $sort = TableSort::apply($query, $request, ['title' => 'title', 'category' => 'category', 'status' => 'is_published', 'updated' => 'updated_at']);
-        $posts = ($sort['sort'] ? $query : $query->orderBy('position')->orderByDesc('id'))
+        $posts = ($sort['sort'] ? $query : $query->latest('id'))
             ->paginate(10, ['id', 'slug', 'title', 'category', 'is_published', 'updated_by', 'updated_at'])->withQueryString();
 
         return Inertia::render('Admin/Posts/Index', ['posts' => $posts, 'filters' => ['search' => $search], 'sort' => $sort]);

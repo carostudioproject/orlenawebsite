@@ -35,15 +35,13 @@ class CatalogController extends Controller
             'outlets' => ['name' => 'name', 'address' => 'address', 'status' => 'is_active'],
             default => ['name' => 'name', 'status' => 'is_active'],
         });
-        // Default: categories in order-form order, outlets in website order, then by name.
-        if (! $sort['sort'] && $resource === 'categories') {
-            $query->orderBy('order_position');
-        } elseif (! $sort['sort'] && $resource === 'outlets') {
-            $query->orderBy('position');
+        // Default: newest first, like every admin table.
+        if (! $sort['sort']) {
+            $query->latest('id');
         }
 
         return Inertia::render('Admin/Catalog/Index', [
-            'resource' => $resource, 'records' => $query->orderBy('name')->paginate(10)->withQueryString(), 'filters' => $filters, 'sort' => $sort,
+            'resource' => $resource, 'records' => $query->paginate(10)->withQueryString(), 'filters' => $filters, 'sort' => $sort,
             // Ids of inactive products without a price in these filters, so bulk activation can say what will be skipped.
             'unpriced' => $resource === 'products' ? $this->filtered($resource, $filters)->where('is_active', false)->whereNull('price')->pluck('id') : [],
         ]);
