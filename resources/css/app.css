@@ -24,6 +24,8 @@
     p { margin-top: 0; margin-bottom: 1rem; }
     a { color: inherit; }
     button, a { -webkit-tap-highlight-color: transparent; }
+    /* Fast taps (e.g. + / − several times) must not trigger iOS double-tap zoom; pinch zoom still works. */
+    a, button, input, select, textarea, label, summary, [role="button"] { touch-action: manipulation; }
     button { cursor: pointer; }
     :focus-visible { outline: 2px solid #4d7141; outline-offset: 5px; }
     [id] { scroll-margin-top: 80px; }
