@@ -29,6 +29,7 @@ watch(() => props.checkoutKey, key => { form.checkout_key = key; });
 const productById = computed(() => new Map(props.products.map(product => [product.id, product])));
 // The optional greeting card appears once a hampers product is in the cart.
 const hasHamper = computed(() => form.items.some(item => productById.value.get(item.product_id)?.is_hamper));
+const hasCard = computed(() => form.items.some(item => productById.value.get(item.product_id)?.is_card));
 const categoryName = (id: number) => props.categories.find(category => category.id === id)?.name ?? '';
 function addToCart(productId: number, quantity: number, contents: number[]) {
     addLine(form.items, productId, quantity, contents);
@@ -217,7 +218,7 @@ const panelLines = computed<PanelLine[]>(() => cart.value.map(row => ({
                 <p v-if="form.errors.requested_time" class="admin-error-text m-0 text-sm" role="alert">{{ form.errors.requested_time }}</p>
             </fieldset>
             </div>
-            <Field v-if="hasHamper" id="card_message" label="Kartu ucapan hampers (opsional)" :hint="`Ditulis di kartu yang disertakan bersama hampers. ${form.card_message.length}/300 karakter.`" :error="form.errors.card_message"><template #default="{ describedBy }"><textarea id="card_message" v-model="form.card_message" rows="3" maxlength="300" placeholder="Contoh: Selamat Hari Raya, semoga selalu diberi berkah. Dari keluarga Sinta." :aria-describedby="describedBy" :aria-invalid="!!form.errors.card_message"></textarea></template></Field>
+            <Field v-if="hasHamper || hasCard" id="card_message" :label="hasHamper ? 'Kartu ucapan hampers (opsional)' : 'Tulisan kartu ucapan (opsional)'" :hint="`Ditulis di kartu ucapan yang disertakan bersama pesanan. ${form.card_message.length}/300 karakter.`" :error="form.errors.card_message"><template #default="{ describedBy }"><textarea id="card_message" v-model="form.card_message" rows="3" maxlength="300" placeholder="Contoh: Selamat Hari Raya, semoga selalu diberi berkah. Dari keluarga Sinta." :aria-describedby="describedBy" :aria-invalid="!!form.errors.card_message"></textarea></template></Field>
             <Field id="customer_note" label="Catatan (opsional)" :error="form.errors.customer_note"><template #default="{ describedBy }"><textarea id="customer_note" v-model="form.customer_note" rows="3" maxlength="2000" placeholder="Misalnya tulisan di kue atau permintaan khusus" :aria-describedby="describedBy"></textarea></template></Field>
         </section>
 

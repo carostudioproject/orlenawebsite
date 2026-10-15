@@ -43,9 +43,19 @@ async function choose(id: number | null, event: MouseEvent) {
     if (top < offset) window.scrollTo({ top: window.scrollY + top - offset, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
 }
 
-interface CardState { quantity: number; hampersId: number | null; single: number | null; picks: Record<number, number> }
+interface CardState { quantity: number; hampersId: number | null; single: number | null; picks: Record<number, number>; extras: Record<number, number> }
 const cards = reactive<Record<number, CardState>>({});
-const card = (product: OrderProduct) => (cards[product.id] ??= { quantity: 1, hampersId: null, single: null, picks: {} });
+const card = (product: OrderProduct) => (cards[product.id] ??= { quantity: 1, hampersId: null, single: null, picks: {}, extras: {} });
+// Extras of the product's category (paper bag, candle, topper, card): added as their own cart lines.
+const addonsFor = (product: OrderProduct) => {
+    const ids = props.categories.find(category => category.id === product.category_id)?.addon_ids ?? [];
+    return ids.map(id => props.products.find(item => item.id === id)).filter((item): item is OrderProduct => !!item && item.id !== product.id);
+};
+function extra(product: OrderProduct, addon: OrderProduct, step: number) {
+    const state = card(product);
+    state.extras[addon.id] = Math.min(99, Math.max(0, (state.extras[addon.id] ?? 0) + step));
+}
+const extrasTotal = (product: OrderProduct) => addonsFor(product).reduce((sum, addon) => sum + addon.price * (card(product).extras[addon.id] ?? 0), 0);
 const picked = (product: OrderProduct) => Object.values(card(product).picks).reduce((sum, count) => sum + count, 0);
 /** Contents chosen for one unit, or null while incomplete. */
 function chosen(product: OrderProduct): number[] | null {
@@ -77,7 +87,7 @@ const formatDate = (date: string) => new Intl.DateTimeFormat('id-ID', { dateStyl
 const dialog = ref<HTMLDialogElement | null>(null);
 const selected = ref<OrderProduct | null>(null);
 function open(product: OrderProduct) {
-    Object.assign(card(product), { quantity: 1, hampersId: null, single: null, picks: {} });
+    Object.assign(card(product), { quantity: 1, hampersId: null, single: null, picks: {}, extras: {} });
     selected.value = product;
     dialog.value?.showModal();
     document.documentElement.classList.add('overflow-hidden');
@@ -98,6 +108,10 @@ function add(product: OrderProduct) {
     const contents = hampers ? [product.id] : chosen(product);
     if (!contents) return;
     emit('add', hampers ? hampers.id : product.id, clampQuantity(card(product).quantity), contents);
+    for (const addon of addonsFor(product)) {
+        const quantity = card(product).extras[addon.id] ?? 0;
+        if (quantity > 0) emit('add', addon.id, quantity, []);
+    }
     close();
     justAdded.value = product.id;
     setTimeout(() => { if (justAdded.value === product.id) justAdded.value = null; }, 1600);
@@ -140,6 +154,7 @@ function add(product: OrderProduct) {
         </div>
         <p v-if="!visible.length" class="admin-muted text-sm">Belum ada produk di kategori ini.</p>
 
+        <!-- Popup photos load at once: lazy images inside a dialog may never load until scrolled. -->
         <dialog ref="dialog" class="order-sheet" aria-labelledby="order-sheet-title" @close="onClose" @click="backdrop">
             <template v-if="selected">
                 <div class="order-sheet-body">
@@ -157,7 +172,7 @@ function add(product: OrderProduct) {
                         <p class="m-0 mb-2 text-sm font-bold"><i class="fa-solid fa-box" aria-hidden="true"></i> Isi box</p>
                         <ul class="m-0 grid list-none grid-cols-1 gap-1.5 p-0">
                             <li v-for="item in selected.fixed_contents" :key="item.id" class="order-content-option">
-                                <span class="order-thumb"><img v-if="item.image" :src="item.image" alt="" loading="lazy"><i v-else class="fa-solid fa-cookie-bite" aria-hidden="true"></i></span>
+                                <span class="order-thumb"><img v-if="item.image" :src="item.image" alt=""><i v-else class="fa-solid fa-cookie-bite" aria-hidden="true"></i></span>
                                 <span class="flex-1">{{ item.name }}{{ item.variant ? ` (${item.variant})` : '' }}</span><span class="font-bold tabular-nums">{{ item.quantity }}×</span>
                             </li>
                         </ul>
@@ -171,7 +186,7 @@ function add(product: OrderProduct) {
                         <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
                             <label v-for="option in selected.contents" :key="option.id" class="order-tile">
                                 <input v-model="card(selected).single" type="radio" :name="`content-${selected.id}`" :value="option.id" class="sr-only">
-                                <span class="order-tile-photo"><img v-if="option.image" :src="option.image" alt="" loading="lazy"><i v-else class="fa-solid fa-cookie-bite" aria-hidden="true"></i></span>
+                                <span class="order-tile-photo"><img v-if="option.image" :src="option.image" alt=""><i v-else class="fa-solid fa-cookie-bite" aria-hidden="true"></i></span>
                                 <span class="block px-1 pt-1.5 text-xs font-bold leading-snug">{{ optionLabel(option) }}</span>
                                 <span v-if="option.price" class="block px-1 text-xs tabular-nums text-chocolate/70">+{{ rupiah(option.price) }}</span>
                             </label>
@@ -181,7 +196,7 @@ function add(product: OrderProduct) {
                     <fieldset v-else-if="isChoice(selected)" class="mt-4 space-y-1.5">
                         <legend class="mb-1 flex w-full justify-between text-sm font-bold"><span>Pilih {{ selected.content_count }} isi (boleh sama)</span><span class="tabular-nums" :class="{ 'text-matcha': picked(selected) === selected.content_count }" aria-live="polite">{{ picked(selected) }}/{{ selected.content_count }}</span></legend>
                         <div v-for="option in selected.contents" :key="option.id" class="order-content-option">
-                            <span class="order-thumb"><img v-if="option.image" :src="option.image" alt="" loading="lazy"><i v-else class="fa-solid fa-cookie-bite" aria-hidden="true"></i></span>
+                            <span class="order-thumb"><img v-if="option.image" :src="option.image" alt=""><i v-else class="fa-solid fa-cookie-bite" aria-hidden="true"></i></span>
                             <span class="flex-1">{{ optionLabel(option) }}<span v-if="option.price" class="text-chocolate/70"> · +{{ rupiah(option.price) }}</span></span>
                             <div class="order-stepper is-small" role="group" :aria-label="`Jumlah ${optionLabel(option)}`">
                                 <button type="button" :aria-label="`Kurangi ${optionLabel(option)}`" :disabled="!card(selected).picks[option.id]" @click="pick(selected, option, -1)"><i class="fa-solid fa-minus" aria-hidden="true"></i></button>
@@ -201,7 +216,7 @@ function add(product: OrderProduct) {
                             </label>
                             <label v-for="hampers in hampersFor(selected)" :key="hampers.id" class="order-tile">
                                 <input v-model="card(selected).hampersId" type="radio" :name="`hampers-${selected.id}`" :value="hampers.id" class="sr-only">
-                                <span class="order-tile-photo"><img v-if="hampers.image" :src="hampers.image" alt="" loading="lazy"><i v-else class="fa-solid fa-gift" aria-hidden="true"></i></span>
+                                <span class="order-tile-photo"><img v-if="hampers.image" :src="hampers.image" alt=""><i v-else class="fa-solid fa-gift" aria-hidden="true"></i></span>
                                 <span class="block px-1 pt-1.5 text-xs font-bold leading-snug">{{ hampers.name }}{{ hampers.variant ? ` (${hampers.variant})` : '' }}</span>
                                 <span class="block px-1 text-xs tabular-nums text-chocolate/70">+{{ rupiah(hampers.price) }}</span>
                             </label>
@@ -213,11 +228,24 @@ function add(product: OrderProduct) {
                         <div class="order-stepper" role="group" :aria-label="`Jumlah ${selected.name}`"><button type="button" aria-label="Kurangi" :disabled="card(selected).quantity <= 1" @click="card(selected).quantity--"><i class="fa-solid fa-minus" aria-hidden="true"></i></button><input v-model.number="card(selected).quantity" class="order-qty" type="number" min="1" max="99" inputmode="numeric" :aria-label="`Jumlah ${selected.name}`" @change="card(selected).quantity = clampQuantity(card(selected).quantity)"><button type="button" aria-label="Tambah" :disabled="card(selected).quantity >= 99" @click="card(selected).quantity++"><i class="fa-solid fa-plus" aria-hidden="true"></i></button></div>
                     </div>
                     <p v-if="(isChoice(selected) || chosenHampers(selected)) && card(selected).quantity > 1" class="admin-muted m-0 mt-2 text-xs">Isi yang sama untuk {{ card(selected).quantity }} {{ selected.content_type === 'box' ? 'box' : 'hampers' }}. Untuk isi berbeda, tambahkan satu per satu.</p>
+
+                    <fieldset v-if="addonsFor(selected).length" class="mt-5 space-y-1.5">
+                        <legend class="mb-1 text-sm font-bold">Tambahan <span class="font-normal text-chocolate/65">(opsional)</span></legend>
+                        <div v-for="addon in addonsFor(selected)" :key="addon.id" class="order-content-option">
+                            <span class="order-thumb"><img v-if="addon.image" :src="addon.image" alt=""><i v-else class="fa-solid fa-gift" aria-hidden="true"></i></span>
+                            <span class="flex-1">{{ addon.name }}{{ addon.variant ? ` (${addon.variant})` : '' }}<span class="text-chocolate/70"> · +{{ rupiah(addon.price) }}</span></span>
+                            <div class="order-stepper is-small" role="group" :aria-label="`Jumlah ${addon.name}`">
+                                <button type="button" :aria-label="`Kurangi ${addon.name}`" :disabled="!card(selected).extras[addon.id]" @click="extra(selected, addon, -1)"><i class="fa-solid fa-minus" aria-hidden="true"></i></button>
+                                <span class="order-qty" aria-live="polite">{{ card(selected).extras[addon.id] ?? 0 }}</span>
+                                <button type="button" :aria-label="`Tambah ${addon.name}`" :disabled="(card(selected).extras[addon.id] ?? 0) >= 99" @click="extra(selected, addon, 1)"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
+                            </div>
+                        </div>
+                    </fieldset>
                 </div>
                 <div class="order-sheet-footer">
                     <div class="min-w-0">
                         <p class="m-0 text-xs text-chocolate/65">Total</p>
-                        <p class="m-0 text-lg font-bold tabular-nums">{{ ready(selected) ? rupiah(unitPrice(selected) * clampQuantity(card(selected).quantity)) : '—' }}</p>
+                        <p class="m-0 text-lg font-bold tabular-nums">{{ ready(selected) ? rupiah(unitPrice(selected) * clampQuantity(card(selected).quantity) + extrasTotal(selected)) : '—' }}</p>
                     </div>
                     <button type="button" class="admin-primary flex-1" :disabled="disabled || !ready(selected)" @click="add(selected)"><i class="fa-solid fa-cart-plus" aria-hidden="true"></i>{{ addLabel(selected) }}</button>
                 </div>

@@ -7,7 +7,8 @@ import ImageInput from '../../../Components/Admin/ImageInput.vue';
 import type { CatalogRecord } from '../../../Types/admin';
 defineOptions({ layout: AdminLayout });
 interface Candidate { id: number; name: string; variant: string | null; sku: string; price: number | null; is_active: boolean; flavour: boolean; category: string | null }
-const props = defineProps<{ resource: 'products' | 'outlets' | 'categories'; record: CatalogRecord | null; categories: { id: number; name: string }[]; outlets: { id: number; name: string }[]; hamperMode?: boolean; contentCandidates?: Candidate[] }>();
+const props = defineProps<{ resource: 'products' | 'outlets' | 'categories'; record: CatalogRecord | null; categories: { id: number; name: string }[]; outlets: { id: number; name: string }[]; hamperMode?: boolean; contentCandidates?: Candidate[];
+    addonCandidates?: { id: number; name: string; variant: string | null; price: number | null; is_active: boolean; category: string | null }[] }>();
 const names = { products: 'product', outlets: 'outlet', categories: 'category' };
 // Hampers are products; opened from the Hampers list the form is titled and pre-set as a hamper.
 const noun = computed(() => (props.hamperMode ? 'hampers' : names[props.resource]));
@@ -26,6 +27,7 @@ const form = useForm({
     content_type: (props.record ? props.record.content_type ?? '' : props.hamperMode ? 'hampers' : '') as '' | 'hampers' | 'box' | 'set' | 'flavour',
     content_count: props.record?.content_count ?? 1, content_pricing: props.record?.content_pricing ?? 'added',
     content_ids: [...(props.record?.content_ids ?? [])] as number[],
+    addon_ids: [...(props.record?.addon_ids ?? [])] as number[],
     sale_starts_on: props.record?.sale_starts_on ?? '', sale_ends_on: props.record?.sale_ends_on ?? '',
     order_position: props.record?.order_position ?? 100,
     upload: null as File | null,
@@ -78,6 +80,13 @@ function toggleAll(on: boolean) {
     const ids = candidates.value.map(item => item.id);
     form.content_ids = on ? [...new Set([...form.content_ids, ...ids])] : form.content_ids.filter(id => !ids.includes(id));
 }
+// Category extras: chosen ones first, then packaging, filtered by a search.
+const addonSearch = ref('');
+const addonList = computed(() => {
+    const query = addonSearch.value.trim().toLowerCase();
+    return (props.addonCandidates ?? []).filter(item => !query || `${item.name} ${item.variant ?? ''} ${item.category ?? ''}`.toLowerCase().includes(query))
+        .sort((a, b) => Number(form.addon_ids.includes(b.id)) - Number(form.addon_ids.includes(a.id)));
+});
 function submit() {
     form.transform(data => ({ ...data, content_type: data.content_type || null }));
     // Method spoofing keeps file uploads working on update (PHP does not parse multipart PUT bodies).
@@ -171,6 +180,20 @@ function submit() {
                 <Field id="closes_at" label="Outlet closes (WITA)" hint="The last slot starts an hour earlier; pickups are kept until closing." :error="form.errors.closes_at"><template #default="{ describedBy }"><input id="closes_at" v-model="form.closes_at" type="time" step="60" required :aria-describedby="describedBy" :aria-invalid="!!form.errors.closes_at"></template></Field>
             </fieldset>
         </template>
+        <fieldset v-if="resource === 'categories'" class="space-y-3 rounded-xl border border-chocolate/15 p-4">
+            <legend class="px-2 text-sm font-bold">Extras in the order popup</legend>
+            <p class="admin-muted m-0 text-xs">Offered as optional extras (e.g. paper bag, candle, topper, card) when a customer opens any product of this category on /order. They are added to the cart as their own products, at their own price. Only active products with a price are shown to customers.</p>
+            <p v-if="form.errors.addon_ids" class="admin-error-text m-0 text-sm" role="alert">{{ form.errors.addon_ids }}</p>
+            <input v-model="addonSearch" type="search" placeholder="Search products" aria-label="Search extras">
+            <ul class="m-0 max-h-72 list-none space-y-1 overflow-y-auto p-0">
+                <li v-for="item in addonList" :key="item.id"><label class="flex items-center gap-3 rounded-lg px-2 py-1.5 text-sm hover:bg-cream/60">
+                    <input v-model="form.addon_ids" type="checkbox" :value="item.id">
+                    <span class="flex-1">{{ item.name }}{{ item.variant ? ` (${item.variant})` : '' }} <span class="admin-muted text-xs">· {{ item.category }}</span></span>
+                    <span class="text-xs tabular-nums" :class="item.is_active && item.price ? '' : 'admin-error-text'">{{ item.price ? `Rp ${item.price.toLocaleString('id-ID')}` : 'no price' }}{{ item.is_active ? '' : ' · inactive' }}</span>
+                </label></li>
+            </ul>
+            <p class="admin-muted m-0 text-xs">{{ form.addon_ids.length }} selected.</p>
+        </fieldset>
         <Field v-if="resource === 'categories'" id="order_position" label="Order on the order form" hint="Lower numbers come first in the category chips on /order, e.g. 1 for Brownies. Categories with the same number are sorted by name." :error="form.errors.order_position"><template #default="{ describedBy }"><input id="order_position" v-model.number="form.order_position" type="number" min="0" max="999" required class="max-w-32" :aria-describedby="describedBy"></template></Field>
         <ImageInput id="photo" :label="{ products: 'Product photo', outlets: 'Outlet photo', categories: 'Category photo' }[resource]" :current="record?.image ?? null" :error="form.errors.upload" @select="file => (form.upload = file)" />
         <fieldset class="space-y-3 rounded-xl border border-chocolate/15 p-4">

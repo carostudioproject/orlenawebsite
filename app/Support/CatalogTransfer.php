@@ -10,7 +10,7 @@ namespace App\Support;
 final class CatalogTransfer
 {
     /** In insert order (parents first). */
-    public const TABLES = ['categories', 'outlets', 'products', 'outlet_prices', 'product_contents', 'posts', 'content_entries', 'settings', 'closed_dates'];
+    public const TABLES = ['categories', 'outlets', 'products', 'outlet_prices', 'product_contents', 'category_addons', 'posts', 'content_entries', 'settings', 'closed_dates'];
 
     /** Columns pointing at users, cleared on export. */
     public const USER_COLUMNS = ['updated_by'];

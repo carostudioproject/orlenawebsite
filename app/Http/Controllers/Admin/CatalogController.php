@@ -56,6 +56,9 @@ class CatalogController extends Controller
     {
         $resource = $request->route('resource');
         $record = $id ? self::MODELS[$resource]::findOrFail($id) : null;
+        if ($record instanceof Category) {
+            $record->setAttribute('addon_ids', $record->addons()->pluck('products.id'));
+        }
         if ($record instanceof Product) {
             $record->load('outletPrices');
             // A fixed box repeats each flavour once per piece, e.g. [almond, almond, choco, choco].
@@ -73,6 +76,12 @@ class CatalogController extends Controller
                 ->when($record, fn ($query) => $query->whereKeyNot($record->id))
                 ->orderBy('name')->orderBy('variant')->get(['id', 'name', 'variant', 'sku', 'price', 'is_active', 'category_id', 'content_type'])
                 ->map(fn (Product $product) => [...$product->only('id', 'name', 'variant', 'sku', 'price', 'is_active'), 'flavour' => $product->content_type === 'flavour', 'category' => $product->category?->name]) : [],
+            // Regular products that can be offered as extras in a category's order popups (packaging first).
+            'addonCandidates' => $resource === 'categories' ? Product::with('category:id,name')->whereNull('content_type')
+                ->when($record, fn ($query) => $query->where('category_id', '!=', $record->id))->orderBy('name')->orderBy('variant')
+                ->get(['id', 'name', 'variant', 'price', 'is_active', 'category_id'])
+                ->map(fn (Product $product) => [...$product->only('id', 'name', 'variant', 'price', 'is_active'), 'category' => $product->category?->name])
+                ->sortBy(fn ($product) => [stripos((string) $product['category'], 'pack') === false, $product['category'], $product['name']])->values() : [],
         ]);
     }
 
@@ -94,7 +103,8 @@ class CatalogController extends Controller
             $data = $request->validated();
             $prices = $data['outlet_prices'] ?? [];
             $contentIds = $data['content_ids'] ?? [];
-            unset($data['outlet_prices'], $data['upload'], $data['content_ids']);
+            $addonIds = $data['addon_ids'] ?? null;
+            unset($data['outlet_prices'], $data['upload'], $data['content_ids'], $data['addon_ids']);
             if (($data['content_type'] ?? null) === 'hampers') {
                 $data['content_count'] = 1;
             }
@@ -116,6 +126,12 @@ class CatalogController extends Controller
             $changes = $record->getDirty();
             $record->save();
 
+            if ($record instanceof Category && $addonIds !== null) {
+                $synced = $record->addons()->sync(collect($addonIds)->values()->mapWithKeys(fn ($productId, $position) => [(int) $productId => ['position' => $position]])->all());
+                if (array_filter($synced)) {
+                    $changes['addon_ids'] = array_map('intval', $addonIds);
+                }
+            }
             if ($record instanceof Product) {
                 $record->outletPrices()->delete();
                 $record->outletPrices()->createMany($prices);

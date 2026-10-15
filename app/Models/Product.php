@@ -110,6 +110,12 @@ class Product extends Model
         return $this->hasMany(OutletPrice::class);
     }
 
+    /** A greeting card sold as a product (e.g. "Card"): the order form then asks for the card message, as for hampers. */
+    public function isGreetingCard(): bool
+    {
+        return (bool) preg_match('/^(card|kartu)\b/i', trim($this->name));
+    }
+
     public function priceAt(Outlet $outlet): ?int
     {
         return $this->outletPrices()->where('outlet_id', $outlet->id)->value('price') ?? $this->price;

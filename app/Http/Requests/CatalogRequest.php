@@ -35,6 +35,9 @@ class CatalogRequest extends FormRequest
                 'order_position' => ['sometimes', 'integer', 'min:0', 'max:999'],
                 'is_active' => ['sometimes', 'boolean'],
                 'upload' => ContentImage::RULES,
+                // Extras offered in this category's order popups: regular products only (no hampers, box or flavour).
+                'addon_ids' => ['sometimes', 'array', 'max:20'],
+                'addon_ids.*' => ['integer', 'distinct', Rule::exists('products', 'id')->whereNull('content_type')],
             ],
             'outlets' => [
                 'name' => ['required', 'string', 'max:160'],

@@ -31,6 +31,8 @@ label.order-content-option:has(input:checked) { border-color: var(--admin-chocol
 .order-stepper button:hover:not(:disabled) { background: var(--admin-almond); }
 .order-stepper button:disabled { opacity: .35; cursor: not-allowed; }
 .order-stepper .order-qty { width: 2.75rem; border: 0; border-radius: 0; padding: 0; text-align: center; font-weight: 700; -moz-appearance: textfield; }
+/* 16px: iOS zooms into smaller fields, which breaks the popup layout. */
+.order-stepper input.order-qty { font-size: 16px; }
 .order-stepper input::-webkit-inner-spin-button, .order-stepper input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .order-stepper.is-small button { width: 1.9rem; height: 2rem; }
 .order-stepper.is-small .order-qty { width: 2.25rem; }
@@ -44,9 +46,12 @@ label.order-content-option:has(input:checked) { border-color: var(--admin-chocol
 .order-select { width: 100%; border: 1px solid #3b030429; border-radius: .75rem; background-color: white; padding: .55rem .75rem; font-size: 1rem; }
 /* Product popup: a bottom sheet on phones, a centred dialog on wider screens. */
 .order-sheet { width: 100%; max-width: 32rem; max-height: 88dvh; margin: auto auto 0; border: 0; border-radius: 1.25rem 1.25rem 0 0; padding: 0; background: white; color: var(--admin-chocolate); }
-.order-sheet[open] { display: flex; flex-direction: column; animation: order-sheet-in .2s ease-out; }
+.order-sheet[open] { display: flex; flex-direction: column; overflow: hidden; animation: order-sheet-in .2s ease-out; }
 .order-sheet::backdrop { background: rgb(27 1 2 / .45); }
-.order-sheet-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 1.25rem; }
+/* Basis auto (not flex: 1, whose 0% basis Safari resolves to 0 in a sheet of indefinite height and collapses the body);
+   min-height: 0 lets it shrink and scroll so the footer button stays on screen on phones. */
+.order-sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 1.25rem; }
+.order-sheet-footer { flex-shrink: 0; }
 .order-sheet-footer { display: flex; align-items: center; gap: 1rem; border-top: 1px solid var(--admin-line); padding: .9rem 1.25rem calc(.9rem + env(safe-area-inset-bottom)); }
 @media (min-width: 640px) { .order-sheet { margin: auto; border-radius: 1.25rem; } }
 @keyframes order-sheet-in { from { transform: translateY(1.5rem); opacity: 0; } }

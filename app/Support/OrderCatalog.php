@@ -13,7 +13,7 @@ class OrderCatalog
 {
     public static function for(?Outlet $pricing): array
     {
-        $products = Product::with('category', 'outletPrices', 'contentOptions.category', 'contentOptions.outletPrices')
+        $products = Product::with('category.addons:id', 'outletPrices', 'contentOptions.category', 'contentOptions.outletPrices')
             ->where('is_active', true)->where('price', '>', 0)->onSale()
             ->whereHas('category', fn ($query) => $query->where('is_active', true))
             ->orderBy('name')->orderByDesc('price')->get();
@@ -22,7 +22,8 @@ class OrderCatalog
         $rows = $products->map(fn (Product $product) => [
             'id' => $product->id, 'name' => $product->name, 'category_id' => $product->category_id, 'description' => $product->description,
             'image' => $product->image, 'variant' => $product->variant,
-            'is_hamper' => $product->is_hamper || $product->content_type === 'hampers', 'hamper_items' => $product->hamperItems(), 'sale_ends_on' => $product->sale_ends_on?->toDateString(),
+            'is_hamper' => $product->is_hamper || $product->content_type === 'hampers', 'is_card' => $product->isGreetingCard(),
+            'hamper_items' => $product->hamperItems(), 'sale_ends_on' => $product->sale_ends_on?->toDateString(),
             'price' => $price($product),
             'content_type' => $product->hasChoice() || $product->hasFixedContents() ? $product->content_type : null,
             'content_count' => $product->hasChoice() ? $product->content_count : ($product->hasFixedContents() ? (int) $product->contentOptions->sum('pivot.quantity') : null),
@@ -39,10 +40,13 @@ class OrderCatalog
             // A hampers or box without any available contents cannot be ordered.
             ->filter(fn (array $row) => ! in_array($row['content_type'], ['hampers', 'box'], true) || $row['contents'])->values();
         $categoryIds = $rows->pluck('category_id')->unique();
+        $orderable = $rows->pluck('id')->flip();
 
         return [
             'categories' => $products->pluck('category')->whereIn('id', $categoryIds)->unique('id')->sortBy([['order_position', 'asc'], ['name', 'asc']])->values()
-                ->map(fn ($category) => ['id' => $category->id, 'name' => $category->name, 'image' => $category->image]),
+                ->map(fn ($category) => ['id' => $category->id, 'name' => $category->name, 'image' => $category->image,
+                    // Extras offered in this category's popups, only those that can be ordered right now.
+                    'addon_ids' => $category->addons->pluck('id')->filter(fn ($id) => $orderable->has($id))->values()->all()]),
             'products' => $rows,
         ];
     }

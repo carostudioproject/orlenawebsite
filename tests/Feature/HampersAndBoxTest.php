@@ -145,6 +145,33 @@ class HampersAndBoxTest extends TestCase
         $this->assertDatabaseCount('orders', 0);
     }
 
+    public function test_category_extras_are_offered_in_the_popup_and_a_card_keeps_its_message(): void
+    {
+        $packaging = Category::create(['name' => 'Packaging']);
+        $card = Product::create(['category_id' => $packaging->id, 'sku' => 'P0028', 'barcode' => 'BC-P0028', 'name' => 'Card', 'price' => 5000, 'is_active' => true]);
+        $candle = Product::create(['category_id' => $packaging->id, 'sku' => 'P0087', 'barcode' => 'BC-P0087', 'name' => 'Lilin', 'price' => 5000, 'is_active' => true]);
+        $bag = Product::create(['category_id' => $packaging->id, 'sku' => 'P0003', 'barcode' => 'BC-P0003', 'name' => 'Paper Bag Kecil', 'price' => 4000, 'is_active' => false]);
+        $brownies = $this->berry->category;
+
+        $admin = User::factory()->create(['role' => 'admin']);
+        $this->actingAs($admin)->get('/admin/categories/'.$brownies->id.'/edit')->assertInertia(fn (Assert $page) => $page
+            ->where('addonCandidates.0.category', 'Packaging')->where('record.addon_ids', []));
+        // Only regular products can be extras.
+        $this->put('/admin/categories/'.$brownies->id, ['name' => 'Brownies', 'is_active' => true, 'addon_ids' => [$this->box->id]])->assertSessionHasErrors('addon_ids.0');
+        $this->put('/admin/categories/'.$brownies->id, ['name' => 'Brownies', 'is_active' => true, 'addon_ids' => [$candle->id, $card->id, $bag->id]])->assertSessionHasNoErrors();
+        $this->assertSame([$candle->id, $card->id, $bag->id], $brownies->addons()->pluck('products.id')->all());
+        auth()->logout();
+
+        // The inactive paper bag is not offered; the card is flagged so the form asks for its message.
+        $this->get('/order?outlet_id='.$this->outlet->id)->assertInertia(fn (Assert $page) => $page
+            ->where('categories', fn ($categories) => collect($categories)->firstWhere('id', $brownies->id)['addon_ids'] === [$candle->id, $card->id])
+            ->where('products', fn ($products) => collect($products)->firstWhere('id', $card->id)['is_card'] === true));
+        $payload = $this->payload([['product_id' => $this->berry->id, 'quantity' => 1, 'quoted_price' => 100000], ['product_id' => $card->id, 'quantity' => 1, 'quoted_price' => 5000]]);
+        $this->post('/order', [...$payload, 'card_message' => 'Selamat ulang tahun'])->assertSessionHasNoErrors();
+        $order = Order::sole();
+        $this->assertSame([105000, 'Selamat ulang tahun'], [$order->subtotal, $order->card_message]);
+    }
+
     public function test_staff_set_contents_in_the_product_form(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
