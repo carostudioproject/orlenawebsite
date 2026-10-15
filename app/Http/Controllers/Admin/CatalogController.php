@@ -9,6 +9,7 @@ use App\Models\Outlet;
 use App\Models\Product;
 use App\Support\Audit;
 use App\Support\ContentImage;
+use App\Support\TableSort;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -28,15 +29,21 @@ class CatalogController extends Controller
         if ($resource === 'products') {
             $query->with('category');
         }
-        // Categories list in order-form order; outlets in website order.
-        if ($resource === 'categories') {
+        $sort = TableSort::apply($query, $request, match ($resource) {
+            'products' => ['name' => 'name', 'code' => 'sku', 'price' => 'price', 'status' => 'is_active',
+                'category' => fn ($q, $dir) => $q->orderBy(Category::select('name')->whereColumn('categories.id', 'products.category_id'), $dir)],
+            'outlets' => ['name' => 'name', 'address' => 'address', 'status' => 'is_active'],
+            default => ['name' => 'name', 'status' => 'is_active'],
+        });
+        // Default: categories in order-form order, outlets in website order, then by name.
+        if (! $sort['sort'] && $resource === 'categories') {
             $query->orderBy('order_position');
-        } elseif ($resource === 'outlets') {
+        } elseif (! $sort['sort'] && $resource === 'outlets') {
             $query->orderBy('position');
         }
 
         return Inertia::render('Admin/Catalog/Index', [
-            'resource' => $resource, 'records' => $query->orderBy('name')->paginate(10)->withQueryString(), 'filters' => $filters,
+            'resource' => $resource, 'records' => $query->orderBy('name')->paginate(10)->withQueryString(), 'filters' => $filters, 'sort' => $sort,
             // Ids of inactive products without a price in these filters, so bulk activation can say what will be skipped.
             'unpriced' => $resource === 'products' ? $this->filtered($resource, $filters)->where('is_active', false)->whereNull('price')->pluck('id') : [],
         ]);

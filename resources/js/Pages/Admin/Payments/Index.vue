@@ -2,6 +2,7 @@
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import AdminLayout from '../../../Layouts/AdminLayout.vue';
+import SortTh, { type TableSortState } from '../../../Components/Admin/SortTh.vue';
 import Pagination from '../../../Components/Admin/Pagination.vue';
 import SearchInput from '../../../Components/Admin/SearchInput.vue';
 import StatusBadge from '../../../Components/Admin/StatusBadge.vue';
@@ -15,7 +16,7 @@ interface PaymentRow {
     expires_at: string | null; paid_at: string | null; created_at: string; reason: string | null; last_error: string | null;
     order: { id: number; order_code: string; order_status: string; customer: { name: string; whatsapp: string } } | null; creator: { name: string } | null;
 }
-const props = defineProps<{ payments: Paginated<PaymentRow>; filters: { search?: string; status?: string; from?: string; to?: string }; statuses: string[]; totals: { paid_today: number; pending: number; pending_amount: number; failed_week: number } }>();
+const props = defineProps<{ payments: Paginated<PaymentRow>; filters: { search?: string; status?: string; from?: string; to?: string }; sort: TableSortState; statuses: string[]; totals: { paid_today: number; pending: number; pending_amount: number; failed_week: number } }>();
 const page = usePage<AdminProps>();
 const { filters: live, loading, active, apply, reset } = useLiveFilters(() => '/admin/payments', { search: props.filters.search ?? '', status: props.filters.status ?? '', from: props.filters.from ?? '', to: props.filters.to ?? '' });
 const checking = ref<number | null>(null);
@@ -45,7 +46,7 @@ const method = (type: string | null) => (type ? type.replace(/_/g, ' ') : '—')
     <p v-if="paymentError" role="alert" class="admin-alert admin-alert-error mb-4">{{ paymentError }}</p>
     <div class="admin-card overflow-x-auto">
         <table v-if="payments.data.length" class="w-full text-left text-sm">
-            <thead><tr><th>Order</th><th class="text-right">Amount</th><th>Status</th><th>Method</th><th>Time</th><th class="text-right">Actions</th></tr></thead>
+            <thead><tr><SortTh column="order" label="Order" :sort="sort" /><SortTh column="amount" label="Amount" :sort="sort" class="text-right" /><SortTh column="status" label="Status" :sort="sort" /><SortTh column="method" label="Method" :sort="sort" /><SortTh column="time" label="Time" :sort="sort" /><th class="text-right">Actions</th></tr></thead>
             <tbody>
                 <tr v-for="payment in payments.data" :key="payment.id">
                     <td><Link v-if="payment.order" :href="`/admin/orders/${payment.order.id}`" class="font-bold underline">{{ payment.order.order_code }}</Link><span class="block text-xs">{{ payment.order?.customer.name }} · attempt {{ payment.attempt }}</span><span class="admin-muted block text-xs">{{ payment.provider_order_id }}</span></td>

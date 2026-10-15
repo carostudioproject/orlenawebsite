@@ -158,3 +158,10 @@ a.admin-kpi:hover { border-color: #3b030433; box-shadow: 0 6px 20px -12px #3b030
 /* iOS Safari gives date/time inputs an intrinsic width wider than small screens; keep them inside their field. */
 .admin-shell input[type='date'], .admin-shell input[type='time'] { -webkit-appearance: none; appearance: none; display: block; min-width: 0; max-width: 100%; min-height: 2.9rem; text-align: left; }
 .admin-shell input[type='date']::-webkit-date-and-time-value, .admin-shell input[type='time']::-webkit-date-and-time-value { text-align: left; }
+
+/* Sortable table headers (SortTh): the label is a button; the arrow shows the current direction. */
+.admin-sort { display: inline-flex; align-items: center; gap: .4rem; border: 0; background: none; padding: 0; font: inherit; font-weight: inherit; color: inherit; text-align: inherit; cursor: pointer; }
+.admin-sort i { font-size: .7rem; opacity: .35; }
+.admin-sort:hover i, .admin-sort.is-active i { opacity: 1; }
+.admin-sort:hover { text-decoration: underline; }
+th.text-right .admin-sort { flex-direction: row-reverse; }

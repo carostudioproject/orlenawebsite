@@ -279,6 +279,23 @@ class OrderRulesTest extends TestCase
         $this->post('/admin/orders/'.$refunded->id.'/erzap-voided')->assertStatus(422);
     }
 
+    public function test_admin_tables_sort_by_a_column_header(): void
+    {
+        $cheap = $this->order(['total' => 50000, 'requested_date' => '2030-01-05']);
+        $dear = $this->order(['total' => 900000, 'requested_date' => '2030-01-03']);
+        $cheap->customer->update(['name' => 'Zara']);
+        $dear->customer->update(['name' => 'Ayu']);
+        $this->actingAs(User::factory()->create(['role' => 'admin']));
+        $this->get('/admin/orders?sort=total&dir=desc')->assertInertia(fn (Assert $page) => $page->where('orders.data.0.id', $dear->id)->where('sort', ['sort' => 'total', 'dir' => 'desc']));
+        $this->get('/admin/orders?sort=total&dir=asc')->assertInertia(fn (Assert $page) => $page->where('orders.data.0.id', $cheap->id));
+        $this->get('/admin/orders?sort=customer')->assertInertia(fn (Assert $page) => $page->where('orders.data.0.customer.name', 'Ayu')->where('sort.dir', 'asc'));
+        $this->get('/admin/orders?sort=date&dir=asc&status=confirmed')->assertInertia(fn (Assert $page) => $page->where('orders.data.0.id', $dear->id)->where('filters.status', 'confirmed'));
+        // Products: by price, highest first; the default stays by name.
+        Product::where('id', '!=', $dear->items()->first()->product_id)->update(['price' => 10000]);
+        $this->get('/admin/products?sort=price&dir=desc')->assertInertia(fn (Assert $page) => $page->where('records.data.0.price', 80000));
+        $this->get('/admin/products')->assertInertia(fn (Assert $page) => $page->where('sort', ['sort' => null, 'dir' => null]));
+    }
+
     public function test_orders_waiting_more_than_an_hour_are_flagged(): void
     {
         $this->order(['order_status' => 'pending_review', 'payment_status' => 'not_created']);

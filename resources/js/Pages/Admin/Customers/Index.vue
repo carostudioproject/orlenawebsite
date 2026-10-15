@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import AdminLayout from '../../../Layouts/AdminLayout.vue';
+import SortTh, { type TableSortState } from '../../../Components/Admin/SortTh.vue';
 import Pagination from '../../../Components/Admin/Pagination.vue';
 import SearchInput from '../../../Components/Admin/SearchInput.vue';
 import { useLiveFilters } from '../../../Composables/useLiveFilters';
@@ -9,8 +10,8 @@ import { witaTime } from '../../../Support/orderStatus';
 import type { Paginated } from '../../../Types/admin';
 defineOptions({ layout: AdminLayout });
 interface CustomerRow { whatsapp: string; name: string; orders: number; spent: number; last_order_at: string }
-const props = defineProps<{ customers: Paginated<CustomerRow>; filters: { search?: string; sort?: string } }>();
-const { filters: live, loading, active, apply, reset } = useLiveFilters(() => '/admin/customers', { search: props.filters.search ?? '', sort: props.filters.sort ?? '' });
+const props = defineProps<{ customers: Paginated<CustomerRow>; filters: { search?: string }; sort: TableSortState }>();
+const { filters: live, loading, active, apply, reset } = useLiveFilters(() => '/admin/customers', { search: props.filters.search ?? '' });
 </script>
 <template>
     <Head title="Customers · Orlena" />
@@ -18,12 +19,11 @@ const { filters: live, loading, active, apply, reset } = useLiveFilters(() => '/
     <p class="admin-muted mt-2 text-sm">Grouped by WhatsApp number. Total spent only counts paid orders that were not cancelled.</p>
     <form class="my-6 flex flex-wrap items-end gap-3" @submit.prevent="apply">
         <SearchInput id="search" v-model="live.search" label="Name or WhatsApp" :loading="loading" />
-        <div><label for="sort" class="mb-2 block text-sm">Sort by</label><select id="sort" v-model="live.sort"><option value="">Latest order</option><option value="spent">Highest total spent</option><option value="orders">Most orders</option></select></div>
         <button v-if="active" type="button" class="admin-secondary" @click="reset"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i>Reset</button>
     </form>
     <div class="admin-card overflow-x-auto">
         <table v-if="customers.data.length" class="w-full text-left text-sm">
-            <thead><tr><th>Customer</th><th class="text-right">Orders</th><th class="text-right">Total spent</th><th>Last order</th><th class="text-right">Actions</th></tr></thead>
+            <thead><tr><SortTh column="name" label="Customer" :sort="sort" /><SortTh column="orders" label="Orders" :sort="sort" class="text-right" /><SortTh column="spent" label="Total spent" :sort="sort" class="text-right" /><SortTh column="last_order" label="Last order" :sort="sort" /><th class="text-right">Actions</th></tr></thead>
             <tbody>
                 <tr v-for="customer in customers.data" :key="customer.whatsapp">
                     <td><Link :href="`/admin/customers/${customer.whatsapp}`" class="font-bold underline">{{ customer.name }}</Link><span class="block text-xs">{{ customer.whatsapp }}</span></td>

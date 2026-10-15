@@ -11,6 +11,7 @@ use App\Actions\Payments\ReconcilePayment;
 use App\Actions\Payments\RecordManualPayment;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ReviewOrderRequest;
+use App\Models\Customer;
 use App\Models\IntegrationSync;
 use App\Models\Order;
 use App\Models\Outlet;
@@ -19,6 +20,7 @@ use App\Services\Doku\DokuException;
 use App\Services\Payments\PaymentGateways;
 use App\Support\Audit;
 use App\Support\PreorderDate;
+use App\Support\TableSort;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -36,15 +38,19 @@ class OrderController extends Controller
             'search' => ['nullable', 'string', 'max:100'], 'date' => ['nullable', 'date_format:Y-m-d'],
             'status' => ['nullable', 'in:'.self::ORDER_STATUSES], 'payment' => ['nullable', 'in:'.self::PAYMENT_STATUSES],
         ]);
-        $orders = Order::with('customer:id,name,whatsapp')->when($filters['search'] ?? null, function ($q, $search) {
+        $query = Order::with('customer:id,name,whatsapp')->when($filters['search'] ?? null, function ($q, $search) {
             $q->where(fn ($q) => $q->where('order_code', 'like', '%'.$search.'%')->orWhereHas('customer', fn ($c) => $c->where('name', 'like', '%'.$search.'%')->orWhere('whatsapp', 'like', '%'.$search.'%')));
         })->when($filters['date'] ?? null, fn ($q, $date) => $q->whereDate('requested_date', $date))
             ->when($filters['status'] ?? null, fn ($q, $status) => $q->where('order_status', $status))
-            ->when($filters['payment'] ?? null, fn ($q, $payment) => $q->where('payment_status', $payment))
-            ->latest('id')->paginate(10)->withQueryString();
+            ->when($filters['payment'] ?? null, fn ($q, $payment) => $q->where('payment_status', $payment));
+        $sort = TableSort::apply($query, $request, [
+            'code' => 'order_code', 'date' => 'requested_date', 'total' => 'total', 'status' => 'order_status', 'payment' => 'payment_status', 'created' => 'created_at',
+            'customer' => fn ($q, $dir) => $q->orderBy(Customer::select('name')->whereColumn('customers.id', 'orders.customer_id'), $dir),
+        ]);
+        $orders = ($sort['sort'] ? $query : $query->latest('id'))->paginate(10)->withQueryString();
         Inertia::encryptHistory();
 
-        return Inertia::render('Admin/Orders/Index', compact('orders', 'filters'));
+        return Inertia::render('Admin/Orders/Index', compact('orders', 'filters', 'sort'));
     }
 
     public function show(Order $order)

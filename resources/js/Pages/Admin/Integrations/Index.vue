@@ -2,6 +2,7 @@
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import AdminLayout from '../../../Layouts/AdminLayout.vue';
+import SortTh, { type TableSortState } from '../../../Components/Admin/SortTh.vue';
 import Pagination from '../../../Components/Admin/Pagination.vue';
 import SearchInput from '../../../Components/Admin/SearchInput.vue';
 import StatusBadge from '../../../Components/Admin/StatusBadge.vue';
@@ -12,7 +13,7 @@ import { rupiah } from '../../../Support/money';
 defineOptions({ layout: AdminLayout });
 interface SyncRow { id: number; type: string; status: string; attempts: number; last_error: string | null; external_ref: string | null; subject_id: number; order_code: string | null; created_at: string; synced_at: string | null; next_attempt_at: string | null }
 const props = defineProps<{
-    configured: boolean; missingSettings: string[]; defaultOutlet: boolean; syncs: Paginated<SyncRow>; filters: { status?: string; search?: string }; labels: Record<string, string>;
+    configured: boolean; missingSettings: string[]; defaultOutlet: boolean; syncs: Paginated<SyncRow>; filters: { status?: string; search?: string }; sort: TableSortState; labels: Record<string, string>;
     counts: Record<string, number>; mapping: { outlets: { mapped: number; total: number }; products: { mapped: number; total: number } };
     toVoid: { id: number; order_code: string; total: number; updated_at: string; customer: { name: string } | null }[];
 }>();
@@ -63,7 +64,7 @@ const tiles = computed(() => [
     <p v-if="syncError" role="alert" class="admin-alert admin-alert-error mb-4">{{ syncError }}</p>
     <div class="admin-card overflow-x-auto">
         <table v-if="syncs.data.length" class="w-full text-left text-sm">
-            <thead><tr><th>Order</th><th>Type</th><th>Status</th><th>Attempts</th><th>Details</th><th>Time</th><th class="text-right">Actions</th></tr></thead>
+            <thead><tr><SortTh column="order" label="Order" :sort="sort" /><SortTh column="type" label="Type" :sort="sort" /><SortTh column="status" label="Status" :sort="sort" /><SortTh column="attempts" label="Attempts" :sort="sort" /><th>Details</th><SortTh column="time" label="Time" :sort="sort" /><th class="text-right">Actions</th></tr></thead>
             <tbody>
                 <tr v-for="sync in syncs.data" :key="sync.id">
                     <td><Link v-if="sync.order_code" :href="`/admin/orders/${sync.subject_id}`" class="font-bold underline">{{ sync.order_code }}</Link><span v-else>#{{ sync.subject_id }}</span></td>

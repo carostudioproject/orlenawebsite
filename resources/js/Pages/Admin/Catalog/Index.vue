@@ -2,13 +2,14 @@
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import AdminLayout from '../../../Layouts/AdminLayout.vue';
+import SortTh, { type TableSortState } from '../../../Components/Admin/SortTh.vue';
 import Pagination from '../../../Components/Admin/Pagination.vue';
 import SearchInput from '../../../Components/Admin/SearchInput.vue';
 import { useLiveFilters } from '../../../Composables/useLiveFilters';
 import { confirmDialog } from '../../../Support/dialog';
 import type { AdminProps, CatalogRecord, Paginated } from '../../../Types/admin';
 defineOptions({ layout: AdminLayout });
-const props = defineProps<{ resource: 'products' | 'outlets' | 'categories'; records: Paginated<CatalogRecord>; filters: { search?: string; status?: string; type?: string }; unpriced: number[] }>();
+const props = defineProps<{ resource: 'products' | 'outlets' | 'categories'; records: Paginated<CatalogRecord>; filters: { search?: string; status?: string; type?: string }; unpriced: number[]; sort: TableSortState }>();
 const page = usePage<AdminProps>();
 const names = { products: 'Products', outlets: 'Outlets', categories: 'Categories' };
 const singular = { products: 'product', outlets: 'outlet', categories: 'category' };
@@ -92,7 +93,7 @@ async function bulk(activate: boolean, all: boolean) {
     </div>
     <div class="admin-card overflow-x-auto">
         <table v-if="records.data.length" class="w-full text-left text-sm">
-            <thead><tr><th v-if="page.props.auth.can_manage" class="w-10"><input type="checkbox" :checked="allOnPage" :indeterminate="someOnPage" aria-label="Select all rows on this page" @change="togglePage"></th><th><span class="sr-only">Photo</span></th><th>Name</th><th v-if="resource === 'products'">Category</th><th v-if="resource === 'products'">Base price</th><th v-if="resource === 'outlets'">Address</th><th>Status</th><th v-if="page.props.auth.can_manage" class="text-right">Actions</th></tr></thead>
+            <thead><tr><th v-if="page.props.auth.can_manage" class="w-10"><input type="checkbox" :checked="allOnPage" :indeterminate="someOnPage" aria-label="Select all rows on this page" @change="togglePage"></th><th><span class="sr-only">Photo</span></th><SortTh column="name" label="Name" :sort="sort" /><SortTh column="category" label="Category" :sort="sort" v-if="resource === 'products'" /><SortTh column="price" label="Base price" :sort="sort" v-if="resource === 'products'" /><SortTh column="address" label="Address" :sort="sort" v-if="resource === 'outlets'" /><SortTh column="status" label="Status" :sort="sort" /><th v-if="page.props.auth.can_manage" class="text-right">Actions</th></tr></thead>
             <tbody>
                 <tr v-for="record in records.data" :key="record.id" :class="{ 'bg-cream/60': selected.includes(record.id) }">
                     <td v-if="page.props.auth.can_manage"><input v-model="selected" type="checkbox" :value="record.id" :aria-label="`Select ${record.name}${record.variant ? ` (${record.variant})` : ''}`"></td>

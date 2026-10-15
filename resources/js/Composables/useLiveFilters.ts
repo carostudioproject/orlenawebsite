@@ -13,6 +13,9 @@ export function useLiveFilters<T extends Record<string, string>>(url: () => stri
     function apply() {
         clearTimeout(timer);
         const query = Object.fromEntries(Object.entries(filters).map(([key, value]) => [key, value.trim()]).filter(([, value]) => value !== ''));
+        // A column sort chosen in the table header stays while filtering.
+        const current = new URLSearchParams(window.location.search);
+        for (const key of ['sort', 'dir']) if (!(key in query) && current.get(key)) query[key] = current.get(key) as string;
         router.get(url(), query, {
             preserveState: true, preserveScroll: true, replace: true,
             onStart: () => { loading.value = true; }, onFinish: () => { loading.value = false; },

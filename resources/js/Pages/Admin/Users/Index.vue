@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import AdminLayout from '../../../Layouts/AdminLayout.vue';
+import SortTh, { type TableSortState } from '../../../Components/Admin/SortTh.vue';
 import Pagination from '../../../Components/Admin/Pagination.vue';
 import SearchInput from '../../../Components/Admin/SearchInput.vue';
 import { useLiveFilters } from '../../../Composables/useLiveFilters';
 import { roleOptions, type Paginated, type StaffUser } from '../../../Types/admin';
 const roleLabel = (role: string) => roleOptions.find(option => option.value === role)?.label ?? role;
 defineOptions({ layout: AdminLayout });
-const props = defineProps<{ users: Paginated<StaffUser>; filters: { search?: string; role?: string } }>();
+const props = defineProps<{ users: Paginated<StaffUser>; filters: { search?: string; role?: string }; sort: TableSortState }>();
 const { filters: live, loading, active, apply, reset } = useLiveFilters(() => '/admin/users', { search: props.filters.search ?? '', role: props.filters.role ?? '' });
 </script>
 <template>
@@ -19,7 +20,7 @@ const { filters: live, loading, active, apply, reset } = useLiveFilters(() => '/
         <button v-if="active" type="button" class="admin-secondary" @click="reset"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i>Reset</button>
     </form>
     <div class="admin-card overflow-x-auto">
-        <table v-if="users.data.length" class="w-full text-left text-sm"><thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th class="text-right">Actions</th></tr></thead><tbody><tr v-for="user in users.data" :key="user.id"><td>{{ user.name }}</td><td class="font-bold">@{{ user.username }}</td><td>{{ user.email ?? '—' }}</td><td>{{ roleLabel(user.role) }}</td><td>{{ user.is_active ? 'Active' : 'Inactive' }}</td><td><div class="admin-actions"><Link :href="`/admin/users/${user.id}/edit`" class="admin-action" :aria-label="`Edit account ${user.name}`"><i class="fa-solid fa-pen" aria-hidden="true"></i>Edit</Link></div></td></tr></tbody></table>
+        <table v-if="users.data.length" class="w-full text-left text-sm"><thead><tr><SortTh column="name" label="Name" :sort="sort" /><SortTh column="username" label="Username" :sort="sort" /><SortTh column="email" label="Email" :sort="sort" /><SortTh column="role" label="Role" :sort="sort" /><SortTh column="status" label="Status" :sort="sort" /><th class="text-right">Actions</th></tr></thead><tbody><tr v-for="user in users.data" :key="user.id"><td>{{ user.name }}</td><td class="font-bold">@{{ user.username }}</td><td>{{ user.email ?? '—' }}</td><td>{{ roleLabel(user.role) }}</td><td>{{ user.is_active ? 'Active' : 'Inactive' }}</td><td><div class="admin-actions"><Link :href="`/admin/users/${user.id}/edit`" class="admin-action" :aria-label="`Edit account ${user.name}`"><i class="fa-solid fa-pen" aria-hidden="true"></i>Edit</Link></div></td></tr></tbody></table>
         <p v-else class="m-0 py-8 text-center text-sm">No matching accounts.</p>
     </div>
     <Pagination :links="users.links" />
