@@ -101,3 +101,5 @@ label.order-content-option:has(input:checked) { border-color: var(--admin-chocol
 .po-slot[aria-pressed="true"] { border-color: var(--color-chocolate); background: var(--color-chocolate); color: #fff; }
 .po-slot[aria-pressed="true"] small { color: #ffffffcc; }
 .po-slot:disabled { opacity: .4; text-decoration: line-through; cursor: default; }
+/* Customer text on a cart line (greeting card, writing on a cake): 16px so iOS does not zoom when it gets focus. */
+.admin-shell textarea.order-line-input { font-size: 1rem; padding: .55rem .75rem; resize: vertical; }

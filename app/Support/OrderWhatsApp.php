@@ -21,6 +21,7 @@ class OrderWhatsApp
         $items = $order->items->whereNull('parent_item_id')->flatMap(fn ($item) => [
             '- '.$label($item).' = '.$rupiah($item->subtotal + (int) $contents->get($item->id)?->sum('subtotal')),
             ...($contents->get($item->id)?->map(fn ($content) => '   isi: '.$label($content))->all() ?? []),
+            ...array_map(fn ($text) => '   '.$text, $item->inputLines()),
         ]);
         $delivery = $order->fulfillment_method === 'delivery';
         $schedule = $order->requested_date->locale('id')->translatedFormat('l, j F Y')
@@ -62,6 +63,7 @@ class OrderWhatsApp
         $items = collect($addition->items)->flatMap(fn ($item) => [
             '- '.$item['quantity'].'x '.$item['name'].(! empty($item['variant']) ? ' ('.$item['variant'].')' : '').' = '.$rupiah($item['subtotal']),
             ...array_map(fn ($content) => '   isi: '.$content, $item['contents'] ?? []),
+            ...array_map(fn ($text) => '   '.$text, (array) ($item['input'] ?? [])),
         ]);
 
         return implode("\n", [

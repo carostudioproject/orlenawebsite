@@ -54,12 +54,15 @@ class CheckoutRequest extends FormRequest
     {
         return [
             'items' => ['required', 'array', 'min:1', 'max:50'],
-            'items.*' => ['array:product_id,quantity,quoted_price,contents'],
+            'items.*' => ['array:product_id,quantity,quoted_price,contents,input_texts'],
             'items.*.product_id' => ['required', 'integer', 'min:1'],
             'items.*.quantity' => ['required', 'integer', 'min:1', 'max:99'],
             'items.*.quoted_price' => ['required', 'integer', 'min:1', 'max:999999999'],
             'items.*.contents' => ['sometimes', 'array', 'max:50'],
             'items.*.contents.*' => ['integer', 'min:1'],
+            // Checked against the product's own label, limit and "required" in OrderPricing.
+            'items.*.input_texts' => ['sometimes', 'array', 'max:99'],
+            'items.*.input_texts.*' => ['nullable', 'string', 'max:300'],
         ];
     }
 

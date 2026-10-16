@@ -80,6 +80,7 @@
             @foreach ($order['items'] as $item)
                 <div>{{ $item['label'] }}</div>
                 @foreach ($item['contents'] as $content)<div class="contents">isi: {{ $content }}</div>@endforeach
+                @foreach ($item['input'] as $text)<div class="card">{{ $text }}</div>@endforeach
             @endforeach
             @if ($order['card'])<div class="card">Kartu ucapan: {{ $order['card'] }}</div>@endif
             @if ($order['note'])<div class="muted">Catatan: {{ $order['note'] }}</div>@endif

@@ -24,13 +24,14 @@ class Product extends Model
 
     protected $fillable = [
         'category_id', 'variant', 'sku', 'name', 'description', 'image', 'price', 'is_active', 'is_featured', 'featured_label', 'featured_position',
+        'input_label', 'input_placeholder', 'input_required', 'input_max',
         'is_hamper', 'hamper_contents', 'content_type', 'content_count', 'content_pricing', 'sale_starts_on', 'sale_ends_on', 'erzap_product_id', 'erzap_variant_id', 'barcode',
     ];
 
     protected function casts(): array
     {
         return [
-            'is_active' => 'boolean', 'is_featured' => 'boolean', 'featured_position' => 'integer', 'is_hamper' => 'boolean', 'price' => 'integer', 'content_count' => 'integer',
+            'is_active' => 'boolean', 'is_featured' => 'boolean', 'featured_position' => 'integer', 'input_required' => 'boolean', 'input_max' => 'integer', 'is_hamper' => 'boolean', 'price' => 'integer', 'content_count' => 'integer',
             'sale_starts_on' => 'date:Y-m-d', 'sale_ends_on' => 'date:Y-m-d',
         ];
     }
@@ -111,9 +112,12 @@ class Product extends Model
     }
 
     /** A greeting card sold as a product (e.g. "Card"): the order form then asks for the card message, as for hampers. */
-    public function isGreetingCard(): bool
+    /** The text this product asks for on its cart line (greeting card, writing on a cake…), or null. */
+    public function customerInput(): ?array
     {
-        return (bool) preg_match('/^(card|kartu)\b/i', trim($this->name));
+        return filled($this->input_label) ? [
+            'label' => $this->input_label, 'placeholder' => $this->input_placeholder, 'required' => $this->input_required, 'max' => $this->input_max ?: 150,
+        ] : null;
     }
 
     public function priceAt(Outlet $outlet): ?int

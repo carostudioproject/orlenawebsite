@@ -4,8 +4,9 @@ import { computed, nextTick, ref, watch } from 'vue';
 import ShopLayout from '../../Layouts/ShopLayout.vue';
 import ProductPicker from '../../Components/Shop/ProductPicker.vue';
 import CartPanel, { type PanelLine } from '../../Components/Shop/CartPanel.vue';
+import LineInput from '../../Components/Shop/LineInput.vue';
 import { rupiah } from '../../Support/money';
-import { addLine, contentsLabel, toRequest, unitPrice, type CartLine } from '../../Support/cart';
+import { addLine, contentsLabel, missingInputs, setInputText, toRequest, unitPrice, type CartLine } from '../../Support/cart';
 import type { OrderCategory, OrderItem, OrderProduct } from '../../Types/ordering';
 defineOptions({ layout: ShopLayout });
 interface OrderSnapshot { order_code: string; fulfillment_method: 'pickup' | 'delivery'; outlet_name_snapshot: string; requested_date: string; requested_time: string | null; subtotal: number; delivery_fee: number | null; total: number; items: OrderItem[] }
@@ -33,17 +34,33 @@ const newTotal = computed(() => props.order.total + addedSubtotal.value);
 const errors = computed(() => form.errors as Record<string, string>);
 const errorSummary = ref<HTMLElement | null>(null);
 const schedule = computed(() => `${props.order.requested_date}${props.order.requested_time ? `, ${props.order.requested_time.slice(0, 5)} WITA` : ''}`);
-function submit() {
+async function submit() {
     if (!form.items.length || form.processing) return;
+    // A required text (e.g. a greeting card) is checked here with a visible message before sending.
+    const missing = form.items.flatMap((line, index) => missingInputs(line, index, productById.value.get(line.product_id)));
+    if (missing.length) {
+        form.clearErrors();
+        form.setError(Object.fromEntries(missing) as never);
+        await nextTick();
+        const [, index, , unit] = missing[0][0].split('.');
+        document.getElementById(`line-input-${index}-${unit}`)?.focus();
+        return;
+    }
     form.transform(data => ({ ...data, items: toRequest(data.items, productById.value) }))
-        .post(`/orders/${props.order.order_code}/tambah`, { preserveScroll: true, onError: async () => { await nextTick(); errorSummary.value?.focus(); } });
+        .post(`/orders/${props.order.order_code}/tambah`, { preserveScroll: 'errors', onError: async () => { await nextTick(); errorSummary.value?.focus(); } });
 }
 // The cart bar and drawer (CartPanel) edit the additions.
 const cartPanel = ref<InstanceType<typeof CartPanel> | null>(null);
 const itemError = (index: number) => errors.value[`items.${index}.quantity`] ?? errors.value[`items.${index}.contents`] ?? errors.value[`items.${index}.product_id`];
+const inputError = (index: number) => (unit: number) => errors.value[`items.${index}.input_texts.${unit}`] ?? (unit === 0 ? errors.value[`items.${index}.input_texts`] : undefined);
+function setText(index: number, unit: number, text: string) {
+    setInputText(form.items[index], unit, text);
+    form.clearErrors(`items.${index}.input_texts.${unit}` as never, `items.${index}.input_texts` as never);
+}
 const panelLines = computed<PanelLine[]>(() => additions.value.map(row => ({
-    key: `${row.product_id}:${row.contents.join(',')}`, index: row.index, name: row.product?.name ?? 'Produk tidak tersedia', detail: row.product?.variant ?? '',
+    key: `${row.index}:${row.product_id}:${row.contents.join(',')}`, index: row.index, name: row.product?.name ?? 'Produk tidak tersedia', detail: row.product?.variant ?? '',
     contentsText: row.contentsText, unit: row.unit, quantity: row.quantity, error: itemError(row.index),
+    input: row.product?.input, inputTexts: row.input_texts, inputError: inputError(row.index),
 })));
 function scrollToSummary() { document.getElementById('summary')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 </script>
@@ -70,17 +87,18 @@ function scrollToSummary() { document.getElementById('summary')?.scrollIntoView(
             </div>
             <div>
                 <p class="admin-eyebrow mb-2">Pesanan saat ini</p>
-                <ul class="m-0 list-none space-y-1 p-0 text-sm"><li v-for="item in currentLines" :key="item.id"><div class="flex justify-between gap-3"><span>{{ item.quantity }}× {{ item.product_name_snapshot }}<span v-if="item.variant_snapshot" class="admin-muted"> ({{ item.variant_snapshot }})</span></span><span class="shrink-0 tabular-nums">{{ rupiah(item.total) }}</span></div><p v-if="item.contents.length" class="admin-muted m-0 text-xs">Isi: {{ item.contents.map(child => `${child.quantity}× ${child.product_name_snapshot}`).join(', ') }}</p></li></ul>
+                <ul class="m-0 list-none space-y-1 p-0 text-sm"><li v-for="item in currentLines" :key="item.id"><div class="flex justify-between gap-3"><span>{{ item.quantity }}× {{ item.product_name_snapshot }}<span v-if="item.variant_snapshot" class="admin-muted"> ({{ item.variant_snapshot }})</span></span><span class="shrink-0 tabular-nums">{{ rupiah(item.total) }}</span></div><p v-if="item.contents.length" class="admin-muted m-0 text-xs">Isi: {{ item.contents.map(child => `${child.quantity}× ${child.product_name_snapshot}`).join(', ') }}</p><p v-for="(text, unit) in item.input_texts ?? []" :key="unit" class="admin-muted m-0 text-xs">{{ item.input_label_snapshot }}{{ (item.input_texts?.length ?? 0) > 1 ? ` ${unit + 1}` : '' }}: “{{ text }}”</p></li></ul>
             </div>
             <div class="border-t border-chocolate/10 pt-4">
                 <p class="admin-eyebrow mb-2">Tambahan</p>
                 <p v-if="!additions.length" class="admin-muted text-sm">Belum ada tambahan. Pilih produk di langkah 1.</p>
                 <ul v-else class="m-0 list-none divide-y divide-chocolate/10 p-0">
-                    <li v-for="row in additions" :key="`${row.product_id}:${row.contents.join(',')}`" class="flex justify-between gap-3 py-2.5 text-sm">
-                        <div class="min-w-0">
+                    <li v-for="row in additions" :key="`${row.index}:${row.product_id}:${row.contents.join(',')}`" class="flex justify-between gap-3 py-2.5 text-sm">
+                        <div class="min-w-0 flex-1">
                             <p class="m-0 font-bold">{{ row.quantity }} × {{ row.product?.name }}<span v-if="row.product?.variant" class="admin-muted font-normal"> ({{ row.product.variant }})</span></p>
                             <p v-if="row.contentsText" class="m-0 text-xs text-chocolate/75"><i class="fa-solid fa-gift" aria-hidden="true"></i> Isi: {{ row.contentsText }}</p>
                             <p v-if="itemError(row.index)" class="admin-error-text m-0 text-xs" role="alert">{{ itemError(row.index) }}</p>
+                            <LineInput v-if="row.product?.input" :id="`line-input-${row.index}`" class="mt-2" :texts="row.input_texts" :input="row.product.input" :quantity="row.quantity" :error-for="inputError(row.index)" :disabled="form.processing" @update="(unit, text) => setText(row.index, unit, text)" />
                         </div>
                         <span class="shrink-0 font-bold tabular-nums">{{ rupiah(row.unit * row.quantity) }}</span>
                     </li>
@@ -96,7 +114,7 @@ function scrollToSummary() { document.getElementById('summary')?.scrollIntoView(
             <p class="admin-muted text-xs">Setelah disimpan, kirim update ke Orlena melalui WhatsApp. Ketersediaan tambahan tetap dikonfirmasi admin.</p>
         </section>
 
-        <CartPanel ref="cartPanel" title="tambahan" :lines="panelLines" :subtotal="addedSubtotal" :disabled="form.processing" @quantity="(index, quantity) => { form.items[index].quantity = quantity; }" @remove="index => { form.items.splice(index, 1); form.clearErrors(); }">
+        <CartPanel ref="cartPanel" title="tambahan" :lines="panelLines" :subtotal="addedSubtotal" :disabled="form.processing" @quantity="(index, quantity) => { form.items[index].quantity = quantity; }" @remove="index => { form.items.splice(index, 1); form.clearErrors(); }" @text="setText">
             <template #action="{ close }"><button type="button" class="admin-primary flex-1" @click="close(); scrollToSummary()">Lanjut ke ringkasan</button></template>
         </CartPanel>
     </form>

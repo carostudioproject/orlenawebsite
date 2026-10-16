@@ -5,10 +5,11 @@ import ShopLayout from '../../Layouts/ShopLayout.vue';
 import Field from '../../Components/Field.vue';
 import ProductPicker from '../../Components/Shop/ProductPicker.vue';
 import CartPanel, { type PanelLine } from '../../Components/Shop/CartPanel.vue';
+import LineInput from '../../Components/Shop/LineInput.vue';
 import PoCalendar, { type CalendarDay } from '../../Components/Shop/PoCalendar.vue';
 import type { OrderCategory, OrderProduct } from '../../Types/ordering';
 import { rupiah } from '../../Support/money';
-import { addLine, contentsLabel, toRequest, unitPrice, type CartLine } from '../../Support/cart';
+import { addLine, contentsLabel, missingInputs, setInputText, toRequest, unitPrice, type CartLine } from '../../Support/cart';
 defineOptions({ layout: ShopLayout });
 interface ShopOutlet { id: number; name: string; address: string; delivers: boolean; closes_at: string }
 const props = defineProps<{
@@ -27,9 +28,8 @@ watch(() => props.checkoutKey, key => { form.checkout_key = key; });
 
 // Step 1 lives in <ProductPicker>; this page owns the cart.
 const productById = computed(() => new Map(props.products.map(product => [product.id, product])));
-// The optional greeting card appears once a hampers product is in the cart.
+// The optional greeting card appears once a hampers product is in the cart (a card bought as an extra has its own text on its line).
 const hasHamper = computed(() => form.items.some(item => productById.value.get(item.product_id)?.is_hamper));
-const hasCard = computed(() => form.items.some(item => productById.value.get(item.product_id)?.is_card));
 const categoryName = (id: number) => props.categories.find(category => category.id === id)?.name ?? '';
 function addToCart(productId: number, quantity: number, contents: number[]) {
     addLine(form.items, productId, quantity, contents);
@@ -108,6 +108,12 @@ function isMapsUrl(value: string) {
 const errorSummary = ref<HTMLElement | null>(null);
 const errors = computed(() => form.errors as Record<string, string>);
 const itemError = (index: number) => errors.value[`items.${index}.product_id`] ?? errors.value[`items.${index}.contents`] ?? errors.value[`items.${index}.quantity`];
+// Each text field (one per unit) has its own message; a mismatch on the whole line shows under the first.
+const inputError = (index: number) => (unit: number) => errors.value[`items.${index}.input_texts.${unit}`] ?? (unit === 0 ? errors.value[`items.${index}.input_texts`] : undefined);
+function setText(index: number, unit: number, text: string) {
+    setInputText(form.items[index], unit, text);
+    form.clearErrors(`items.${index}.input_texts.${unit}` as never, `items.${index}.input_texts` as never);
+}
 const canSubmit = computed(() => !form.processing && pricesReady.value && form.items.length > 0 && cart.value.every(row => row.product));
 // A field's message disappears as soon as the customer changes it.
 for (const field of ['name', 'whatsapp', 'outlet_id', 'delivery_address', 'recipient_whatsapp', 'location_url', 'requested_date', 'requested_time'] as const) {
@@ -125,6 +131,9 @@ function clientErrors(): Record<string, string> {
         if (!/^[0-9+\s()-]{8,}$/.test(form.recipient_whatsapp.trim())) found.recipient_whatsapp = 'Masukkan nomor WhatsApp penerima, misalnya 081234567890.';
         if (!isMapsUrl(form.location_url.trim())) found.location_url = 'Tempel link lokasi dari Google Maps (diawali https://maps.app.goo.gl/ atau https://www.google.com/maps/).';
     }
+    form.items.forEach((line, index) => {
+        for (const [key, message] of missingInputs(line, index, productById.value.get(line.product_id))) found[key] = message;
+    });
     if (!form.requested_date) found.requested_date = 'Pilih tanggal PO di kalender.';
     else if (!form.requested_time) found.requested_time = form.fulfillment_method === 'delivery' ? 'Pilih perkiraan jam kirim.' : 'Pilih jam pickup.';
     return found;
@@ -134,9 +143,11 @@ async function submit() {
     const found = clientErrors();
     if (Object.keys(found).length) {
         form.clearErrors();
-        form.setError(found);
+        form.setError(found as never);
         await nextTick();
-        const first = document.getElementById(Object.keys(found)[0]);
+        const key = Object.keys(found)[0];
+        // A missing card text (items.N.input_texts.U) focuses its field in the summary.
+        const first = document.getElementById(key.startsWith('items.') ? `line-input-${key.split('.')[1]}-${key.split('.')[3]}` : key);
         first?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         first?.focus({ preventScroll: true });
         return;
@@ -144,15 +155,16 @@ async function submit() {
     form.transform(data => ({
         ...data, outlet_id: effectiveOutlet.value, nearest_outlet: data.fulfillment_method === 'delivery' && data.outlet_id === 'nearest',
         items: toRequest(data.items, productById.value),
-    })).post('/order', { preserveScroll: true, onError: async () => { await nextTick(); errorSummary.value?.focus(); } });
+    })).post('/order', { preserveScroll: 'errors', onError: async () => { await nextTick(); errorSummary.value?.focus(); } });
 }
 function scrollToCart() { document.getElementById('cart')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 // The cart bar and drawer (CartPanel) edit the same lines.
 const cartPanel = ref<InstanceType<typeof CartPanel> | null>(null);
 const panelLines = computed<PanelLine[]>(() => cart.value.map(row => ({
-    key: `${row.product_id}:${row.contents.join(',')}`, index: row.index, name: row.product?.name ?? 'Produk tidak tersedia',
+    key: `${row.index}:${row.product_id}:${row.contents.join(',')}`, index: row.index, name: row.product?.name ?? 'Produk tidak tersedia',
     detail: [row.product ? categoryName(row.product.category_id) : '', row.product?.variant ?? ''].filter(Boolean).join(' · '),
     contentsText: row.contentsText, unit: row.unit, quantity: row.quantity, error: itemError(row.index),
+    input: row.product?.input, inputTexts: row.input_texts, inputError: inputError(row.index),
 })));
 </script>
 <template>
@@ -218,7 +230,7 @@ const panelLines = computed<PanelLine[]>(() => cart.value.map(row => ({
                 <p v-if="form.errors.requested_time" class="admin-error-text m-0 text-sm" role="alert">{{ form.errors.requested_time }}</p>
             </fieldset>
             </div>
-            <Field v-if="hasHamper || hasCard" id="card_message" :label="hasHamper ? 'Kartu ucapan hampers (opsional)' : 'Tulisan kartu ucapan (opsional)'" :hint="`Ditulis di kartu ucapan yang disertakan bersama pesanan. ${form.card_message.length}/300 karakter.`" :error="form.errors.card_message"><template #default="{ describedBy }"><textarea id="card_message" v-model="form.card_message" rows="3" maxlength="300" placeholder="Contoh: Selamat Hari Raya, semoga selalu diberi berkah. Dari keluarga Sinta." :aria-describedby="describedBy" :aria-invalid="!!form.errors.card_message"></textarea></template></Field>
+            <Field v-if="hasHamper" id="card_message" label="Kartu ucapan hampers (opsional)" :hint="`Ditulis di kartu ucapan yang disertakan bersama pesanan. ${form.card_message.length}/300 karakter.`" :error="form.errors.card_message"><template #default="{ describedBy }"><textarea id="card_message" v-model="form.card_message" rows="3" maxlength="300" placeholder="Contoh: Selamat Hari Raya, semoga selalu diberi berkah. Dari keluarga Sinta." :aria-describedby="describedBy" :aria-invalid="!!form.errors.card_message"></textarea></template></Field>
             <Field id="customer_note" label="Catatan (opsional)" :error="form.errors.customer_note"><template #default="{ describedBy }"><textarea id="customer_note" v-model="form.customer_note" rows="3" maxlength="2000" placeholder="Misalnya tulisan di kue atau permintaan khusus" :aria-describedby="describedBy"></textarea></template></Field>
         </section>
 
@@ -230,12 +242,13 @@ const panelLines = computed<PanelLine[]>(() => cart.value.map(row => ({
             </div>
             <p v-if="!cart.length" class="admin-muted rounded-xl bg-cream/60 p-4 text-center text-sm"><i class="fa-solid fa-basket-shopping mb-2 block text-2xl text-chocolate/25" aria-hidden="true"></i>Keranjang masih kosong. Pilih produk di langkah 1.</p>
             <ul v-else class="m-0 list-none divide-y divide-chocolate/10 p-0">
-                <li v-for="row in cart" :key="`${row.product_id}:${row.contents.join(',')}`" class="flex justify-between gap-3 py-3 text-sm">
-                    <div class="min-w-0">
+                <li v-for="row in cart" :key="`${row.index}:${row.product_id}:${row.contents.join(',')}`" class="flex justify-between gap-3 py-3 text-sm">
+                    <div class="min-w-0 flex-1">
                         <p class="m-0 font-bold">{{ row.quantity }} × {{ row.product?.name ?? 'Produk tidak tersedia' }}</p>
                         <p class="m-0 text-xs text-matcha">{{ row.product ? categoryName(row.product.category_id) : '' }}{{ row.product?.variant ? ` · ${row.product.variant}` : '' }}</p>
                         <p v-if="row.contentsText" class="m-0 mt-0.5 text-xs text-chocolate/75"><i class="fa-solid fa-gift" aria-hidden="true"></i> Isi: {{ row.contentsText }}</p>
                         <p v-if="itemError(row.index)" class="admin-error-text m-0 mt-1 text-xs" role="alert">{{ itemError(row.index) }}</p>
+                        <LineInput v-if="row.product?.input" :id="`line-input-${row.index}`" class="mt-2" :texts="row.input_texts" :input="row.product.input" :quantity="row.quantity" :error-for="inputError(row.index)" :disabled="form.processing" @update="(unit, text) => setText(row.index, unit, text)" />
                     </div>
                     <span class="shrink-0 font-bold tabular-nums">{{ rupiah(row.unit * row.quantity) }}</span>
                 </li>
@@ -262,7 +275,7 @@ const panelLines = computed<PanelLine[]>(() => cart.value.map(row => ({
             <p class="admin-muted text-xs leading-relaxed">{{ form.fulfillment_method === 'delivery' ? 'Total awal belum termasuk ongkir. ' : '' }}Ini adalah permintaan PO; ketersediaan produk dan jadwal dikonfirmasi admin. Setelah tersimpan, Anda mendapat Order Code untuk dilanjutkan via WhatsApp.</p>
         </section>
 
-        <CartPanel ref="cartPanel" :lines="panelLines" :subtotal="subtotal" :disabled="form.processing" @quantity="(index, quantity) => { form.items[index].quantity = quantity; }" @remove="index => { form.items.splice(index, 1); form.clearErrors(); }">
+        <CartPanel ref="cartPanel" :lines="panelLines" :subtotal="subtotal" :disabled="form.processing" @quantity="(index, quantity) => { form.items[index].quantity = quantity; }" @remove="index => { form.items.splice(index, 1); form.clearErrors(); }" @text="setText">
             <template #action="{ close }"><button type="button" class="admin-primary flex-1" @click="close(); scrollToCart()">Lanjut ke ringkasan</button></template>
         </CartPanel>
     </form>

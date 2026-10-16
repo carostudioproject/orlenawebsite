@@ -35,7 +35,7 @@ class Order extends Model
             'product_id' => $line['product_id'], 'product_name_snapshot' => $line['name'], 'category_snapshot' => $line['category'], 'variant_snapshot' => $line['variant'],
             'sku_snapshot' => $line['sku'], 'unit_price_snapshot' => $line['unit_price'], 'quantity' => $line['quantity'], 'subtotal' => $line['subtotal'],
         ];
-        $parent = $this->items()->create($snapshot($item));
+        $parent = $this->items()->create([...$snapshot($item), 'input_label_snapshot' => $item['input_label'] ?? null, 'input_texts' => $item['input_texts'] ?? null]);
         foreach ($item['contents'] ?? [] as $content) {
             $this->items()->create([...$snapshot($content), 'parent_item_id' => $parent->id]);
         }

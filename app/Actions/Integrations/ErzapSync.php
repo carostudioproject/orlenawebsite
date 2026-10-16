@@ -200,6 +200,8 @@ class ErzapSync
             'Paid via '.($payment?->provider === 'manual' ? 'manual payment' : 'DOKU').($payment?->payment_type ? ' ('.$payment->payment_type.')' : ''),
             $order->customer_note ? 'Note: '.$order->customer_note : null,
             $order->card_message ? 'Greeting card: '.$order->card_message : null,
+            // Texts the customer wrote on a line (greeting card, writing on a cake…).
+            ...$order->items->flatMap(fn ($item) => array_map(fn ($text) => $item->product_name_snapshot.' - '.$text, $item->inputLines()))->all(),
         ]));
 
         return [

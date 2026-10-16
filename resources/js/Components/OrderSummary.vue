@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import type { OrderItem, Preorder } from '../Types/ordering';
 import { rupiah } from '../Support/money';
 // Customer pages use Indonesian; the dashboard passes lang="en".
-type SummaryItem = Pick<OrderItem, 'id' | 'parent_item_id' | 'product_name_snapshot' | 'category_snapshot' | 'variant_snapshot' | 'quantity' | 'subtotal'>;
+type SummaryItem = Pick<OrderItem, 'id' | 'parent_item_id' | 'product_name_snapshot' | 'category_snapshot' | 'variant_snapshot' | 'quantity' | 'subtotal' | 'input_label_snapshot' | 'input_texts'>;
 const props = defineProps<{ order: Pick<Preorder, 'subtotal' | 'delivery_fee' | 'total'> & { items: SummaryItem[] }; lang?: 'id' | 'en' }>();
 const t = computed(() => (props.lang === 'en'
     ? { fee: 'Delivery fee', pending: 'Confirmed by staff', total: 'Initial total', note: 'The initial total excludes the delivery fee.', contents: 'Contents' }
@@ -22,6 +22,9 @@ const lines = computed(() => props.order.items.filter(item => !item.parent_item_
                 <p class="m-0 text-xs text-matcha">{{ item.category_snapshot }}{{ item.variant_snapshot ? ` · ${item.variant_snapshot}` : '' }}</p>
                 <ul v-if="item.contents.length" class="m-0 mt-1.5 list-none space-y-0.5 p-0 text-xs text-chocolate/75" :aria-label="`${t.contents} ${item.product_name_snapshot}`">
                     <li v-for="child in item.contents" :key="child.id"><i class="fa-solid fa-gift" aria-hidden="true"></i> {{ child.quantity }} × {{ child.product_name_snapshot }}{{ child.variant_snapshot ? ` (${child.variant_snapshot})` : '' }}<span v-if="child.subtotal"> · {{ rupiah(child.subtotal) }}</span></li>
+                </ul>
+                <ul v-if="item.input_texts?.length" class="m-0 mt-1.5 list-none space-y-1 p-0 text-xs">
+                    <li v-for="(text, unit) in item.input_texts" :key="unit" class="rounded-lg bg-cream/70 px-2 py-1"><i class="fa-solid fa-pen-nib" aria-hidden="true"></i> {{ item.input_label_snapshot }}{{ item.input_texts.length > 1 ? ` ${unit + 1}` : '' }}: “{{ text }}”</li>
                 </ul>
             </div>
             <span class="whitespace-nowrap">{{ rupiah(item.total) }}</span>

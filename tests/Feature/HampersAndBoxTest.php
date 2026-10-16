@@ -168,7 +168,8 @@ class HampersAndBoxTest extends TestCase
     public function test_category_extras_are_offered_in_the_popup_and_a_card_keeps_its_message(): void
     {
         $packaging = Category::create(['name' => 'Packaging']);
-        $card = Product::create(['category_id' => $packaging->id, 'sku' => 'P0028', 'barcode' => 'BC-P0028', 'name' => 'Card', 'price' => 5000, 'is_active' => true]);
+        $card = Product::create(['category_id' => $packaging->id, 'sku' => 'P0028', 'barcode' => 'BC-P0028', 'name' => 'Card', 'price' => 5000, 'is_active' => true,
+            'input_label' => 'Tulisan kartu ucapan', 'input_max' => 40]);
         $candle = Product::create(['category_id' => $packaging->id, 'sku' => 'P0087', 'barcode' => 'BC-P0087', 'name' => 'Lilin', 'price' => 5000, 'is_active' => true]);
         $bag = Product::create(['category_id' => $packaging->id, 'sku' => 'P0003', 'barcode' => 'BC-P0003', 'name' => 'Paper Bag Kecil', 'price' => 4000, 'is_active' => false]);
         $brownies = $this->berry->category;
@@ -182,14 +183,43 @@ class HampersAndBoxTest extends TestCase
         $this->assertSame([$candle->id, $card->id, $bag->id], $brownies->addons()->pluck('products.id')->all());
         auth()->logout();
 
-        // The inactive paper bag is not offered; the card is flagged so the form asks for its message.
+        // The inactive paper bag is not offered; the card asks for its text on its cart line.
         $this->get('/order?outlet_id='.$this->outlet->id)->assertInertia(fn (Assert $page) => $page
             ->where('categories', fn ($categories) => collect($categories)->firstWhere('id', $brownies->id)['addon_ids'] === [$candle->id, $card->id])
-            ->where('products', fn ($products) => collect($products)->firstWhere('id', $card->id)['is_card'] === true));
-        $payload = $this->payload([['product_id' => $this->berry->id, 'quantity' => 1, 'quoted_price' => 100000], ['product_id' => $card->id, 'quantity' => 1, 'quoted_price' => 5000]]);
-        $this->post('/order', [...$payload, 'card_message' => 'Selamat ulang tahun'])->assertSessionHasNoErrors();
+            ->where('products', fn ($products) => collect($products)->firstWhere('id', $card->id)['input'] === ['label' => 'Tulisan kartu ucapan', 'placeholder' => null, 'required' => false, 'max' => 40]
+                && collect($products)->firstWhere('id', $candle->id)['input'] === null));
+        $cards = fn (array $texts, int $quantity) => ['product_id' => $card->id, 'quantity' => $quantity, 'quoted_price' => 5000, 'input_texts' => $texts];
+        $berry = ['product_id' => $this->berry->id, 'quantity' => 1, 'quoted_price' => 100000];
+        $this->post('/order', $this->payload([$berry, $cards(['ok', str_repeat('a', 41)], 2)]))->assertSessionHasErrors('items.1.input_texts.1');
+        $this->post('/order', $this->payload([$berry, $cards(['a', 'b', 'c'], 2)]))->assertSessionHasErrors('items.1.input_texts');
+        // Optional: an unwritten card is fine. Required: every card needs its own text.
+        $card->update(['input_required' => true]);
+        $this->post('/order', $this->payload([$berry, $cards(['Halo', '   '], 2)]))->assertSessionHasErrors('items.1.input_texts.1');
+        $this->post('/order', $this->payload([$berry, $cards(['Halo'], 3)]))->assertSessionHasErrors('items.1.input_texts.1');
+        // Three cards on one line, each with its own greeting; the order-level card is for hampers only, and the candle ignores any text.
+        $this->post('/order', [...$this->payload([$berry, $cards(['  Selamat   ulang tahun ', 'Get well soon', 'Congrats!'], 3), ['product_id' => $candle->id, 'quantity' => 1, 'quoted_price' => 5000, 'input_texts' => ['x']]]), 'card_message' => 'Halo'])
+            ->assertSessionHasNoErrors();
         $order = Order::sole();
-        $this->assertSame([105000, 'Selamat ulang tahun'], [$order->subtotal, $order->card_message]);
+        $this->assertSame([120000, null], [$order->subtotal, $order->card_message]);
+        $this->assertSame([[null, null], ['Tulisan kartu ucapan', ['Selamat ulang tahun', 'Get well soon', 'Congrats!']], [null, null]],
+            $order->items()->orderBy('id')->get()->map(fn ($item) => [$item->input_label_snapshot, $item->input_texts])->all());
+        $this->assertStringContainsString("   Tulisan kartu ucapan 1: Selamat ulang tahun\n   Tulisan kartu ucapan 2: Get well soon", OrderWhatsApp::message($order));
+
+        // Rekap CK lists each text under its line and in the WhatsApp text.
+        $order->update(['order_status' => 'confirmed', 'payment_status' => 'paid']);
+        $recap = app(ProductionRecap::class);
+        $data = $recap->build($order->requested_date->toDateString());
+        $this->assertSame(['Tulisan kartu ucapan 1: Selamat ulang tahun', 'Tulisan kartu ucapan 2: Get well soon', 'Tulisan kartu ucapan 3: Congrats!'], $data['orders'][0]['orders'][0]['items'][1]['input']);
+        $this->assertStringContainsString('Tulisan kartu ucapan 3: Congrats!', $recap->whatsappText($data));
+    }
+
+    public function test_staff_set_the_customer_text_option(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $base = ['name' => 'Tart Ulang Tahun', 'sku' => 'TT0001', 'category_id' => $this->berry->category_id, 'price' => 250000, 'is_active' => true];
+        $this->actingAs($admin)->post('/admin/products', [...$base, 'input_label' => 'Tulisan di kue', 'input_max' => 5])->assertSessionHasErrors('input_max');
+        $this->post('/admin/products', [...$base, 'input_label' => 'Tulisan di kue', 'input_placeholder' => 'Happy birthday!', 'input_required' => true, 'input_max' => 40])->assertSessionHasNoErrors();
+        $this->assertSame(['label' => 'Tulisan di kue', 'placeholder' => 'Happy birthday!', 'required' => true, 'max' => 40], Product::where('sku', 'TT0001')->sole()->customerInput());
     }
 
     public function test_staff_set_contents_in_the_product_form(): void

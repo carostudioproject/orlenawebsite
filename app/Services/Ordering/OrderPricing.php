@@ -31,7 +31,7 @@ class OrderPricing
             if ($price < 1 || $unitTotal !== (int) $row['quoted_price']) {
                 $this->fail('pricing', 'Harga produk berubah. Muat ulang harga dan periksa total sebelum mengirim kembali.');
             }
-            $items[] = [...$this->line($product, $price, $quantity), 'contents' => $contents];
+            $items[] = [...$this->line($product, $price, $quantity), 'contents' => $contents, ...$this->input($product, $row['input_texts'] ?? [], $quantity, $index)];
         }
         $subtotal = array_sum(array_map(fn ($item) => $item['subtotal'] + array_sum(array_column($item['contents'], 'subtotal')), $items));
 
@@ -72,6 +72,37 @@ class OrderPricing
         }
 
         return $lines;
+    }
+
+    /**
+     * The customer's texts for a product that asks for one (e.g. a greeting card): one per unit, so 3 cards carry 3 greetings.
+     * Other products ignore them; an optional field keeps only the texts that were written.
+     */
+    private function input(Product $product, array $texts, int $quantity, int $index): array
+    {
+        $input = $product->customerInput();
+        if (! $input) {
+            return ['input_label' => null, 'input_texts' => null];
+        }
+        if (count($texts) > $quantity) {
+            $this->fail("items.$index.input_texts", 'Jumlah '.mb_strtolower($input['label']).' untuk '.$product->label().' melebihi jumlah produk. Muat ulang halaman.');
+        }
+        $written = [];
+        for ($unit = 0; $unit < $quantity; $unit++) {
+            $text = trim((string) preg_replace('/[^\S\n]+/u', ' ', (string) ($texts[$unit] ?? '')));
+            $name = $input['label'].($quantity > 1 ? ' '.($unit + 1) : '').' untuk '.$product->label();
+            if ($text === '' && $input['required']) {
+                $this->fail("items.$index.input_texts.$unit", $name.' wajib diisi.');
+            }
+            if (mb_strlen($text) > $input['max']) {
+                $this->fail("items.$index.input_texts.$unit", $name.' maksimal '.$input['max'].' karakter.');
+            }
+            if ($text !== '') {
+                $written[] = $text;
+            }
+        }
+
+        return ['input_label' => $input['label'], 'input_texts' => $written ?: null];
     }
 
     private function line(Product $product, int $price, int $quantity): array

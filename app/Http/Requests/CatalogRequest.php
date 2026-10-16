@@ -75,6 +75,11 @@ class CatalogRequest extends FormRequest
                 'is_featured' => ['sometimes', 'boolean'],
                 'featured_label' => ['nullable', 'string', 'max:30'],
                 'featured_position' => ['sometimes', 'integer', 'min:0', 'max:999'],
+                // A text the customer writes on this product's cart line (greeting card, writing on a cake…). No label: not asked.
+                'input_label' => ['nullable', 'string', 'max:60'],
+                'input_placeholder' => ['nullable', 'string', 'max:120'],
+                'input_required' => ['sometimes', 'boolean'],
+                'input_max' => ['sometimes', 'integer', 'min:10', 'max:300'],
                 'sale_starts_on' => ['nullable', 'date_format:Y-m-d'],
                 'sale_ends_on' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:sale_starts_on'],
                 'description' => ['nullable', 'string', 'max:5000'],

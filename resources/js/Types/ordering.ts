@@ -1,10 +1,12 @@
-export interface OrderItem { id: number; parent_item_id?: number | null; product_name_snapshot: string; category_snapshot: string; variant_snapshot: string | null; quantity: number; unit_price_snapshot: number; subtotal: number }
+export interface OrderItem { id: number; parent_item_id?: number | null; product_name_snapshot: string; category_snapshot: string; variant_snapshot: string | null; quantity: number; unit_price_snapshot: number; subtotal: number; input_label_snapshot?: string | null; input_texts?: string[] | null }
+/** A text the customer writes on a product's cart line, e.g. a greeting card or the writing on a cake. */
+export interface CustomerInput { label: string; placeholder: string | null; required: boolean; max: number }
 /** addon_ids: extras (paper bag, candle, card…) offered in the popup of this category's products. */
 export interface OrderCategory { id: number; name: string; image: string | null; addon_ids?: number[] }
 /** A content the customer can choose for a hampers/box; price is what it adds per unit (0 in a box). */
 export interface ContentOption { id: number; name: string; variant: string | null; image: string | null; price: number }
 export interface OrderProduct {
-    id: number; name: string; category_id: number; description: string | null; image: string | null; variant: string | null; is_hamper: boolean; is_card?: boolean; featured?: boolean; featured_label?: string | null; hamper_items: string[]; sale_ends_on: string | null; price: number;
+    id: number; name: string; category_id: number; description: string | null; image: string | null; variant: string | null; is_hamper: boolean; input?: CustomerInput | null; featured?: boolean; featured_label?: string | null; hamper_items: string[]; sale_ends_on: string | null; price: number;
     content_type: 'hampers' | 'box' | 'set' | null; content_count: number | null; contents: ContentOption[];
     /** A box with fixed flavours: what each unit holds. */
     fixed_contents: { id: number; name: string; variant: string | null; image: string | null; quantity: number }[];

@@ -30,6 +30,8 @@ const form = useForm({
     addon_ids: [...(props.record?.addon_ids ?? [])] as number[],
     sale_starts_on: props.record?.sale_starts_on ?? '', sale_ends_on: props.record?.sale_ends_on ?? '',
     is_featured: props.record?.is_featured ?? false, featured_label: props.record?.featured_label ?? '', featured_position: props.record?.featured_position ?? 0,
+    input_label: props.record?.input_label ?? '', input_placeholder: props.record?.input_placeholder ?? '',
+    input_required: props.record?.input_required ?? false, input_max: props.record?.input_max ?? 150,
     order_position: props.record?.order_position ?? 100,
     upload: null as File | null,
     outlet_prices: (props.record?.outlet_prices ?? []).map(p => ({ outlet_id: p.outlet_id as number | string, price: p.price as number | string })),
@@ -88,10 +90,13 @@ const addonList = computed(() => {
     return (props.addonCandidates ?? []).filter(item => !query || `${item.name} ${item.variant ?? ''} ${item.category ?? ''}`.toLowerCase().includes(query))
         .sort((a, b) => Number(form.addon_ids.includes(b.id)) - Number(form.addon_ids.includes(a.id)));
 });
+// Customer text: asked only while the field name is set; unticking clears it on save.
+const askText = ref(!!form.input_label);
 function submit() {
-    form.transform(data => ({ ...data, content_type: data.content_type || null }));
+    const clean = (data: ReturnType<typeof form.data>) => ({ ...data, content_type: data.content_type || null, input_label: askText.value ? data.input_label : '' });
+    form.transform(clean);
     // Method spoofing keeps file uploads working on update (PHP does not parse multipart PUT bodies).
-    if (props.record) form.transform(data => ({ ...data, content_type: data.content_type || null, _method: 'put' })).post(`/admin/${props.resource}/${props.record.id}`);
+    if (props.record) form.transform(data => ({ ...clean(data), _method: 'put' })).post(`/admin/${props.resource}/${props.record.id}`);
     else form.post(`/admin/${props.resource}`);
 }
 </script>
@@ -174,6 +179,18 @@ function submit() {
                     <Field id="featured_label" label="Badge text (optional)" hint="Up to 30 characters, e.g. Spesial Natal, Best Seller. Empty: Pilihan." :error="form.errors.featured_label"><template #default="{ describedBy }"><input id="featured_label" v-model="form.featured_label" maxlength="30" placeholder="Spesial Natal" :aria-describedby="describedBy"></template></Field>
                     <Field id="featured_position" label="Order" hint="Lower comes first." :error="form.errors.featured_position"><template #default="{ describedBy }"><input id="featured_position" v-model.number="form.featured_position" type="number" min="0" max="999" :aria-describedby="describedBy"></template></Field>
                 </div>
+            </fieldset>
+            <fieldset class="space-y-3 rounded-xl border border-chocolate/15 p-4">
+                <legend class="px-2 text-sm font-bold">Customer text</legend>
+                <label class="flex items-start gap-3 text-sm"><input v-model="askText" type="checkbox" class="mt-0.5"><span><span class="block font-bold">Ask the customer for a text</span><span class="admin-muted text-xs">For a greeting card, the writing on a cake, a name on a cookie… The field appears on each cart line of this {{ noun }} and the text is shown on the order, the WhatsApp message and Rekap CK.</span></span></label>
+                <template v-if="askText">
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_10rem]">
+                        <Field id="input_label" label="Field name" hint="What the customer sees, e.g. Tulisan kartu ucapan, Tulisan di kue." :error="form.errors.input_label"><template #default="{ describedBy }"><input id="input_label" v-model="form.input_label" maxlength="60" required placeholder="Tulisan kartu ucapan" :aria-describedby="describedBy" :aria-invalid="!!form.errors.input_label"></template></Field>
+                        <Field id="input_max" label="Max characters" hint="10 to 300." :error="form.errors.input_max"><template #default="{ describedBy }"><input id="input_max" v-model.number="form.input_max" type="number" min="10" max="300" required :aria-describedby="describedBy" :aria-invalid="!!form.errors.input_max"></template></Field>
+                    </div>
+                    <Field id="input_placeholder" label="Example text (optional)" hint="Shown greyed out in the empty field." :error="form.errors.input_placeholder"><template #default="{ describedBy }"><input id="input_placeholder" v-model="form.input_placeholder" maxlength="120" placeholder="Contoh: Selamat ulang tahun, Sinta!" :aria-describedby="describedBy"></template></Field>
+                    <label class="flex items-start gap-3 text-sm"><input v-model="form.input_required" type="checkbox" class="mt-0.5"><span><span class="block font-bold">Required</span><span class="admin-muted text-xs">The order cannot be sent while the text is empty. Leave it off when a blank card is fine.</span></span></label>
+                </template>
             </fieldset>
             <fieldset class="space-y-3 rounded-xl border border-chocolate/15 p-4"><legend class="px-2 text-sm font-bold">Outlet prices (optional)</legend><p class="text-sm text-chocolate/65">Outlets without their own price use the base price.</p><div v-for="(price,index) in form.outlet_prices" :key="index" class="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto]"><div><label :for="`outlet-${index}`" class="mb-1 block text-xs">Outlet</label><select :id="`outlet-${index}`" v-model="price.outlet_id" required><option value="" disabled>Choose an outlet</option><option v-for="outlet in outlets" :key="outlet.id" :value="outlet.id">{{ outlet.name }}</option></select></div><div><label :for="`outlet-price-${index}`" class="mb-1 block text-xs">Price (Rp)</label><input :id="`outlet-price-${index}`" v-model="price.price" type="number" min="1" max="999999999" step="1" required></div><button type="button" class="admin-secondary self-end" :aria-label="`Remove outlet price ${index + 1}`" @click="form.outlet_prices.splice(index,1)"><i class="fa-solid fa-trash-can" aria-hidden="true"></i>Remove</button></div><button type="button" class="admin-secondary" :disabled="!outlets.length || form.outlet_prices.length >= outlets.length" @click="form.outlet_prices.push({ outlet_id: '', price: '' })">Add outlet price</button></fieldset>
         </template>

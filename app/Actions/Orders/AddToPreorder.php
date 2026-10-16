@@ -4,6 +4,7 @@ namespace App\Actions\Orders;
 
 use App\Models\Order;
 use App\Models\OrderAddition;
+use App\Models\OrderItem;
 use App\Models\Outlet;
 use App\Services\Ordering\OrderPricing;
 use App\Support\Audit;
@@ -65,6 +66,7 @@ class AddToPreorder
                     'name' => $item['name'], 'variant' => $item['variant'], 'quantity' => $item['quantity'], 'unit_price' => $item['unit_price'],
                     'subtotal' => $item['subtotal'] + array_sum(array_column($item['contents'], 'subtotal')),
                     'contents' => array_map(fn ($content) => $content['quantity'].'x '.$content['name'].($content['variant'] ? ' ('.$content['variant'].')' : ''), $item['contents']),
+                    'input' => OrderItem::formatInput($item['input_label'], $item['input_texts']),
                 ])->all(),
             ]);
             Audit::record('order.items_added', $locked, ['addition_id' => $addition->id, 'subtotal_added' => $quote['subtotal'], 'total' => $locked->total], null);
@@ -75,7 +77,7 @@ class AddToPreorder
 
     private function sameLine($line, array $item): bool
     {
-        return ! $item['contents'] && $line->product_id === $item['product_id'] && $line->unit_price_snapshot === $item['unit_price']
+        return ! $item['contents'] && $line->product_id === $item['product_id'] && $line->unit_price_snapshot === $item['unit_price'] && ! $line->input_texts && ! $item['input_texts']
             && ! $line->contents()->exists();
     }
 }

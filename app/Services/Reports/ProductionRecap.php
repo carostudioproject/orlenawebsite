@@ -55,6 +55,8 @@ class ProductionRecap
                         'label' => $item->quantity.'× '.$item->product_name_snapshot.($item->variant_snapshot ? ' ('.$item->variant_snapshot.')' : ''),
                         'contents' => $order->items->where('parent_item_id', $item->id)
                             ->map(fn ($content) => $content->quantity.'× '.$content->product_name_snapshot.($content->variant_snapshot ? ' ('.$content->variant_snapshot.')' : ''))->values()->all(),
+                        // The customer's text for this line, e.g. a greeting card or the writing on a cake.
+                        'input' => $item->inputLines(),
                     ])->values()->all(),
                 ])->values()->all(),
             ])->values()->all(),
@@ -84,6 +86,20 @@ class ProductionRecap
             foreach ($rows as $row) {
                 $lines[] = '- '.$label([...$row, 'quantity' => $row['by_outlet'][$outlet]]);
             }
+        }
+        // Texts the kitchen writes (cards, cakes), per order.
+        $texts = [];
+        foreach ($recap['orders'] as $group) {
+            foreach ($group['orders'] as $order) {
+                foreach ($order['items'] as $item) {
+                    foreach ($item['input'] as $text) {
+                        $texts[] = '- '.$order['code'].' · '.$item['label'].' · '.$text;
+                    }
+                }
+            }
+        }
+        if ($texts) {
+            array_push($lines, '', '*Tulisan pelanggan*', ...$texts);
         }
         if ($recap['unpaid']) {
             array_push($lines, '', '_'.$recap['unpaid'].' pesanan untuk tanggal ini belum lunas dan belum termasuk._');

@@ -2,11 +2,13 @@
 import { computed, ref } from 'vue';
 import { rupiah } from '../../Support/money';
 import { clampQuantity } from '../../Support/cart';
+import type { CustomerInput } from '../../Types/ordering';
+import LineInput from './LineInput.vue';
 // The cart on every screen size: a bar at the bottom while it has items, opening a panel (bottom sheet on phones,
 // side drawer on wide screens) to change quantities. Shared by the order form and "Tambah pesanan".
-export interface PanelLine { key: string; index: number; name: string; detail: string; contentsText: string; unit: number; quantity: number; error?: string | null }
+export interface PanelLine { key: string; index: number; name: string; detail: string; contentsText: string; unit: number; quantity: number; error?: string | null; input?: CustomerInput | null; inputTexts?: string[]; inputError?: (unit: number) => string | undefined }
 const props = defineProps<{ lines: PanelLine[]; subtotal: number; disabled?: boolean; title?: string }>();
-const emit = defineEmits<{ quantity: [index: number, quantity: number]; remove: [index: number] }>();
+const emit = defineEmits<{ quantity: [index: number, quantity: number]; remove: [index: number]; text: [index: number, unit: number, text: string] }>();
 
 const count = computed(() => props.lines.reduce((sum, line) => sum + line.quantity, 0));
 const dialog = ref<HTMLDialogElement | null>(null);
@@ -62,6 +64,7 @@ defineExpose({ open, close });
                         </div>
                         <button type="button" class="admin-action-icon admin-danger" :aria-label="`Hapus ${line.name}`" title="Hapus" :disabled="disabled" @click="remove(line.index)"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
                     </div>
+                    <LineInput v-if="line.input" :id="`panel-input-${line.index}`" :texts="line.inputTexts ?? []" :input="line.input" :quantity="line.quantity" :error-for="line.inputError" :disabled="disabled" @update="(unit, text) => emit('text', line.index, unit, text)" />
                     <p v-if="line.error" class="admin-error-text m-0 text-xs" role="alert">{{ line.error }}</p>
                 </li>
             </ul>

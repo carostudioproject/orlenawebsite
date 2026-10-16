@@ -87,9 +87,9 @@ class CreatePreorder
                 'location_url' => $data['fulfillment_method'] === 'delivery' ? $data['location_url'] : null,
                 'nearest_outlet' => $data['nearest_outlet'],
                 'customer_note' => $data['customer_note'] ?? null,
-                // The greeting card goes with hampers, or with a card bought as an extra.
-                'card_message' => filled($data['card_message'] ?? null) && Product::whereIn('id', array_column($quote['items'], 'product_id'))->get(['id', 'name', 'is_hamper', 'content_type'])
-                    ->contains(fn (Product $product) => $product->is_hamper || $product->content_type === 'hampers' || $product->isGreetingCard())
+                // The order's greeting card goes with hampers; a card bought as an extra carries its own text on its line.
+                'card_message' => filled($data['card_message'] ?? null) && Product::whereIn('id', array_column($quote['items'], 'product_id'))->get(['id', 'is_hamper', 'content_type'])
+                    ->contains(fn (Product $product) => $product->is_hamper || $product->content_type === 'hampers')
                     ? trim($data['card_message']) : null,
                 'subtotal' => $quote['subtotal'], 'delivery_fee' => $data['fulfillment_method'] === 'pickup' ? 0 : null,
                 'total' => $quote['subtotal'], 'order_status' => 'pending_review', 'payment_status' => 'not_created',

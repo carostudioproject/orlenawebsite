@@ -4,7 +4,7 @@ import { computed, ref } from 'vue';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 defineOptions({ layout: AdminLayout });
 interface Row { name: string; variant: string | null; category: string; quantity: number; by_outlet: Record<string, number> }
-interface RecapOrder { code: string; time: string | null; method: 'pickup' | 'delivery'; customer: string | null; note: string | null; card: string | null; items: { label: string; contents: string[] }[] }
+interface RecapOrder { code: string; time: string | null; method: 'pickup' | 'delivery'; customer: string | null; note: string | null; card: string | null; items: { label: string; contents: string[]; input: string[] }[] }
 interface Recap {
     date: string; final: boolean; cutoff: string; outlets: string[];
     summary: { orders: number; pickup: number; delivery: number; pieces: number };
@@ -51,8 +51,8 @@ async function copy() {
         <div class="flex flex-wrap items-start justify-between gap-4">
             <div>
                 <h2 id="recap-title" class="m-0 text-xl">{{ dayLabel }}</h2>
-                <p class="m-0 mt-1 text-sm"><span class="rounded-full px-2.5 py-0.5 text-xs font-bold text-white" :class="recap.final ? 'bg-matcha' : 'bg-berry'">{{ recap.final ? 'FINAL' : 'SEMENTARA' }}</span>
-                    <span class="admin-muted"> {{ recap.final ? 'Cut-off has passed; this list will not change.' : 'Before cut-off: more paid orders can still come in.' }}</span></p>
+                <p class="m-0 mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"><span class="rounded-full px-2.5 py-0.5 text-xs font-bold text-white" :class="recap.final ? 'bg-matcha' : 'bg-berry'">{{ recap.final ? 'FINAL' : 'SEMENTARA' }}</span>
+                    <span class="admin-muted">{{ recap.final ? 'Cut-off has passed; this list will not change.' : 'Before cut-off: more paid orders can still come in.' }}</span></p>
             </div>
             <div class="flex flex-wrap gap-2">
                 <a :href="`/admin/production/pdf?date=${recap.date}`" class="admin-secondary"><i class="fa-solid fa-file-pdf" aria-hidden="true"></i>Download PDF</a>
@@ -97,7 +97,7 @@ async function copy() {
             <li v-for="order in group.orders" :key="order.code" class="rounded-xl border border-chocolate/10 p-3 text-sm">
                 <p class="m-0 font-bold">{{ order.time ?? '—' }} · {{ order.method === 'delivery' ? 'Delivery' : 'Pickup' }} <span class="admin-muted font-normal">· {{ order.code }} · {{ order.customer }}</span></p>
                 <ul class="m-0 mt-1 list-none p-0">
-                    <li v-for="item in order.items" :key="item.label">{{ item.label }}<span v-for="content in item.contents" :key="content" class="admin-muted block pl-4 text-xs">isi: {{ content }}</span></li>
+                    <li v-for="item in order.items" :key="item.label">{{ item.label }}<span v-for="content in item.contents" :key="content" class="admin-muted block pl-4 text-xs">isi: {{ content }}</span><span v-for="text in item.input" :key="text" class="mt-1 block rounded-lg bg-cream p-2 text-xs"><i class="fa-solid fa-pen-nib" aria-hidden="true"></i> {{ text }}</span></li>
                 </ul>
                 <p v-if="order.card" class="m-0 mt-2 rounded-lg bg-cream p-2 text-xs"><i class="fa-solid fa-envelope-open-text" aria-hidden="true"></i> {{ order.card }}</p>
                 <p v-if="order.note" class="admin-muted m-0 mt-1 text-xs">Note: {{ order.note }}</p>
