@@ -22,6 +22,7 @@ use App\Http\Controllers\Shop\OrderAdditionController;
 use App\Http\Controllers\Shop\OrderStatusController;
 use App\Http\Controllers\Shop\PaymentPageController;
 use App\Http\Controllers\Webhooks\DokuQrisWebhookController;
+use App\Http\Controllers\Webhooks\DokuSnapTokenController;
 use App\Http\Controllers\Webhooks\DokuVaWebhookController;
 use App\Http\Controllers\Webhooks\DokuWebhookController;
 use App\Http\Middleware\PrivateOrderResponse;
@@ -63,6 +64,8 @@ Route::middleware(PrivateOrderResponse::class)->group(function () {
 Route::post('/webhooks/doku', DokuWebhookController::class)->middleware('throttle:payment-webhook');
 Route::post('/webhooks/doku-qris', DokuQrisWebhookController::class)->middleware('throttle:payment-webhook');
 Route::post('/webhooks/doku-va', DokuVaWebhookController::class)->middleware('throttle:payment-webhook');
+// DOKU SNAP Token URL: DOKU gets an access token here before sending notifications.
+Route::post('/authorization/v1/access-token/b2b', DokuSnapTokenController::class)->middleware('throttle:payment-webhook');
 
 Route::middleware('guest')->group(function () {
     Route::get('/admin/login', [SessionController::class, 'create'])->name('login');

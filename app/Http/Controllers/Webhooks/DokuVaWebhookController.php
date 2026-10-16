@@ -11,8 +11,8 @@ use App\Services\Doku\DokuSnapClient;
 use Illuminate\Http\Request;
 
 /**
- * DOKU BCA Virtual Account payment notification (SNAP). Trusted only when DOKU's signature verifies with DOKU's
- * public key (DOKU_SNAP_DOKU_PUBLIC_KEY_PATH); otherwise the body only identifies our payment and its status is read
+ * DOKU BCA Virtual Account payment notification (SNAP). Trusted only when DOKU's signature verifies: with the access token
+ * DOKU got from our Token URL (DokuSnapTokenController), or with DOKU's public key; otherwise the body only identifies our payment and its status is read
  * back from DOKU, so a forged notification cannot mark an order as paid.
  * Set the VA Notification URL in DOKU to {APP_URL}/webhooks/doku-va.
  */
@@ -24,7 +24,7 @@ class DokuVaWebhookController extends Controller
         $payment = $trxId !== '' ? Payment::where('provider', 'doku_va')->where('provider_order_id', $trxId)->first() : null;
         $result = 'unknown_payment';
         if ($payment) {
-            $signed = $snap->verifyNotification('/'.$request->path(), $request->getContent(), (string) $request->header('X-TIMESTAMP'), (string) $request->header('X-SIGNATURE'));
+            $signed = $snap->verifyNotification('/'.$request->path(), $request->getContent(), (string) $request->header('X-TIMESTAMP'), (string) $request->header('X-SIGNATURE'), (string) $request->header('Authorization'));
             $sameVa = trim((string) $request->input('virtualAccountNo')) === trim((string) $payment->va_number);
             try {
                 $result = $signed && $sameVa

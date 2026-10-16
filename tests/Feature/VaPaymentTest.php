@@ -247,6 +247,37 @@ class VaPaymentTest extends TestCase
         $this->postJson('/webhooks/doku-va', ['trxId' => 'unknown'])->assertOk()->assertJson(['status' => 'unknown_payment']);
     }
 
+    public function test_doku_gets_a_token_from_our_token_url_and_signs_the_notification_with_it(): void
+    {
+        $this->fakeDoku();
+        $order = $this->order();
+        $va = $this->confirm($order);
+        $dokuKey = openssl_pkey_get_private((string) file_get_contents(base_path('tests/fixtures/doku-test-private.pem')));
+        $timestamp = '2030-01-01T12:21:00+07:00';
+
+        // Only DOKU (its private key, our Client ID) gets a token.
+        openssl_sign('BRN-OTHER|'.$timestamp, $wrongClient, $dokuKey, OPENSSL_ALGO_SHA256);
+        $this->postJson('/authorization/v1/access-token/b2b', ['grantType' => 'client_credentials'], ['X-CLIENT-KEY' => 'BRN-OTHER', 'X-TIMESTAMP' => $timestamp, 'X-SIGNATURE' => base64_encode($wrongClient)])
+            ->assertStatus(401)->assertJson(['responseCode' => '4017300']);
+        $this->postJson('/authorization/v1/access-token/b2b', ['grantType' => 'client_credentials'], ['X-CLIENT-KEY' => 'BRN-VA', 'X-TIMESTAMP' => $timestamp, 'X-SIGNATURE' => base64_encode('forged')])
+            ->assertStatus(401);
+        openssl_sign('BRN-VA|'.$timestamp, $signed, $dokuKey, OPENSSL_ALGO_SHA256);
+        $token = $this->postJson('/authorization/v1/access-token/b2b', ['grantType' => 'client_credentials'], ['X-CLIENT-KEY' => 'BRN-VA', 'X-TIMESTAMP' => $timestamp, 'X-SIGNATURE' => base64_encode($signed)])
+            ->assertOk()->assertJson(['responseCode' => '2007300', 'tokenType' => 'Bearer', 'expiresIn' => '900'])->json('accessToken');
+
+        $body = ['partnerServiceId' => '   19008', 'customerNo' => '000000000012', 'virtualAccountNo' => self::VA, 'virtualAccountName' => 'Sinta Private',
+            'trxId' => $va->provider_order_id, 'paymentRequestId' => 'PAY-2', 'paidAmount' => ['value' => '175000.00', 'currency' => 'IDR'], 'trxDateTime' => '2030-01-01T12:21:30+07:00'];
+        $json = json_encode($body, JSON_UNESCAPED_SLASHES);
+        $sign = fn (string $withToken) => base64_encode(hash_hmac('sha512', 'POST:/webhooks/doku-va:'.$withToken.':'.strtolower(hash('sha256', $json)).':'.$timestamp, 'va-secret', true));
+        $send = fn (string $withToken, string $signature) => $this->call('POST', '/webhooks/doku-va', [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json',
+            'HTTP_AUTHORIZATION' => 'Bearer '.$withToken, 'HTTP_X_TIMESTAMP' => $timestamp, 'HTTP_X_SIGNATURE' => $signature], $json);
+        // A token we never issued is not trusted: the status is read back from DOKU (still pending).
+        $send('made-up-token', $sign('made-up-token'))->assertOk();
+        $this->assertSame('pending', $order->fresh()->payment_status);
+        $send($token, $sign($token))->assertOk()->assertJson(['status' => 'applied']);
+        $this->assertSame('paid', $order->fresh()->payment_status);
+    }
+
     public function test_demo_mode_offers_va_and_qris_without_calling_doku(): void
     {
         Http::fake();

@@ -24,7 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->redirectUsersTo('/admin');
         $middleware->alias(['active-staff' => EnsureActiveStaff::class]);
         // DOKU authenticates notifications with an HMAC-SHA256 signature instead of a CSRF token.
-        $middleware->validateCsrfTokens(except: ['webhooks/doku', 'webhooks/doku-qris', 'webhooks/doku-va']);
+        $middleware->validateCsrfTokens(except: ['webhooks/doku', 'webhooks/doku-qris', 'webhooks/doku-va', 'authorization/v1/access-token/b2b']);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

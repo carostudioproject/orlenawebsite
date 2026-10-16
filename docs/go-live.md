@@ -68,6 +68,7 @@ Every field "Setiap … (*)". The scheduled tasks run inside `schedule:run` (rou
 
 - [ ] Production Client ID / Secret Key in `.env`, `DOKU_IS_PRODUCTION=true`, `DOKU_ENABLED=true`, `DOKU_MODE=direct`, `DOKU_METHODS=va_bca,qris`, VA BCA and QRIS IDs from DOKU.
 - [ ] SNAP key pair generated on the **live** server (Developer tools → Generate SNAP key), public key uploaded to the DOKU dashboard; DOKU's public key saved as `storage/app/private/doku-snap-doku-public.pem`.
+- [ ] Token URL in the DOKU dashboard (API Keys → Pengaturan SNAP): `https://<domain>/authorization/v1/access-token/b2b`. DOKU gets a token there before each notification; without it, payments are still found by the status checks.
 - [ ] Notification URLs in the DOKU dashboard on the new domain: `https://<domain>/webhooks/doku-va` and `https://<domain>/webhooks/doku-qris`.
 - [ ] Deferred checks from the dev phase: SNAP signature format, VA number reuse (see the go-live notes in payments).
 

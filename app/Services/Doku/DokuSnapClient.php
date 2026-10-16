@@ -6,6 +6,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 /**
  * DOKU Direct API (SNAP) transport shared by QRIS and Virtual Account. A B2B access token is requested with an RSA
@@ -37,21 +38,60 @@ class DokuSnapClient
         return base64_encode(hash_hmac('sha512', $stringToSign, $this->secret(), true));
     }
 
+    /** Lifetime of an access token we issue to DOKU for its notifications (seconds). */
+    public const INBOUND_TOKEN_SECONDS = 900;
+
     /**
-     * Checks a notification DOKU signed with its private key (SHA256withRSA over
-     * "POST:path:lowerhex(sha256(minified body)):timestamp"). False when DOKU's public key is not configured.
+     * Checks a notification from DOKU. With a Bearer token we issued (inboundToken), DOKU signs like any SNAP call:
+     * HMAC-SHA512 with the client secret over "POST:path:token:lowerhex(sha256(minified body)):timestamp".
+     * Without one, DOKU's private key signature (SHA256withRSA over "POST:path:lowerhex(sha256(minified body)):timestamp").
+     * False when neither verifies, or DOKU's public key / the secret is not configured.
      */
-    public function verifyNotification(string $path, string $body, string $timestamp, string $signature): bool
+    public function verifyNotification(string $path, string $body, string $timestamp, string $signature, string $authorization = ''): bool
     {
+        if ($signature === '' || $timestamp === '') {
+            return false;
+        }
+        $minified = (string) json_encode(json_decode($body, true), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $token = preg_match('/^Bearer\s+(\S+)$/i', trim($authorization), $match) ? $match[1] : '';
+        if ($token !== '' && Cache::has($this->inboundKey($token)) && $this->secret() !== '') {
+            return hash_equals($this->signature('POST', $path, $token, $minified, $timestamp), $signature);
+        }
         $file = (string) config('services.doku.snap_doku_public_key_path');
-        if ($file === '' || ! is_readable($file) || $signature === '' || $timestamp === '') {
+        if ($file === '' || ! is_readable($file)) {
             return false;
         }
         $key = openssl_pkey_get_public((string) file_get_contents($file));
-        $minified = json_encode(json_decode($body, true), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        $stringToSign = 'POST:'.$path.':'.strtolower(hash('sha256', (string) $minified)).':'.$timestamp;
+        $stringToSign = 'POST:'.$path.':'.strtolower(hash('sha256', $minified)).':'.$timestamp;
 
         return $key !== false && openssl_verify($stringToSign, (string) base64_decode($signature, true), $key, OPENSSL_ALGO_SHA256) === 1;
+    }
+
+    /**
+     * DOKU asks our Token URL for a B2B access token before it sends a notification: X-CLIENT-KEY is our Client ID and
+     * X-SIGNATURE is DOKU's SHA256withRSA signature of "clientId|timestamp" (checked with DOKU's public key).
+     * Returns the token, or null when the request is not DOKU's.
+     */
+    public function inboundToken(string $clientKey, string $timestamp, string $signature): ?string
+    {
+        $file = (string) config('services.doku.snap_doku_public_key_path');
+        $clientId = (string) config('services.doku.client_id');
+        if ($clientId === '' || ! hash_equals($clientId, $clientKey) || $timestamp === '' || $signature === '' || $file === '' || ! is_readable($file)) {
+            return null;
+        }
+        $key = openssl_pkey_get_public((string) file_get_contents($file));
+        if ($key === false || openssl_verify($clientKey.'|'.$timestamp, (string) base64_decode($signature, true), $key, OPENSSL_ALGO_SHA256) !== 1) {
+            return null;
+        }
+        $token = Str::random(64);
+        Cache::put($this->inboundKey($token), true, self::INBOUND_TOKEN_SECONDS);
+
+        return $token;
+    }
+
+    private function inboundKey(string $token): string
+    {
+        return 'doku-inbound-token:'.hash('sha256', $token);
     }
 
     public function ok(Response $response): bool
