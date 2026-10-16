@@ -15,9 +15,15 @@ class DokuVaClient
 
     public const DELETE_PATH = '/virtual-accounts/bi-snap-va/v1.1/transfer-va/delete-va';
 
+    /** Default additionalInfo.channel; DOKU_VA_BCA_CHANNEL overrides it. */
     public const CHANNEL = 'VIRTUAL_ACCOUNT_BCA';
 
     public function __construct(private DokuSnapClient $snap) {}
+
+    private function channel(): string
+    {
+        return (string) (config('services.doku.va_bca_channel') ?: self::CHANNEL);
+    }
 
     /** Returns the full virtualAccountNo (with DOKU's leading-space padding) and DOKU's how-to-pay page. */
     public function create(string $trxId, int $amount, string $name, \DateTimeInterface $expiresAt): array
@@ -28,7 +34,7 @@ class DokuVaClient
             'partnerServiceId' => $serviceId, 'customerNo' => $prefix, 'virtualAccountNo' => $serviceId.$prefix,
             'virtualAccountName' => $this->name($name), 'trxId' => $trxId,
             'totalAmount' => ['value' => $amount.'.00', 'currency' => 'IDR'],
-            'additionalInfo' => ['channel' => self::CHANNEL, 'virtualAccountConfig' => ['reusableStatus' => false]],
+            'additionalInfo' => ['channel' => $this->channel(), 'virtualAccountConfig' => ['reusableStatus' => false]],
             'virtualAccountTrxType' => 'C',
             'expiredDate' => (new \DateTimeImmutable('@'.$expiresAt->getTimestamp()))->setTimezone(new \DateTimeZone('Asia/Jakarta'))->format('Y-m-d\TH:i:sP'),
         ]);
@@ -68,7 +74,7 @@ class DokuVaClient
     {
         try {
             return $this->snap->ok($this->snap->send(self::DELETE_PATH, [
-                ...$this->identity($virtualAccountNo), 'trxId' => $trxId, 'additionalInfo' => ['channel' => self::CHANNEL],
+                ...$this->identity($virtualAccountNo), 'trxId' => $trxId, 'additionalInfo' => ['channel' => $this->channel()],
             ], 'DELETE'));
         } catch (DokuException) {
             return false;

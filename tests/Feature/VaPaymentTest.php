@@ -278,6 +278,15 @@ class VaPaymentTest extends TestCase
         $this->assertSame('paid', $order->fresh()->payment_status);
     }
 
+    public function test_the_va_channel_name_comes_from_the_settings(): void
+    {
+        config(['services.doku.va_bca_channel' => 'VIRTUAL_ACCOUNT_BCA_AGGREGATOR']);
+        $this->fakeDoku();
+        $this->confirm($this->order());
+        Http::assertSent(fn (HttpRequest $request) => str_ends_with($request->url(), '/transfer-va/create-va')
+            && $request['additionalInfo']['channel'] === 'VIRTUAL_ACCOUNT_BCA_AGGREGATOR');
+    }
+
     public function test_demo_mode_offers_va_and_qris_without_calling_doku(): void
     {
         Http::fake();

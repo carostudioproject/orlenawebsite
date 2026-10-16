@@ -52,6 +52,8 @@ return [
         // BCA Virtual Account (SNAP): partnerServiceId (BIN/company code) and customerNo prefix from DOKU, e.g. 19008 and 0.
         'va_bca_partner_service_id' => env('DOKU_VA_BCA_PARTNER_SERVICE_ID'),
         'va_bca_customer_prefix' => env('DOKU_VA_BCA_CUSTOMER_PREFIX', ''),
+        // additionalInfo.channel of the BCA VA service DOKU activated (e.g. a different name for the Aggregator SNAP service).
+        'va_bca_channel' => env('DOKU_VA_BCA_CHANNEL', 'VIRTUAL_ACCOUNT_BCA'),
         // DOKU's public key (DOKU dashboard), to trust signed SNAP notifications; without it each notification triggers a status check.
         'snap_doku_public_key_path' => env('DOKU_SNAP_DOKU_PUBLIC_KEY_PATH') ?: storage_path('app/private/doku-snap-doku-public.pem'),
         'qris_merchant_id' => env('DOKU_QRIS_MERCHANT_ID'),
