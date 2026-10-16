@@ -2,18 +2,20 @@
 
 Moving from the demo server (dev.caro-studio.com) to Orlena's own Hostinger account and domain. Technical details per step are in [Deploying to Hostinger](deployment-hostinger.md); this page is the order to do them in. Tick each box.
 
+**Status 2026-10-16:** `https://orlenalycious.com` runs on Orlena's Hostinger account (sections 1–6 done, with the notes below); online payment (DOKU) and Erzap are not live yet, so staff record payments by hand.
+
 ## 1. Accounts (Orlena)
 
-- [ ] Hostinger **Unlimited** web hosting (daily backups), data centre in Asia, bought **in Orlena's name** and paid by Orlena.
-- [ ] Domain in Orlena's name, added to the hosting (Hostinger DNS, or A record to the hosting IP).
-- [ ] Access for Caro Studio: hPanel team access, or at least SSH (hPanel → Advanced → SSH Access, add our public key).
+- [x] Hostinger web hosting, data centre Indonesia. *To confirm: the plan (Unlimited, for daily backups) and that the account is in Orlena's name.*
+- [x] Domain `orlenalycious.com` (registered at Spaceship, nameservers stay at Spaceship): A `@` → hosting IP, CNAME `www` → `orlenalycious.com`; Google verification records kept, Vercel records and project domains removed.
+- [x] Access for Caro Studio: hPanel team access, or at least SSH (hPanel → Advanced → SSH Access, add our public key).
 
 ## 2. Server setup (hPanel + SSH)
 
-- [ ] PHP **8.3** for the website and CLI (`php -v`), extensions as listed in the deployment guide (`php -m`).
-- [ ] MySQL database and user (hPanel → Databases). Keep the password only in the server `.env`.
-- [ ] SSL active (hPanel → Security → SSL) and HTTPS forced.
-- [ ] Laravel folder next to `public_html`, and `public_html` pointing to its `public/` (as on dev):
+- [x] PHP **8.3** for the website and CLI (`php -v`), extensions as listed in the deployment guide (`php -m`).
+- [x] MySQL database and user (hPanel → Databases). Keep the password only in the server `.env`.
+- [x] SSL active (hPanel → Security → SSL) and HTTPS forced; `www` redirects to the main domain (public/.htaccess).
+- [x] Laravel folder next to `public_html`, and `public_html` pointing to its `public/` (as on dev):
 
 ```bash
 cd domains/<domain>
@@ -22,11 +24,11 @@ mkdir orlena && mv public_html public_html.default && ln -s orlena/public public
 
 ## 3. First deploy (from the developer's computer)
 
-- [ ] `scripts/deploy.live.env` from `scripts/deploy.example.env` (host, port 65002, user, key, `DEPLOY_APP_DIR=domains/<domain>/orlena`).
-- [ ] Commit, then `scripts/deploy.sh live`. The first run stops at `migrate` because `.env` is missing; that is expected.
-- [ ] `public/storage` link by hand if PHP's `symlink` is disabled (`php artisan storage:link` then fails): `ln -s ../storage/app/public public/storage`.
-- [ ] On the server, `.env` from `.env.example` (see the deployment guide, section 3): `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL=https://<domain>`, `DB_*`, `SESSION_SECURE_COOKIE=true`, `SITE_INDEXABLE=true` (only when the client approves), **no** `DOKU_ALLOW_DEMO`, `DOKU_ENABLED=false` and `ERZAP_ENABLED=false` until steps 7 and 8.
-- [ ] `php artisan key:generate`, `php artisan migrate --force` (no `--seed`: the catalog comes from dev in step 4), then `scripts/deploy.sh live` again; it ends with "Deployed."
+- [x] `scripts/deploy.live.env` from `scripts/deploy.example.env` (host, port 65002, user, key, `DEPLOY_APP_DIR=domains/<domain>/orlena`).
+- [x] Commit, then `scripts/deploy.sh live`. The first run stops at `migrate` because `.env` is missing; that is expected.
+- [x] `public/storage` link by hand if PHP's `symlink` is disabled (`php artisan storage:link` then fails): `ln -s ../storage/app/public public/storage`.
+- [x] On the server, `.env` from `.env.example` (see the deployment guide, section 3): `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL=https://<domain>`, `DB_*`, `SESSION_SECURE_COOKIE=true`, `SITE_INDEXABLE=true` (only when the client approves), **no** `DOKU_ALLOW_DEMO`, `DOKU_ENABLED=false` and `ERZAP_ENABLED=false` until steps 7 and 8.
+- [x] `php artisan key:generate`, `php artisan migrate --force` (no `--seed`: the catalog comes from dev in step 4), then `scripts/deploy.sh live` again; it ends with "Deployed."
 
 ## 4. Catalog, content and photos from dev
 
@@ -41,14 +43,14 @@ php artisan orlena:import-catalog --replace  # --replace: migrations add default
 tar -xzf ~/orlena-photos.tgz -C storage/app/public && php artisan optimize
 ```
 
-- [ ] Delete `catalog-export.json` and `orlena-photos.tgz` from both servers afterwards.
-- [ ] Outlets: all 6 present (add **Jimbaran**), daily quota (30 for Living World and Mal Bali Galeria), hourly quota, first slot and closing time, **Ships delivery** where it applies.
-- [ ] Products: price and photo on every active product; real Erzap barcodes (no dummy barcodes such as 123456789 or 65478931).
+- [x] Delete `catalog-export.json` and `orlena-photos.tgz` from both servers afterwards.
+- [ ] Outlets: all 6 present (add **Jimbaran**), daily quota (30 for Living World and Mal Bali Galeria), hourly quota, first slot and closing time, **Ships delivery** where it applies. *5 outlets present; Jimbaran opens next month; opening hours still the default 13:00–21:00.*
+- [ ] Products: price and photo on every active product; real Erzap barcodes (no dummy barcodes such as 123456789 or 65478931). *Orlena's product sheet imported 2026-10-16; some products still have no photo; check the barcodes 123456789, 1234567956, 1234568016 and 888123456881 against Erzap.*
 
 ## 5. Accounts
 
-- [ ] `php artisan orlena:create-admin` for Orlena's admin (password typed by them, never sent in chat).
-- [ ] One account per staff member / outlet under **Users** (no shared "Staff" account).
+- [x] Orlena's admin account (`admin`). *Created with a random password kept off the chat; Orlena changes it under Profile after the first login.*
+- [ ] One account per staff member / outlet under **Users** (no shared "Staff" account). *So far: `tiwi` (Staff) and `developer` (Caro Studio).*
 
 ## 6. Cron (hPanel → Advanced → Cron Jobs), every minute
 
@@ -60,7 +62,7 @@ domains/<domain>/orlena/artisan schedule:run
 
 Every field "Setiap … (*)". The scheduled tasks run inside `schedule:run` (routes/console.php), because Hostinger disables `proc_open` on some accounts.
 
-- [ ] Added. Without it there is no auto-cancel at 21:00, no DOKU status check and no Erzap sending. Check after a few minutes: Developer tools shows the scheduler as running (green), and `php artisan schedule:list` lists `scheduler-heartbeat`, `orders:cancel-unpaid`, `payments:reconcile` and `erzap:sync`.
+- [x] Added. Without it there is no auto-cancel at 21:00, no DOKU status check and no Erzap sending. Check after a few minutes: Developer tools shows the scheduler as running (green), and `php artisan schedule:list` lists `scheduler-heartbeat`, `orders:cancel-unpaid`, `payments:reconcile` and `erzap:sync`.
 
 ## 7. DOKU (production)
 
@@ -72,7 +74,7 @@ Every field "Setiap … (*)". The scheduled tasks run inside `schedule:run` (rou
 ## 8. Erzap
 
 - [ ] Erzap registers the new domain on the ORLENA account (Erzap calls `https://<domain>/web_service/...`).
-- [ ] `ERZAP_*` in `.env`: base URL, token, inbound token if separate, sales user ID; `ERZAP_ENABLED=true`.
+- [ ] `ERZAP_*` in `.env`: base URL, token, inbound token if separate, sales user ID; `ERZAP_ENABLED=true`. *Base URL set (`https://orlena.erzap.com:4443`, reachable from the server; Erzap to confirm); token and IDs pending.*
 - [ ] Erzap outlet ID per outlet (Erzap → Mapping), so each sale is recorded at the right outlet.
 - [ ] **Dev stops sending to Orlena's Erzap**: on dev set `ERZAP_ENABLED=false` (or Erzap's demo account) and keep `DOKU_ALLOW_DEMO` only there.
 
