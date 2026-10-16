@@ -22,6 +22,7 @@
     @endforeach
 </head>
 <body>
+    @include('partials.page-loader')
     <a href="#main-content" class="skip-link">Skip to content</a>
     @include('partials.site-header')
     <main id="main-content" tabindex="-1">@yield('content')</main>

@@ -1,0 +1,103 @@
+/* Customer order pages (/order, /orders/{code}/tambah): category chips, product cards, size pills, quantity steppers, fulfillment choices.
+   Customer pages share the form, card and button styles in admin.css. */
+.order-step { display: inline-flex; align-items: center; justify-content: center; width: 1.75rem; height: 1.75rem; margin-right: .6rem; border-radius: 999px; background: var(--admin-chocolate); color: var(--admin-cream); font-size: .85rem; vertical-align: .15em; }
+.order-category { display: inline-flex; flex-shrink: 0; align-items: center; gap: .6rem; border: 1px solid #3b030429; border-radius: 999px; background: white; padding: .3rem 1rem .3rem .3rem; font-size: .875rem; font-weight: 700; white-space: nowrap; transition: background-color .15s, border-color .15s; }
+.order-category:hover { border-color: var(--admin-almond); background: #fff5f0; }
+.order-category[aria-pressed='true'] { border-color: var(--admin-chocolate); background: var(--admin-chocolate); color: var(--admin-cream); }
+.order-category-count { min-width: 1.4rem; border-radius: 999px; background: var(--admin-cream); padding: .05rem .4rem; font-size: .7rem; text-align: center; font-variant-numeric: tabular-nums; }
+.order-category[aria-pressed='true'] .order-category-count { background: #ffffff26; color: inherit; }
+.order-categories { scrollbar-width: none; scroll-snap-type: x proximity; }
+.order-categories::-webkit-scrollbar { display: none; }
+.order-categories .order-category { scroll-snap-align: start; }
+/* Phones: compact text chips without the image. */
+@media (max-width: 639px) { .order-category { gap: .45rem; padding: .5rem .5rem .5rem .9rem; } }
+/* Shop-grid card: full-bleed square photo, centred name and price, outline button. */
+.order-product { display: flex; flex-direction: column; }
+.order-product-photo { position: relative; display: flex; aspect-ratio: 1; align-items: center; justify-content: center; overflow: hidden; border-radius: 1rem; background: #f6e3dc; cursor: pointer; }
+.order-product-photo img { width: 100%; height: 100%; object-fit: cover; transition: transform .3s; }
+.order-product-photo:hover img { transform: scale(1.03); }
+/* Highlighted product (admin: "Highlight on the order form"): a badge at the top left of the photo. */
+.order-product-featured { position: absolute; top: .5rem; left: .5rem; max-width: calc(100% - 1rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 999px; background: var(--color-berry); padding: .25rem .6rem; color: white; font-size: .7rem; font-weight: 700; letter-spacing: .02em; box-shadow: 0 2px 6px #3b030433; }
+.order-category.is-featured { border-color: var(--color-berry); }
+.order-category.is-featured[aria-pressed="false"] i { color: var(--color-berry); }
+.order-product-badge { position: absolute; inset: auto 0 0; padding: .4rem; background: #3b0304e0; color: white; font-size: .72rem; font-weight: 700; letter-spacing: .03em; text-align: center; }
+.order-size span { display: inline-block; cursor: pointer; border: 1px solid #3b030429; border-radius: 999px; padding: .35rem .8rem; font-size: .8rem; font-weight: 700; transition: background-color .15s, border-color .15s; }
+.order-size input:checked + span { border-color: var(--admin-chocolate); background: var(--admin-almond); }
+.order-size input:focus-visible + span { outline: 2px solid var(--admin-chocolate); outline-offset: 2px; }
+/* One choosable hampers/box content: radio or stepper row. */
+.order-content-option { display: flex; align-items: center; gap: .6rem; border: 1px solid #3b030420; border-radius: .75rem; background: white; padding: .45rem .7rem; font-size: .8rem; }
+label.order-content-option { cursor: pointer; }
+label.order-content-option:has(input:checked) { border-color: var(--admin-chocolate); background: #fff5f0; }
+.order-content-option input[type="radio"] { accent-color: var(--admin-chocolate); }
+.order-stepper span.order-qty { display: inline-block; line-height: 2rem; }
+.order-stepper { display: inline-flex; align-items: center; overflow: hidden; border: 1px solid #3b030429; border-radius: 999px; background: white; }
+.order-stepper button { display: inline-flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.4rem; font-size: .75rem; transition: background-color .15s; }
+.order-stepper button:hover:not(:disabled) { background: var(--admin-almond); }
+.order-stepper button:disabled { opacity: .35; cursor: not-allowed; }
+.order-stepper .order-qty { width: 2.75rem; border: 0; border-radius: 0; padding: 0; text-align: center; font-weight: 700; -moz-appearance: textfield; }
+/* 16px: iOS zooms into smaller fields, which breaks the popup layout. */
+.order-stepper input.order-qty { font-size: 16px; }
+.order-stepper input::-webkit-inner-spin-button, .order-stepper input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.order-stepper.is-small button { width: 1.9rem; height: 2rem; }
+.order-stepper.is-small .order-qty { width: 2.25rem; }
+.order-method span { display: grid; grid-template-columns: auto 1fr; column-gap: .75rem; height: 100%; cursor: pointer; border: 1px solid #3b030429; border-radius: 1rem; padding: 1rem; transition: background-color .15s, border-color .15s; }
+.order-method i { grid-row: span 2; align-self: center; font-size: 1.2rem; }
+.order-method small { color: #3b0304a6; font-size: .78rem; }
+.order-method input:checked + span { border-color: var(--admin-chocolate); background: #fff5f0; box-shadow: inset 0 0 0 1px var(--admin-chocolate); }
+.order-method input:focus-visible + span { outline: 2px solid var(--admin-chocolate); outline-offset: 2px; }
+.order-method.is-disabled span { cursor: not-allowed; opacity: .5; }
+/* 16px text: iOS zooms into smaller form fields. */
+.order-select { width: 100%; border: 1px solid #3b030429; border-radius: .75rem; background-color: white; padding: .55rem .75rem; font-size: 1rem; }
+/* Product popup: a bottom sheet on phones, a centred dialog on wider screens. */
+.order-sheet { width: 100%; max-width: 32rem; max-height: 88dvh; margin: auto auto 0; border: 0; border-radius: 1.25rem 1.25rem 0 0; padding: 0; background: white; color: var(--admin-chocolate); }
+.order-sheet[open] { display: flex; flex-direction: column; overflow: hidden; animation: order-sheet-in .2s ease-out; }
+.order-sheet::backdrop { background: rgb(27 1 2 / .45); }
+/* Basis auto (not flex: 1, whose 0% basis Safari resolves to 0 in a sheet of indefinite height and collapses the body);
+   min-height: 0 lets it shrink and scroll so the footer button stays on screen on phones. */
+.order-sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 1.25rem; }
+.order-sheet-footer { flex-shrink: 0; }
+.order-sheet-footer { display: flex; align-items: center; gap: 1rem; border-top: 1px solid var(--admin-line); padding: .9rem 1.25rem calc(.9rem + env(safe-area-inset-bottom)); }
+@media (min-width: 640px) { .order-sheet { margin: auto; border-radius: 1.25rem; } }
+@keyframes order-sheet-in { from { transform: translateY(1.5rem); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .order-sheet[open] { animation: none; } }
+/* Cart bar (every screen size) and the cart drawer: a bottom sheet on phones, a right-hand panel on wide screens. */
+.order-cartbar.admin-shell, .order-cartbar { position: fixed; inset: auto 0 0; z-index: 30; border-top: 1px solid var(--admin-line); background: #ffffffeb; padding: .7rem 0 calc(.7rem + env(safe-area-inset-bottom)); box-shadow: 0 -10px 30px -24px #3b030466; backdrop-filter: blur(8px); }
+.order-cartbar-count { position: absolute; top: -.2rem; right: -.25rem; min-width: 1.25rem; border-radius: 999px; background: var(--admin-chocolate); padding: 0 .3rem; color: white; font-size: .7rem; font-weight: 700; line-height: 1.25rem; text-align: center; }
+@media (min-width: 1024px) {
+    .order-sheet.is-drawer { height: 100dvh; max-height: 100dvh; width: 26rem; max-width: 100%; margin: 0 0 0 auto; border-radius: 1.25rem 0 0 1.25rem; }
+    .order-sheet.is-drawer[open] { animation-name: order-drawer-in; }
+}
+@keyframes order-drawer-in { from { transform: translateX(2rem); opacity: 0; } }
+/* Pictures inside the product popup: small thumbnails in rows, square tiles for single choices. */
+.order-thumb { display: flex; width: 2.5rem; height: 2.5rem; flex-shrink: 0; align-items: center; justify-content: center; overflow: hidden; border-radius: .5rem; background: #f6e3dc; color: #3b030440; }
+.order-thumb img, .order-tile-photo img { width: 100%; height: 100%; object-fit: cover; }
+.order-tile { display: block; cursor: pointer; border: 2px solid #3b030414; border-radius: .9rem; background: white; padding: .35rem .35rem .5rem; transition: border-color .15s, background-color .15s; }
+.order-tile:hover { border-color: #3b030440; }
+.order-tile:has(input:checked) { border-color: var(--admin-chocolate); background: #fff5f0; }
+.order-tile:has(input:focus-visible) { outline: 2px solid var(--admin-chocolate); outline-offset: 2px; }
+.order-tile-photo { display: flex; aspect-ratio: 1; align-items: center; justify-content: center; overflow: hidden; border-radius: .6rem; background: #f6e3dc; color: #3b030440; font-size: 1.25rem; }
+/* Category chips stay reachable while scrolling the products (top set from the header height). */
+.order-category-bar { position: sticky; z-index: 20; margin: -.5rem -1.5rem 0; background: white; padding: .5rem 1.5rem .6rem; box-shadow: 0 10px 14px -14px #3b030440; }
+
+/* PO calendar (order form): dates past the cutoff, closed or full stay visible but unavailable. */
+/* Compact: about 23rem wide on desktop, full width on phones; fixed-height days instead of squares. */
+.po-calendar { max-width: 23rem; border: 1px solid #3b030420; border-radius: 1rem; padding: .75rem; background: #fff; }
+.po-calendar.is-disabled { opacity: .55; pointer-events: none; }
+.po-calendar-nav { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: 999px; border: 1px solid #3b030420; background: #fff; }
+.po-calendar-nav:disabled { opacity: .3; cursor: default; }
+.po-calendar-day { height: 2.4rem; border-radius: .6rem; border: 1px solid transparent; font-size: .9rem; font-weight: 700; font-variant-numeric: tabular-nums; transition: background-color .15s, border-color .15s; }
+.po-calendar-day.is-open { background: var(--color-cream); color: var(--color-chocolate); }
+.po-calendar-day.is-open:hover { border-color: var(--color-chocolate); }
+.po-calendar-day.is-full { background: #db3e4c14; color: #db3e4c99; text-decoration: line-through; }
+.po-calendar-day.is-closed, .po-calendar-day.is-cutoff, .po-calendar-day.is-out { color: #3b030440; cursor: default; }
+.po-calendar-day.is-selected { background: var(--color-chocolate); color: #fff; }
+.po-calendar-day:focus-visible { outline: 2px solid var(--color-chocolate); outline-offset: 2px; }
+.po-calendar-key { display: inline-block; width: .7rem; height: .7rem; border-radius: .2rem; margin-right: .35rem; vertical-align: -1px; }
+.po-calendar-key.is-open { background: var(--color-cream); border: 1px solid #3b030420; }
+.po-calendar-key.is-full { background: #db3e4c33; }
+.po-calendar-key.is-closed { background: #3b030414; }
+.po-slot { display: inline-flex; flex-direction: column; align-items: center; min-width: 5.25rem; border: 1px solid #3b030429; border-radius: .9rem; padding: .45rem .7rem; font-size: .85rem; font-weight: 700; background: #fff; transition: background-color .15s, border-color .15s; }
+.po-slot small { font-size: .7rem; font-weight: 400; color: #3b0304a6; }
+.po-slot[aria-pressed="true"] { border-color: var(--color-chocolate); background: var(--color-chocolate); color: #fff; }
+.po-slot[aria-pressed="true"] small { color: #ffffffcc; }
+.po-slot:disabled { opacity: .4; text-decoration: line-through; cursor: default; }

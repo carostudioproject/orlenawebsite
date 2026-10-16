@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\Order;
+use App\Support\TableSort;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -19,14 +20,17 @@ class CustomerController extends Controller
 
     public function index(Request $request)
     {
-        $filters = $request->validate(['search' => ['nullable', 'string', 'max:100'], 'sort' => ['nullable', 'in:recent,spent,orders'], 'page' => ['nullable', 'integer', 'min:1']]);
-        $customers = DB::table('customers as c')->join('orders as o', 'o.customer_id', '=', 'c.id')
+        $filters = $request->validate(['search' => ['nullable', 'string', 'max:100'], 'page' => ['nullable', 'integer', 'min:1']]);
+        $query = DB::table('customers as c')->join('orders as o', 'o.customer_id', '=', 'c.id')
             ->when($filters['search'] ?? null, fn ($q, $search) => $q->where(fn ($q) => $q->where('c.name', 'like', '%'.$search.'%')->orWhere('c.whatsapp', 'like', '%'.$search.'%')))
             ->selectRaw('c.whatsapp, COUNT(o.id) as orders, '.self::PAID_TOTAL.' as spent, MAX(o.created_at) as last_order_at, MAX(c.id) as latest_id')
-            ->groupBy('c.whatsapp')
-            ->when(($filters['sort'] ?? 'recent') === 'spent', fn ($q) => $q->orderByDesc('spent'))
-            ->when(($filters['sort'] ?? 'recent') === 'orders', fn ($q) => $q->orderByDesc('orders'))
-            ->orderByDesc('last_order_at')->paginate(10)->withQueryString();
+            ->groupBy('c.whatsapp');
+        $sort = TableSort::apply($query, $request, [
+            'orders' => 'orders', 'spent' => 'spent', 'last_order' => 'last_order_at',
+            'name' => fn ($q, $dir) => $q->orderByRaw('MAX(c.name) '.$dir),
+        ], 'c.whatsapp');
+        // Default: most recent order first.
+        $customers = ($sort['sort'] ? $query : $query->orderByDesc('last_order_at'))->paginate(10)->withQueryString();
         $names = Customer::whereIn('id', $customers->getCollection()->pluck('latest_id'))->pluck('name', 'id');
         $customers->getCollection()->transform(fn ($row) => [
             'whatsapp' => $row->whatsapp, 'name' => $names[$row->latest_id] ?? '—', 'orders' => (int) $row->orders,
@@ -34,7 +38,7 @@ class CustomerController extends Controller
         ]);
 
         // An object, never []: filters.sort would otherwise resolve to Array.prototype.sort in the browser.
-        return Inertia::render('Admin/Customers/Index', ['customers' => $customers, 'filters' => (object) $filters]);
+        return Inertia::render('Admin/Customers/Index', ['customers' => $customers, 'filters' => (object) $filters, 'sort' => $sort]);
     }
 
     public function show(string $whatsapp)

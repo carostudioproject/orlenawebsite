@@ -6,6 +6,23 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class CheckoutRequest extends FormRequest
 {
+    /** A Google Maps link as shared from the app or browser, checked by exact host (google.attacker.com is not Google). */
+    public static function isMapsUrl(string $url): bool
+    {
+        $parts = parse_url($url);
+        if (($parts['scheme'] ?? '') !== 'https' || isset($parts['user']) || isset($parts['pass']) || isset($parts['port'])) {
+            return false;
+        }
+        $host = strtolower($parts['host'] ?? '');
+        $maps = str_starts_with($parts['path'] ?? '', '/maps');
+
+        return match (true) {
+            in_array($host, ['maps.app.goo.gl', 'maps.google.com', 'maps.google.co.id'], true) => true,
+            in_array($host, ['goo.gl', 'google.com', 'www.google.com', 'google.co.id', 'www.google.co.id'], true) => $maps,
+            default => false,
+        };
+    }
+
     public function authorize(): bool
     {
         return true;
@@ -17,27 +34,54 @@ class CheckoutRequest extends FormRequest
         if (str_starts_with($phone, '0')) {
             $phone = '62'.substr($phone, 1);
         }
-        $this->merge(['whatsapp' => $phone, 'email' => $this->filled('email') ? strtolower(trim($this->input('email'))) : null]);
+        $recipient = preg_replace('/[\s()+-]/', '', (string) $this->input('recipient_whatsapp'));
+        if (str_starts_with($recipient, '0')) {
+            $recipient = '62'.substr($recipient, 1);
+        }
+        $this->merge([
+            'whatsapp' => $phone, 'recipient_whatsapp' => $recipient, 'email' => $this->filled('email') ? strtolower(trim($this->input('email'))) : null,
+            'location_url' => trim((string) $this->input('location_url')),
+            // Only delivery can leave the outlet to Orlena (the nearest one).
+            'nearest_outlet' => $this->input('fulfillment_method') === 'delivery' && $this->boolean('nearest_outlet'),
+        ]);
+    }
+
+    /**
+     * Cart lines, shared with "Tambah pesanan". The same hampers or box may appear on several lines with different contents;
+     * contents are the product IDs chosen for one unit (repeats allowed, checked against the product in OrderPricing).
+     */
+    public static function itemRules(): array
+    {
+        return [
+            'items' => ['required', 'array', 'min:1', 'max:50'],
+            'items.*' => ['array:product_id,quantity,quoted_price,contents'],
+            'items.*.product_id' => ['required', 'integer', 'min:1'],
+            'items.*.quantity' => ['required', 'integer', 'min:1', 'max:99'],
+            'items.*.quoted_price' => ['required', 'integer', 'min:1', 'max:999999999'],
+            'items.*.contents' => ['sometimes', 'array', 'max:50'],
+            'items.*.contents.*' => ['integer', 'min:1'],
+        ];
     }
 
     public function rules(): array
     {
         return [
             'checkout_key' => ['required', 'uuid'],
-            'items' => ['required', 'array', 'min:1', 'max:50'],
-            'items.*' => ['array:product_id,quantity,quoted_price'],
-            'items.*.product_id' => ['required', 'integer', 'min:1', 'distinct'],
-            'items.*.quantity' => ['required', 'integer', 'min:1', 'max:99'],
-            'items.*.quoted_price' => ['required', 'integer', 'min:1', 'max:999999999'],
+            ...self::itemRules(),
             'name' => ['required', 'string', 'max:120'],
             'whatsapp' => ['required', 'regex:/^[1-9][0-9]{7,14}$/'],
             'email' => ['nullable', 'email', 'max:254'],
             'fulfillment_method' => ['required', 'in:pickup,delivery'],
-            // Delivery always ships from the delivery outlet, so only pickup chooses one.
-            'outlet_id' => ['exclude_unless:fulfillment_method,pickup', 'required', 'integer', 'min:1'],
+            // Pickup at the chosen outlet; delivery from the chosen outlet or the nearest one, picked by Orlena.
+            'nearest_outlet' => ['boolean'],
+            'outlet_id' => ['exclude_if:nearest_outlet,true', 'required', 'integer', 'min:1'],
             'requested_date' => ['required', 'date_format:Y-m-d'],
             'requested_time' => ['required', 'date_format:H:i'],
             'delivery_address' => ['exclude_unless:fulfillment_method,delivery', 'required', 'string', 'max:2000'],
+            'recipient_whatsapp' => ['exclude_unless:fulfillment_method,delivery', 'required', 'regex:/^[1-9][0-9]{7,14}$/'],
+            'location_url' => ['exclude_unless:fulfillment_method,delivery', 'required', 'string', 'max:500', 'url:https',
+                fn (string $attribute, mixed $value, \Closure $fail) => is_string($value) && self::isMapsUrl($value) ? null
+                    : $fail('Tempel link lokasi dari Google Maps (diawali https://maps.app.goo.gl/ atau https://www.google.com/maps/).')],
             'customer_note' => ['nullable', 'string', 'max:2000'],
             'card_message' => ['nullable', 'string', 'max:300'],
         ];
@@ -49,9 +93,11 @@ class CheckoutRequest extends FormRequest
             'required' => ':attribute wajib diisi.',
             'email.email' => 'Masukkan alamat email yang valid atau kosongkan.',
             'whatsapp.regex' => 'Masukkan nomor WhatsApp yang valid, misalnya 081234567890.',
+            'recipient_whatsapp.regex' => 'Masukkan nomor WhatsApp penerima yang valid, misalnya 081234567890.',
+            'location_url.url' => 'Tempel link lokasi dari Google Maps (diawali https://).',
+
             'items.min' => 'Pilih minimal satu produk.',
             'items.max' => 'Maksimal 50 produk dalam satu pesanan.',
-            'items.*.product_id.distinct' => 'Produk sudah dipilih. Ubah jumlah pada baris yang sama.',
             'items.*.quantity.integer' => 'Jumlah harus berupa bilangan bulat.',
             'items.*.quantity.min' => 'Jumlah minimal 1.',
             'items.*.quantity.max' => 'Jumlah maksimal 99 per produk.',
@@ -66,7 +112,7 @@ class CheckoutRequest extends FormRequest
         return [
             'name' => 'Nama lengkap', 'whatsapp' => 'Nomor WhatsApp',
             'outlet_id' => 'Outlet', 'fulfillment_method' => 'Metode penerimaan',
-            'requested_date' => 'Tanggal PO', 'requested_time' => 'Jam PO', 'delivery_address' => 'Alamat pengiriman',
+            'requested_date' => 'Tanggal PO', 'requested_time' => 'Jam PO', 'delivery_address' => 'Alamat pengiriman', 'recipient_whatsapp' => 'WhatsApp penerima', 'location_url' => 'Link lokasi Google Maps',
             'items' => 'Pilihan produk', 'items.*.product_id' => 'Produk',
             'items.*.quantity' => 'Jumlah',
         ];

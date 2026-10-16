@@ -9,7 +9,7 @@ The same data the order form already shows.
 | Method | Path | Returns |
 |---|---|---|
 | GET | `/categories` | Active categories: `id`, `name`, `image` |
-| GET | `/outlets` | Outlets taking PO: `id`, `code`, `name`, `address`, `maps_url`, `image`, `is_delivery_hub` |
+| GET | `/outlets` | Outlets taking PO: `id`, `code`, `name`, `address`, `maps_url`, `image`, `delivers` (ships delivery) |
 | GET | `/products?outlet_id=` | Orderable products (active, on sale). Prices follow the outlet when given. Fields: `id`, `name`, `category_id`, `variant`, `price`, `is_hamper`, `hamper_items`, `sale_ends_on`, `image`, `description` |
 | GET | `/schedule` | `earliest_date`, `cutoff_time`, `cutoff_label`, `closed_weekdays` (0 = Sunday), `closed_dates` |
 

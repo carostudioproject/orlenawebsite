@@ -4,11 +4,12 @@ import { computed, ref, watch } from 'vue';
 import AdminLayout from '../../../Layouts/AdminLayout.vue';
 defineOptions({ layout: AdminLayout });
 
-type Field = 'barcode' | 'sku' | 'name' | 'price' | 'category' | 'variant' | 'hamper' | 'hamper_contents';
+type Field = 'barcode' | 'sku' | 'name' | 'price' | 'category' | 'variant' | 'hamper' | 'hamper_contents' | 'content_type' | 'content_count' | 'content_from' | 'content_pricing';
 type Action = 'create' | 'update' | 'skip';
 interface Row {
     line: number; action: Action; name: string | null; variant: string | null; barcode: string | null; sku: string | null; price: number | null; category: string | null; hamper?: boolean; hamper_contents?: string | null;
-    changes?: Partial<Record<'name' | 'price' | 'barcode' | 'sku', [string | number | null, string | number | null]>>;
+    content_type?: string | null;
+    changes?: Partial<Record<'name' | 'price' | 'barcode' | 'sku' | 'content_type' | 'content_count' | 'content_pricing' | 'contents', [string | number | null, string | number | null]>>;
     current?: string; matched_by?: string; reason?: string; warning?: string | null;
 }
 interface Upload {
@@ -40,7 +41,7 @@ const visible = computed(() => (props.upload?.rows ?? []).filter(row => row.acti
 const canApply = computed(() => !!props.upload && !props.upload.errors.length && (props.upload.summary.create + props.upload.summary.update) > 0 && !mappingForm.isDirty);
 const rupiah = (value: string | number | null | undefined) => value == null || value === '' ? '—' : new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value));
 const show = (field: string, value: string | number | null | undefined) => field === 'price' ? rupiah(value) : (value ?? '—');
-const fieldLabels: Record<string, string> = { name: 'Name', price: 'Price', barcode: 'Barcode', sku: 'Code' };
+const fieldLabels: Record<string, string> = { name: 'Name', price: 'Price', barcode: 'Barcode', sku: 'Code', content_type: 'Type', content_count: 'Items per unit', content_pricing: 'Contents price', contents: 'Contents from' };
 </script>
 <template>
     <Head title="Import from Erzap · Orlena" />
@@ -48,7 +49,7 @@ const fieldLabels: Record<string, string> = { name: 'Name', price: 'Price', barc
     <p class="admin-eyebrow mt-5">Products</p><h1 class="text-3xl font-bold">Import from Erzap</h1>
     <div class="admin-muted mt-2 max-w-3xl space-y-1 text-sm">
         <p class="m-0">Export the product list from Erzap as Excel (.xlsx) or CSV and upload it here. You see every change before anything is saved.</p>
-        <p class="m-0"><strong>Updated from Erzap:</strong> selling price, barcode and product code (names only when you tick the option below the columns). <strong>Never changed:</strong> photo, description, category and size of existing products, active status, hampers contents, sale period and outlet prices.</p>
+        <p class="m-0"><strong>Updated from Erzap:</strong> selling price, barcode and product code (names only when you tick the option below the columns), and the hampers/box contents when the Tipe column is filled. <strong>Never changed:</strong> photo, description, category and size of existing products, active status, sale period and outlet prices.</p>
         <p class="m-0">New products are added <strong>inactive</strong>: add a photo and check them, then activate them in Products.</p>
     </div>
     <div class="mt-4 flex flex-wrap items-center gap-3">
@@ -107,7 +108,7 @@ const fieldLabels: Record<string, string> = { name: 'Name', price: 'Price', barc
                                 <td><ul class="m-0 list-none space-y-1 p-0"><li v-for="(change, field) in row.changes" :key="field"><span class="font-bold">{{ fieldLabels[field] }}:</span> <del class="admin-muted">{{ show(field, change?.[0]) }}</del> <i class="fa-solid fa-arrow-right text-xs" aria-label="to"></i> {{ show(field, change?.[1]) }}</li></ul></td>
                             </template>
                             <template v-else-if="tab === 'create'">
-                                <td class="min-w-48"><span class="font-bold">{{ row.name }}</span><span v-if="row.variant" class="ml-1 rounded-full bg-cream px-2 py-0.5 text-xs font-bold">{{ row.variant }}</span><span v-if="row.hamper || row.hamper_contents" class="ml-1 rounded-full bg-rose/40 px-2 py-0.5 text-xs font-bold"><i class="fa-solid fa-gift" aria-hidden="true"></i> Hampers</span><span v-if="row.warning" class="admin-error-text block text-xs">{{ row.warning }}</span></td>
+                                <td class="min-w-48"><span class="font-bold">{{ row.name }}</span><span v-if="row.variant" class="ml-1 rounded-full bg-cream px-2 py-0.5 text-xs font-bold">{{ row.variant }}</span><span v-if="row.hamper || row.hamper_contents || row.content_type === 'hampers'" class="ml-1 rounded-full bg-rose/40 px-2 py-0.5 text-xs font-bold"><i class="fa-solid fa-gift" aria-hidden="true"></i> Hampers</span><span v-if="row.content_type === 'box'" class="ml-1 rounded-full bg-almond px-2 py-0.5 text-xs font-bold"><i class="fa-solid fa-box-open" aria-hidden="true"></i> Box</span><span v-if="row.content_type === 'set'" class="ml-1 rounded-full bg-almond px-2 py-0.5 text-xs font-bold"><i class="fa-solid fa-box" aria-hidden="true"></i> Box isi tetap</span><span v-if="row.content_type === 'flavour'" class="ml-1 rounded-full bg-cream px-2 py-0.5 text-xs font-bold"><i class="fa-solid fa-layer-group" aria-hidden="true"></i> Rasa box</span><span v-if="row.warning" class="admin-error-text block text-xs">{{ row.warning }}</span></td>
                                 <td>{{ row.category ?? 'Imported from Erzap' }}</td>
                                 <td class="text-xs">{{ row.barcode ?? '—' }}<span class="admin-muted block">{{ row.sku }}</span></td>
                                 <td class="whitespace-nowrap">{{ rupiah(row.price) }}</td>

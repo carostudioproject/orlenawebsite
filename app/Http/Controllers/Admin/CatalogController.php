@@ -9,6 +9,7 @@ use App\Models\Outlet;
 use App\Models\Product;
 use App\Support\Audit;
 use App\Support\ContentImage;
+use App\Support\TableSort;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -18,7 +19,7 @@ class CatalogController extends Controller
 {
     private const MODELS = ['products' => Product::class, 'outlets' => Outlet::class, 'categories' => Category::class];
 
-    private const FILTER_RULES = ['search' => ['nullable', 'string', 'max:100'], 'status' => ['nullable', 'in:active,inactive'], 'type' => ['nullable', 'in:regular,hampers']];
+    private const FILTER_RULES = ['search' => ['nullable', 'string', 'max:100'], 'status' => ['nullable', 'in:active,inactive,featured'], 'type' => ['nullable', 'in:regular,hampers']];
 
     public function index(Request $request)
     {
@@ -28,15 +29,19 @@ class CatalogController extends Controller
         if ($resource === 'products') {
             $query->with('category');
         }
-        // Categories list in order-form order; outlets in website order.
-        if ($resource === 'categories') {
-            $query->orderBy('order_position');
-        } elseif ($resource === 'outlets') {
-            $query->orderBy('position');
+        $sort = TableSort::apply($query, $request, match ($resource) {
+            'products' => ['name' => 'name', 'code' => 'sku', 'price' => 'price', 'status' => 'is_active', 'featured' => 'is_featured',
+                'category' => fn ($q, $dir) => $q->orderBy(Category::select('name')->whereColumn('categories.id', 'products.category_id'), $dir)],
+            'outlets' => ['name' => 'name', 'address' => 'address', 'status' => 'is_active'],
+            default => ['name' => 'name', 'status' => 'is_active'],
+        });
+        // Default: newest first, like every admin table.
+        if (! $sort['sort']) {
+            $query->latest('id');
         }
 
         return Inertia::render('Admin/Catalog/Index', [
-            'resource' => $resource, 'records' => $query->orderBy('name')->paginate(10)->withQueryString(), 'filters' => $filters,
+            'resource' => $resource, 'records' => $query->paginate(10)->withQueryString(), 'filters' => $filters, 'sort' => $sort,
             // Ids of inactive products without a price in these filters, so bulk activation can say what will be skipped.
             'unpriced' => $resource === 'products' ? $this->filtered($resource, $filters)->where('is_active', false)->whereNull('price')->pluck('id') : [],
         ]);
@@ -56,16 +61,32 @@ class CatalogController extends Controller
     {
         $resource = $request->route('resource');
         $record = $id ? self::MODELS[$resource]::findOrFail($id) : null;
+        if ($record instanceof Category) {
+            $record->setAttribute('addon_ids', $record->addons()->pluck('products.id'));
+        }
         if ($record instanceof Product) {
             $record->load('outletPrices');
+            // A fixed box repeats each flavour once per piece, e.g. [almond, almond, choco, choco].
+            $record->setAttribute('content_ids', $record->contentOptions()->get()->flatMap(fn (Product $option) => array_fill(0, max(1, (int) $option->pivot->quantity), $option->id))->values());
         }
 
         return Inertia::render('Admin/Catalog/Form', [
             'resource' => $resource, 'record' => $record,
             // Opened from the Hampers list, or editing a hamper: the form, title, and menu follow Hampers.
-            'hamperMode' => $resource === 'products' && ($record ? $record->is_hamper : $request->query('type') === 'hampers'),
+            'hamperMode' => $resource === 'products' && ($record ? $record->is_hamper || $record->content_type === 'hampers' : $request->query('type') === 'hampers'),
             'categories' => $resource === 'products' ? Category::orderBy('name')->get(['id', 'name']) : [],
             'outlets' => $resource === 'products' ? Outlet::orderBy('name')->get(['id', 'name']) : [],
+            // Products that can be chosen as hampers/box contents ("Isi Dari").
+            'contentCandidates' => $resource === 'products' ? Product::with('category:id,name')->where(fn ($query) => $query->whereNull('content_type')->orWhere('content_type', 'flavour'))
+                ->when($record, fn ($query) => $query->whereKeyNot($record->id))
+                ->orderBy('name')->orderBy('variant')->get(['id', 'name', 'variant', 'sku', 'price', 'is_active', 'category_id', 'content_type'])
+                ->map(fn (Product $product) => [...$product->only('id', 'name', 'variant', 'sku', 'price', 'is_active'), 'flavour' => $product->content_type === 'flavour', 'category' => $product->category?->name]) : [],
+            // Regular products that can be offered as extras in a category's order popups (packaging first).
+            'addonCandidates' => $resource === 'categories' ? Product::with('category:id,name')->whereNull('content_type')
+                ->when($record, fn ($query) => $query->where('category_id', '!=', $record->id))->orderBy('name')->orderBy('variant')
+                ->get(['id', 'name', 'variant', 'price', 'is_active', 'category_id'])
+                ->map(fn (Product $product) => [...$product->only('id', 'name', 'variant', 'price', 'is_active'), 'category' => $product->category?->name])
+                ->sortBy(fn ($product) => [stripos((string) $product['category'], 'pack') === false, $product['category'], $product['name']])->values() : [],
         ]);
     }
 
@@ -86,9 +107,22 @@ class CatalogController extends Controller
             $record = $id ? self::MODELS[$resource]::lockForUpdate()->findOrFail($id) : new (self::MODELS[$resource]);
             $data = $request->validated();
             $prices = $data['outlet_prices'] ?? [];
-            unset($data['outlet_prices'], $data['upload']);
+            $contentIds = $data['content_ids'] ?? [];
+            $addonIds = $data['addon_ids'] ?? null;
+            unset($data['outlet_prices'], $data['upload'], $data['content_ids'], $data['addon_ids']);
+            if (($data['content_type'] ?? null) === 'hampers') {
+                $data['content_count'] = 1;
+            }
             if ($resource === 'products' && empty($data['is_hamper'])) {
                 $data['hamper_contents'] = null;
+            }
+            if ($resource === 'products' && ! in_array($data['content_type'] ?? null, ['hampers', 'box', 'set'], true)) {
+                $contentIds = [];
+            }
+            // Only hampers and boxes have a count and a contents price; a fixed box counts its pieces.
+            if ($resource === 'products' && ! in_array($data['content_type'] ?? null, ['hampers', 'box'], true)) {
+                $data['content_count'] = ($data['content_type'] ?? null) === 'set' ? count($contentIds) : null;
+                $data['content_pricing'] = null;
             }
             if ($request->hasFile('upload')) {
                 $data['image'] = ContentImage::resolve($request->file('upload'), null);
@@ -96,21 +130,30 @@ class CatalogController extends Controller
             $record->fill($data);
             $changes = $record->getDirty();
             $record->save();
-            // Only one outlet ships delivery orders.
-            if ($record instanceof Outlet && $record->is_delivery_hub) {
-                Outlet::whereKeyNot($record->id)->where('is_delivery_hub', true)->update(['is_delivery_hub' => false]);
+
+            if ($record instanceof Category && $addonIds !== null) {
+                $synced = $record->addons()->sync(collect($addonIds)->values()->mapWithKeys(fn ($productId, $position) => [(int) $productId => ['position' => $position]])->all());
+                if (array_filter($synced)) {
+                    $changes['addon_ids'] = array_map('intval', $addonIds);
+                }
             }
             if ($record instanceof Product) {
                 $record->outletPrices()->delete();
                 $record->outletPrices()->createMany($prices);
                 $changes['outlet_prices'] = $prices;
+                // Repeats count only for a fixed box (2x Almond); other lists hold each product once.
+                $counts = array_count_values(array_values(array_diff(array_map('intval', $contentIds), [$record->id])));
+                $synced = $record->contentOptions()->sync(array_map(fn ($count) => ['quantity' => $record->content_type === 'set' ? $count : 1], $counts));
+                if (array_filter($synced)) {
+                    $changes['content_ids'] = $record->contentOptions()->pluck('products.id')->all();
+                }
             }
             Audit::record($id ? 'catalog.updated' : 'catalog.created', $record, $changes);
 
             return $record;
         });
 
-        return redirect('/admin/'.$resource.($record instanceof Product && $record->is_hamper ? '?type=hampers' : ''))->with('success', 'Saved.');
+        return redirect('/admin/'.$resource.($record instanceof Product && ($record->is_hamper || $record->content_type === 'hampers') ? '?type=hampers' : ''))->with('success', 'Saved.');
     }
 
     /** Quick activate/deactivate from the list for products and outlets. */
@@ -185,10 +228,11 @@ class CatalogController extends Controller
             $query->where('name', 'like', '%'.$filters['search'].'%');
         }
         if (! empty($filters['status'])) {
-            $query->where('is_active', $filters['status'] === 'active');
+            $filters['status'] === 'featured' && $resource === 'products' ? $query->where('is_featured', true) : $query->where('is_active', $filters['status'] === 'active');
         }
         if ($resource === 'products' && ! empty($filters['type'])) {
-            $query->where('is_hamper', $filters['type'] === 'hampers');
+            $hampers = fn ($q) => $q->where('is_hamper', true)->orWhere('content_type', 'hampers');
+            $filters['type'] === 'hampers' ? $query->where($hampers) : $query->whereNot($hampers);
         }
 
         return $query;

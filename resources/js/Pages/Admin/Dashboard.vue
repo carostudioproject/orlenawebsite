@@ -8,11 +8,11 @@ import { rupiah } from '../../Support/money';
 import { witaTime } from '../../Support/orderStatus';
 import type { AdminProps } from '../../Types/admin';
 defineOptions({ layout: AdminLayout });
-interface ActionOrder { id: number; order_code: string; requested_date: string; total: number; order_status: string; payment_status: string; customer: { name: string } | null }
+interface ActionOrder { id: number; order_code: string; requested_date: string; total: number; order_status: string; payment_status: string; created_at: string; customer: { name: string } | null }
 const props = defineProps<{
     today: string;
     orders: {
-        pending_review: number; awaiting_payment: number; to_process: number; tomorrow: number; paid_this_month: number; paid_last_month: number;
+        pending_review: number; overdue_review: number; awaiting_payment: number; to_process: number; tomorrow: number; paid_this_month: number; paid_last_month: number;
         daily: { date: string; total: number }[]; payment_breakdown: Record<string, number>; needs_action: ActionOrder[];
     } | null;
     catalog: { products: number; active_products: number; outlets: number; active_outlets: number; categories: number } | null;
@@ -37,6 +37,8 @@ const breakdown = computed(() => {
     return entries.map(([status, total]) => ({ status, total, width: (total / max) * 100 }));
 });
 const percent = (part: number, whole: number) => (whole ? Math.round((part / whole) * 100) : 0);
+// Waiting for review longer than the 1-hour confirmation rule.
+const overdue = (order: ActionOrder) => order.order_status === 'pending_review' && Date.now() - new Date(order.created_at).getTime() > 3600_000;
 </script>
 <template>
     <Head title="Overview · Orlena" />
@@ -47,6 +49,7 @@ const percent = (part: number, whole: number) => (whole ? Math.round((part / who
             <Link v-if="content" href="/admin/posts/create" :class="orders ? 'admin-secondary' : 'admin-primary'"><i class="fa-solid fa-pen" aria-hidden="true"></i>Write an article</Link>
         </div>
     </div>
+    <Link v-if="orders?.overdue_review" href="/admin/orders?status=pending_review" role="alert" class="admin-alert admin-alert-error mb-6 flex items-center gap-2 no-underline"><i class="fa-solid fa-stopwatch" aria-hidden="true"></i><span><strong>{{ orders.overdue_review }} order(s)</strong> waiting for review for more than 1 hour. Orders should be confirmed within 1 hour so customers can pay before the cut-off ({{ page.props.poCutoff }}).</span></Link>
 
     <template v-if="orders">
         <section aria-label="Order indicators" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -75,7 +78,7 @@ const percent = (part: number, whole: number) => (whole ? Math.round((part / who
             <div class="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 id="action-title" class="text-lg">Needs action</h2><p class="admin-muted m-0 text-sm">New orders to review and paid orders to prepare, nearest PO date first.</p></div><Link href="/admin/orders" class="admin-secondary">All orders<i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></Link></div>
             <div class="overflow-x-auto">
                 <table v-if="orders.needs_action.length" class="w-full text-left text-sm"><thead><tr><th>Order</th><th>Customer</th><th>PO date</th><th class="text-right">Total</th><th>Status</th><th class="text-right">Actions</th></tr></thead><tbody>
-                    <tr v-for="order in orders.needs_action" :key="order.id"><td><Link :href="`/admin/orders/${order.id}`" class="font-bold underline">{{ order.order_code }}</Link></td><td>{{ order.customer?.name ?? '—' }}</td><td class="whitespace-nowrap">{{ order.requested_date }}</td><td class="whitespace-nowrap text-right tabular-nums">{{ rupiah(order.total) }}</td><td><div class="flex flex-wrap gap-1.5"><StatusBadge kind="order" :status="order.order_status" /><StatusBadge kind="payment" :status="order.payment_status" /></div></td><td><div class="admin-actions"><Link :href="`/admin/orders/${order.id}`" class="admin-action" :aria-label="`Open order ${order.order_code}`"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i>{{ order.order_status === 'pending_review' ? 'Review' : 'Process' }}</Link></div></td></tr>
+                    <tr v-for="order in orders.needs_action" :key="order.id"><td><Link :href="`/admin/orders/${order.id}`" class="font-bold underline">{{ order.order_code }}</Link></td><td>{{ order.customer?.name ?? '—' }}</td><td class="whitespace-nowrap">{{ order.requested_date }}</td><td class="whitespace-nowrap text-right tabular-nums">{{ rupiah(order.total) }}</td><td><div class="flex flex-wrap gap-1.5"><StatusBadge kind="order" :status="order.order_status" /><StatusBadge kind="payment" :status="order.payment_status" /><span v-if="overdue(order)" class="whitespace-nowrap rounded-full bg-berry px-2.5 py-0.5 text-xs font-bold text-white">Waiting &gt; 1h</span></div></td><td><div class="admin-actions"><Link :href="`/admin/orders/${order.id}`" class="admin-action" :aria-label="`Open order ${order.order_code}`"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i>{{ order.order_status === 'pending_review' ? 'Review' : 'Process' }}</Link></div></td></tr>
                 </tbody></table>
                 <div v-else class="flex flex-col items-center gap-2 py-10 text-center"><span class="admin-kpi-icon" style="background: #4d714126"><i class="fa-solid fa-check" aria-hidden="true"></i></span><p class="m-0 font-bold">All clear</p><p class="admin-muted m-0 text-sm">No orders are waiting for action.</p></div>
             </div>

@@ -36,7 +36,7 @@ class PaymentFlowTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        config(['services.doku.client_id' => self::CLIENT, 'services.doku.secret_key' => self::KEY, 'services.doku.is_production' => false]);
+        config(['services.doku.enabled' => true, 'services.doku.mode' => 'checkout', 'services.doku.client_id' => self::CLIENT, 'services.doku.secret_key' => self::KEY, 'services.doku.is_production' => false]);
         $this->travelTo(CarbonImmutable::parse('2030-01-01 12:00:00', 'Asia/Makassar'));
     }
 
@@ -107,7 +107,7 @@ class PaymentFlowTest extends TestCase
         $this->post('/admin/orders/'.$order->id.'/confirm', ['review_version' => $order->fresh()->review_version])->assertSessionHasNoErrors();
     }
 
-    public function test_confirmation_creates_one_signed_doku_link_capped_by_twenty_four_hours(): void
+    public function test_confirmation_creates_one_signed_doku_link_valid_for_two_hours(): void
     {
         $this->fakeDoku();
         $order = $this->order();
@@ -121,7 +121,7 @@ class PaymentFlowTest extends TestCase
         $payment = Payment::sole();
         $this->assertSame([$order->order_code.'-P1', 'pending', 175000, 'doku'], [$payment->provider_order_id, $payment->status, $payment->amount, $payment->provider]);
         $this->assertSame(['https://sandbox.doku.com/checkout-link-v2/doku-token', 'session-1'], [$payment->payment_url, $payment->transaction_id]);
-        $this->assertSame('2030-01-02 12:00:00', $payment->expires_at->format('Y-m-d H:i:s'));
+        $this->assertSame('2030-01-01 14:00:00', $payment->expires_at->format('Y-m-d H:i:s'));
         Http::assertSent(function (HttpRequest $request) use ($order, $payment) {
             $items = collect($request['order']['line_items']);
             $components = 'Client-Id:'.self::CLIENT."\nRequest-Id:".$payment->provider_request_id."\nRequest-Timestamp:2030-01-01T04:00:00Z"
@@ -132,7 +132,7 @@ class PaymentFlowTest extends TestCase
                 && $request->header('Request-Timestamp') === ['2030-01-01T04:00:00Z']
                 && $request->header('Signature') === ['HMACSHA256='.base64_encode(hash_hmac('sha256', $components, self::KEY, true))]
                 && $request['order']['invoice_number'] === $order->order_code.'-P1' && $request['order']['amount'] === 175000
-                && $request['payment'] === ['payment_due_date' => 1440]
+                && $request['payment'] === ['payment_due_date' => 120]
                 && $request['customer']['phone'] === '6281234567890'
                 && $items->sum(fn ($item) => $item['price'] * $item['quantity']) === 175000;
         });
@@ -145,22 +145,41 @@ class PaymentFlowTest extends TestCase
         $this->assertDatabaseHas('order_status_histories', ['order_id' => $order->id, 'from_status' => 'pending_review', 'to_status' => 'confirmed', 'actor_id' => $staff->id]);
     }
 
-    public function test_link_expiry_stops_at_cutoff_and_closed_dates_must_be_rescheduled(): void
+    public function test_va_mode_limits_doku_checkout_to_virtual_accounts(): void
+    {
+        config(['services.doku.mode' => 'va', 'services.doku.va_methods' => ['VIRTUAL_ACCOUNT_BCA', 'VIRTUAL_ACCOUNT_BRI']]);
+        $this->fakeDoku();
+        $this->actingAs(User::factory()->create());
+        $order = $this->order();
+        $this->get('/admin/orders/'.$order->id)->assertInertia(fn (Assert $page) => $page->where('paymentMode', 'va'));
+        $this->confirm($order);
+
+        Http::assertSent(fn (HttpRequest $request) => str_ends_with($request->url(), '/checkout/v1/payment')
+            && $request['payment']['payment_method_types'] === ['VIRTUAL_ACCOUNT_BCA', 'VIRTUAL_ACCOUNT_BRI']);
+        $this->assertSame('doku', Payment::sole()->provider);
+        // Our payment page sends the customer on to the DOKU page to pick a bank.
+        $this->get('/bayar/'.$order->order_code)->assertInertia(fn (Assert $page) => $page
+            ->where('payment.checkout_url', 'https://sandbox.doku.com/checkout-link-v2/doku-token')->where('payment.qr', null));
+    }
+
+    public function test_link_expiry_stops_at_payment_close_and_closed_dates_must_be_rescheduled(): void
     {
         $this->fakeDoku();
         $this->actingAs(User::factory()->create());
+        // Confirmed at 20.00 for tomorrow: the 2-hour link stops at H-1 21.00.
+        $this->travelTo(CarbonImmutable::parse('2030-01-01 20:00:00', 'Asia/Makassar'));
         $order = $this->order(['requested_date' => '2030-01-02']);
         $this->confirm($order);
-        $this->assertSame('2030-01-01 18:00:00', Payment::sole()->expires_at->format('Y-m-d H:i:s'));
-        Http::assertSent(fn (HttpRequest $request) => $request['payment'] === ['payment_due_date' => 360]);
+        $this->assertSame('2030-01-01 21:00:00', Payment::sole()->expires_at->format('Y-m-d H:i:s'));
+        Http::assertSent(fn (HttpRequest $request) => $request['payment'] === ['payment_due_date' => 60]);
 
-        $this->travelTo(CarbonImmutable::parse('2030-01-01 17:50:00', 'Asia/Makassar'));
+        $this->travelTo(CarbonImmutable::parse('2030-01-01 20:50:00', 'Asia/Makassar'));
         $late = $this->order(['requested_date' => '2030-01-02']);
         $this->post('/admin/orders/'.$late->id.'/confirm', ['review_version' => 0])->assertSessionHasErrors('payment');
         $this->assertSame('pending_review', $late->fresh()->order_status);
         $this->post('/admin/orders/'.$late->id.'/review', ['review_version' => 0, 'delivery_fee' => 15000, 'note' => 'Moved', 'requested_date' => '2030-01-01'])->assertSessionHasErrors('requested_date');
-        $this->post('/admin/orders/'.$late->id.'/review', ['review_version' => 0, 'delivery_fee' => 15000, 'note' => 'Customer agreed', 'requested_date' => '2030-01-03', 'requested_time' => '10:00'])->assertSessionHasNoErrors();
-        $this->assertDatabaseHas('order_reviews', ['order_id' => $late->id, 'previous_schedule' => '2030-01-02', 'schedule' => '2030-01-03 10:00']);
+        $this->post('/admin/orders/'.$late->id.'/review', ['review_version' => 0, 'delivery_fee' => 15000, 'note' => 'Customer agreed', 'requested_date' => '2030-01-03', 'requested_time' => '14:00'])->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('order_reviews', ['order_id' => $late->id, 'previous_schedule' => '2030-01-02', 'schedule' => '2030-01-03 14:00']);
         $this->confirm($late->fresh());
         $this->assertSame('pending', $late->fresh()->payment_status);
     }
@@ -319,6 +338,47 @@ class PaymentFlowTest extends TestCase
         $this->confirm($order);
         $this->post('/admin/orders/'.$order->id.'/cancel', ['from' => 'confirmed', 'cancel_reason' => 'Customer changed mind'])->assertSessionHasErrors('payment');
         $this->assertSame('cancelled', $order->fresh()->order_status);
+    }
+
+    public function test_without_doku_staff_confirm_and_record_manual_payments(): void
+    {
+        config(['services.doku.enabled' => false, 'services.erzap.enabled' => false]);
+        Http::fake();
+        $this->actingAs(User::factory()->create());
+        $order = $this->order();
+        $this->get('/admin/orders/'.$order->id)->assertInertia(fn (Assert $page) => $page->where('dokuEnabled', false)->has('manualMethods'));
+
+        // Confirming does not call DOKU and creates no payment link.
+        $this->confirm($order);
+        $this->assertSame(['confirmed', 'not_created'], [$order->fresh()->order_status, $order->fresh()->payment_status]);
+        $this->assertDatabaseCount('payments', 0);
+        Http::assertNothingSent();
+
+        $this->post('/admin/orders/'.$order->id.'/payments/manual', ['method' => 'crypto'])->assertSessionHasErrors('method');
+        $this->post('/admin/orders/'.$order->id.'/payments/manual', ['method' => 'transfer', 'note' => 'BCA 10:15'])
+            ->assertSessionHas('success', 'Payment recorded. Not sent to Erzap yet: the Erzap settings are not complete.');
+        $payment = Payment::sole();
+        $this->assertSame(['manual', 'paid', 175000, 'MANUAL-TRANSFER', 'BCA 10:15'], [$payment->provider, $payment->status, $payment->amount, $payment->payment_type, $payment->reason]);
+        $this->assertSame('paid', $order->fresh()->payment_status);
+        // Tried right away; it waits for the Erzap settings and the schedule retries it later.
+        $this->assertDatabaseHas('integration_syncs', ['provider' => 'erzap', 'subject_id' => $order->id, 'status' => 'waiting_config']);
+        // Paid orders cannot be marked twice, and fulfillment can start.
+        $this->post('/admin/orders/'.$order->id.'/payments/manual', ['method' => 'cash'])->assertSessionHasErrors('payment');
+        $this->post('/admin/orders/'.$order->id.'/status', ['from' => 'confirmed', 'to' => 'processing'])->assertSessionHasNoErrors();
+    }
+
+    public function test_mark_as_paid_sends_to_erzap_immediately(): void
+    {
+        config(['services.doku.enabled' => false, 'services.erzap' => [...config('services.erzap'), 'enabled' => true, 'base_url' => 'https://erzap.test:4443',
+            'token' => 't', 'sales_user_id' => '54', 'default_outlet_id' => '1', 'send_order_code' => true]]);
+        Http::fake(['erzap.test:4443/*' => Http::response(['status' => '1', 'message ' => ''])]);
+        $this->actingAs(User::factory()->create());
+        $order = $this->order();
+        $order->items()->first()->product->update(['barcode' => '260810111525']);
+        $this->confirm($order);
+        $this->post('/admin/orders/'.$order->id.'/payments/manual', ['method' => 'cash'])->assertSessionHas('success', 'Payment recorded. The order is paid and was sent to Erzap.');
+        $this->assertDatabaseHas('integration_syncs', ['subject_id' => $order->id, 'status' => 'synced']);
+        Http::assertSent(fn (HttpRequest $request) => $request['shopping_carts']['pelanggan_payment_channel'] === 'MANUAL-CASH' && $request['shopping_carts']['konfirmasi_dari_bank'] === 'Manual');
     }
 
     public function test_disabled_staff_cannot_create_payments(): void

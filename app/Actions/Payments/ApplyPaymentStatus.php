@@ -4,8 +4,13 @@ namespace App\Actions\Payments;
 
 use App\Actions\Integrations\ErzapSync;
 use App\Models\Order;
+use App\Models\Outlet;
 use App\Models\Payment;
+use App\Services\Ordering\Capacity;
+use App\Services\Payments\PaymentGateways;
 use App\Support\Audit;
+use App\Support\PreorderDate;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -65,23 +70,97 @@ class ApplyPaymentStatus
         if (isset($data['payment_type'])) {
             $changes['payment_type'] = mb_substr((string) $data['payment_type'], 0, 40);
         }
+        $paidAt = $this->paidAt($data);
         if ($target === 'paid') {
-            $changes['paid_at'] = now();
+            $changes['paid_at'] = $paidAt;
         }
         $payment->update($changes);
-
-        $latest = (int) Payment::where('order_id', $order->id)->max('attempt') === $payment->attempt;
-        // A paid order only moves to refunded; a stale attempt never overwrites the newest link's status.
-        if (in_array($target, ['paid', 'refunded'], true) || ($latest && $order->payment_status !== 'paid')) {
-            $order->update(['payment_status' => $target]);
-        }
-        // Paid orders go to Erzap; sent later by the scheduler, never inside this transaction.
-        if ($target === 'paid') {
-            ErzapSync::queue($order);
-        }
         Audit::record('payment.status_changed', $payment, ['from' => $previous, 'to' => $target, 'attempt' => $payment->attempt]);
 
+        // The order is settled by the money received on all its attempts against its current total, not by one attempt:
+        // an older link paid after the total went up does not settle the order on its own.
+        $received = (int) Payment::where('order_id', $order->id)->where('status', 'paid')->sum('amount');
+        if ($target === 'paid') {
+            if ($received < $order->total) {
+                Audit::record('payment.underpaid', $order, ['received' => $received, 'total' => $order->total, 'attempt' => $payment->attempt]);
+
+                return ['underpaid', 'Diterima Rp '.number_format($received, 0, ',', '.').' dari total Rp '.number_format($order->total, 0, ',', '.')];
+            }
+            // Only the payment that settles the order decides its date; a later extra receipt never moves it.
+            $settles = $order->payment_status !== 'paid';
+            $order->update(['payment_status' => 'paid']);
+            if ($settles) {
+                $this->moveIfLate($order, $paidAt);
+            }
+            // Paid orders go to Erzap (with the final date); sent later by the scheduler, never inside this transaction.
+            ErzapSync::queue($order);
+            $this->closeOtherLinks($order, $payment);
+        } elseif ($target === 'refunded') {
+            // A refund only reopens the order when the money still held no longer covers it.
+            if ($received < $order->total) {
+                $order->update(['payment_status' => 'refunded']);
+            }
+        } elseif ($order->payment_status !== 'paid' && (int) Payment::where('order_id', $order->id)->max('attempt') === $payment->attempt) {
+            // A stale attempt never overwrites the newest link's status, and nothing overwrites "paid".
+            $order->update(['payment_status' => $target]);
+        }
+
         return ['applied', null];
+    }
+
+    /**
+     * Rules Order Website: paid after the H-1 cutoff, the order misses that day's production and moves to the next open date
+     * (usually H+2), same time. Staff then tell the customer with the WhatsApp button on the order page.
+     */
+    private function moveIfLate(Order $order, CarbonImmutable $paidAt): void
+    {
+        $dates = app(PreorderDate::class);
+        $from = $order->requested_date->toDateString();
+        if (! in_array($order->order_status, ['pending_review', 'confirmed'], true) || $paidAt->lessThanOrEqualTo($dates->cutoff($from))) {
+            return;
+        }
+        // The same outlet lock as checkout, so the moved order cannot take a place another order is taking right now.
+        $order->setRelation('outlet', Outlet::lockForUpdate()->find($order->outlet_id));
+        $to = app(Capacity::class)->nextOpenDate($order);
+        $time = $order->requested_time ? ' '.substr($order->requested_time, 0, 5) : '';
+        $order->update(['requested_date' => $to, 'moved_from_date' => $from, 'review_version' => $order->review_version + 1]);
+        DB::table('order_reviews')->insert([
+            'order_id' => $order->id, 'actor_id' => null, 'previous_delivery_fee' => $order->delivery_fee, 'delivery_fee' => $order->delivery_fee,
+            'note' => 'Paid after the cut-off ('.$dates->cutoffLabel(english: true).'): moved to the next open date.',
+            'previous_schedule' => $from.$time, 'schedule' => $to.$time, 'created_at' => now(),
+        ]);
+        Audit::record('order.moved_after_cutoff', $order, ['from' => $from, 'to' => $to]);
+    }
+
+    /**
+     * When the money was received: the provider's verified time when it carries a time zone (a payment at 18:59 notified
+     * at 19:01 still makes the cutoff), else now. A time in the future or over a day old is not trusted.
+     */
+    private function paidAt(array $data): CarbonImmutable
+    {
+        $now = CarbonImmutable::now('Asia/Makassar');
+        $value = $data['transaction_date'] ?? null;
+        if (! is_string($value) || ! preg_match('/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})$/', $value)) {
+            return $now;
+        }
+        try {
+            $at = CarbonImmutable::parse($value)->setTimezone('Asia/Makassar');
+        } catch (\Throwable) {
+            return $now;
+        }
+
+        return $at->greaterThan($now) || $at->lessThan($now->subDay()) ? $now : $at;
+    }
+
+    /** Once the order is paid, other open links are closed so the customer cannot pay twice (at DOKU after commit). */
+    private function closeOtherLinks(Order $order, Payment $paid): void
+    {
+        $open = Payment::where('order_id', $order->id)->whereKeyNot($paid->id)->whereIn('status', Payment::OPEN)->lockForUpdate()->get();
+        foreach ($open as $link) {
+            $link->update(['status' => 'cancelled', 'open_order_id' => null, 'last_error' => 'Closed: the order was paid with attempt '.$paid->attempt.'.']);
+            Audit::record('payment.closed_after_paid', $link, ['paid_attempt' => $paid->attempt]);
+            DB::afterCommit(fn () => app(PaymentGateways::class)->for($link)?->cancel($link));
+        }
     }
 
     private function target(string $transactionStatus): ?string

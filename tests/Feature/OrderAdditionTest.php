@@ -49,7 +49,7 @@ class OrderAdditionTest extends TestCase
         $this->post('/order', [
             'checkout_key' => session('checkout_key'), 'items' => [['product_id' => $this->brownie->id, 'quantity' => 2, 'quoted_price' => 80000]],
             'name' => 'Customer', 'whatsapp' => '081234567890', 'outlet_id' => $this->outlet->id, 'fulfillment_method' => 'pickup',
-            'requested_date' => '2030-01-03', 'requested_time' => '10:00',
+            'requested_date' => '2030-01-03', 'requested_time' => '14:00',
         ])->assertSessionHasNoErrors();
 
         return Order::sole();
@@ -132,9 +132,9 @@ class OrderAdditionTest extends TestCase
         $this->addItems($order, $item)->assertSessionHasErrors('order');
 
         $order->update(['order_status' => 'pending_review']);
-        $this->travelTo(CarbonImmutable::parse('2030-01-02 18:01:00', 'Asia/Makassar'));
+        $this->travelTo(CarbonImmutable::parse('2030-01-02 19:01:00', 'Asia/Makassar'));
         $this->addItems($order, $item)->assertSessionHasErrors('order');
-        $this->assertStringContainsString('H-1 pukul 18.00', session('errors')->first('order'));
+        $this->assertStringContainsString('H-1 pukul 19.00', session('errors')->first('order'));
         $this->assertSame(160000, $order->fresh()->total);
         $this->assertDatabaseCount('order_additions', 0);
     }

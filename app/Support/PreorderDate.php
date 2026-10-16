@@ -7,12 +7,17 @@ use App\Models\Setting;
 use Carbon\CarbonImmutable;
 
 /**
- * PO schedule rules, set by staff under Pengaturan → Jadwal PO:
- * production for a date closes at H-1 {cutoff time} WITA, and closed weekdays/dates take no PO.
+ * PO schedule rules, set by staff under Pengaturan → Jadwal PO (Rules Order Website):
+ * production for a date closes at H-1 {cutoff time} WITA, unpaid orders are cancelled at H-1 {payment close} WITA,
+ * dates go up to {max days} ahead, and closed weekdays/dates take no PO.
  */
 class PreorderDate
 {
-    public const DEFAULT_CUTOFF = '18:00';
+    public const DEFAULT_CUTOFF = '19:00';
+
+    public const DEFAULT_PAYMENT_CLOSE = '21:00';
+
+    public const DEFAULT_MAX_DAYS = 30;
 
     public const WEEKDAYS = [1 => 'Senin', 2 => 'Selasa', 3 => 'Rabu', 4 => 'Kamis', 5 => 'Jumat', 6 => 'Sabtu', 0 => 'Minggu'];
 
@@ -30,18 +35,62 @@ class PreorderDate
         return $english ? 'D-1 at '.$this->cutoffTime().' WITA' : 'H-1 pukul '.str_replace(':', '.', $this->cutoffTime()).' WITA';
     }
 
+    /** Payments received between the cutoff and this time move the order to the next open date; still unpaid at this time, it is cancelled. */
+    public function paymentCloseTime(): string
+    {
+        return Setting::get('po.payment_close_time', self::DEFAULT_PAYMENT_CLOSE);
+    }
+
+    public function paymentCloseLabel(bool $english = false): string
+    {
+        return $english ? 'D-1 at '.$this->paymentCloseTime().' WITA' : 'H-1 pukul '.str_replace(':', '.', $this->paymentCloseTime()).' WITA';
+    }
+
+    public function paymentClose(string $requestedDate): CarbonImmutable
+    {
+        [$hour, $minute] = array_map('intval', explode(':', $this->paymentCloseTime()));
+
+        return CarbonImmutable::parse($requestedDate, 'Asia/Makassar')->subDay()->setTime($hour, $minute);
+    }
+
+    /** How many days ahead customers may order. */
+    public function maxDays(): int
+    {
+        return (int) Setting::get('po.max_days', self::DEFAULT_MAX_DAYS);
+    }
+
+    /** The last date that can be ordered today. */
+    public function latest(?CarbonImmutable $now = null): string
+    {
+        return ($now ?? CarbonImmutable::now('Asia/Makassar'))->setTimezone('Asia/Makassar')->addDays($this->maxDays())->toDateString();
+    }
+
     /** Carbon day-of-week numbers (0 = Sunday) without PO. */
     public function closedWeekdays(): array
     {
         return array_map('intval', Setting::get('po.closed_weekdays', []));
     }
 
-    /** Orders per requested date staff can handle; a warning only, never a block. */
-    public function dailyCapacity(): ?int
+    /** Minimum subtotal for delivery orders (rupiah), or null for none. */
+    public function deliveryMinOrder(): ?int
     {
-        $capacity = Setting::get('po.daily_capacity');
+        $minimum = Setting::get('delivery.min_order');
 
-        return $capacity ? (int) $capacity : null;
+        return $minimum ? (int) $minimum : null;
+    }
+
+    /** Maximum delivery distance in km, shown to customers and checked by staff during review; null when not set. */
+    public function deliveryRadius(): ?int
+    {
+        $radius = Setting::get('delivery.max_radius_km');
+
+        return $radius ? (int) $radius : null;
+    }
+
+    /** Delivery arrival is an estimate: minutes late without compensation, shown before the customer pays. */
+    public function deliveryTolerance(): int
+    {
+        return (int) Setting::get('delivery.tolerance_minutes', 60);
     }
 
     public function cutoff(string $requestedDate): CarbonImmutable
@@ -54,11 +103,30 @@ class PreorderDate
     /** Why a date takes no PO, or null when it is open. */
     public function closedReason(string $date, bool $english = false): ?string
     {
-        $day = CarbonImmutable::parse($date, 'Asia/Makassar');
-        if (in_array($day->dayOfWeek, $this->closedWeekdays(), true)) {
+        return $this->closedReasons($date, $date, $english)[$date] ?? null;
+    }
+
+    /** Closed weekdays and dates in a range, one query: date => reason. */
+    public function closedReasons(string $from, string $to, bool $english = false): array
+    {
+        $closedDates = ClosedDate::whereDate('date', '>=', $from)->whereDate('date', '<=', $to)->get(['date', 'reason'])->keyBy(fn ($closed) => $closed->date->toDateString());
+        $weekdays = $this->closedWeekdays();
+        $reasons = [];
+        for ($day = CarbonImmutable::parse($from, 'Asia/Makassar'); $day->toDateString() <= $to; $day = $day->addDay()) {
+            $reason = $this->reasonFor($day, $weekdays, $closedDates->get($day->toDateString()), $english);
+            if ($reason !== null) {
+                $reasons[$day->toDateString()] = $reason;
+            }
+        }
+
+        return $reasons;
+    }
+
+    private function reasonFor(CarbonImmutable $day, array $weekdays, ?ClosedDate $closed, bool $english): ?string
+    {
+        if (in_array($day->dayOfWeek, $weekdays, true)) {
             return $english ? 'Orlena takes no PO on '.self::WEEKDAYS_EN[$day->dayOfWeek].'s.' : 'Orlena tidak menerima PO untuk hari '.self::WEEKDAYS[$day->dayOfWeek].'.';
         }
-        $closed = ClosedDate::whereDate('date', $day->toDateString())->first();
         if (! $closed) {
             return null;
         }

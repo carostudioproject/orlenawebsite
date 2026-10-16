@@ -2,7 +2,7 @@
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import AdminLayout from '../../../Layouts/AdminLayout.vue';
-import Field from '../../../Components/Admin/Field.vue';
+import Field from '../../../Components/Field.vue';
 import ImageInput from '../../../Components/Admin/ImageInput.vue';
 import { contentSections } from '../../../Support/contentSections';
 import { confirmDialog } from '../../../Support/dialog';

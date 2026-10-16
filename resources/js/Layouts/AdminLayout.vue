@@ -13,6 +13,7 @@ const groups = computed(() => [
         { label: 'Overview', href: '/admin', icon: 'fa-gauge-high', visible: true },
         { label: 'Orders', href: '/admin/orders', icon: 'fa-receipt', visible: can.value.orders },
         { label: 'Payments', href: '/admin/payments', icon: 'fa-credit-card', visible: can.value.orders },
+        { label: 'Rekap CK', href: '/admin/production', icon: 'fa-kitchen-set', visible: can.value.orders },
         { label: 'Customers', href: '/admin/customers', icon: 'fa-user-group', visible: can.value.orders },
         { label: 'Reports', href: '/admin/reports', icon: 'fa-chart-column', visible: can.value.reports },
     ] },
@@ -29,6 +30,7 @@ const groups = computed(() => [
     { title: 'Settings', links: [
         { label: 'PO schedule', href: '/admin/schedule', icon: 'fa-calendar-days', visible: can.value.schedule },
         { label: 'Erzap integration', href: '/admin/integrations', icon: 'fa-plug', visible: can.value.integrations },
+        { label: 'Developer tools', href: '/admin/system', icon: 'fa-code', visible: can.value.system },
         { label: 'My profile', href: '/admin/profile', icon: 'fa-user-gear', visible: true },
         { label: 'Team accounts', href: '/admin/users', icon: 'fa-users', visible: can.value.users },
     ] },

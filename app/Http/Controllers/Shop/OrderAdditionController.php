@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Shop;
 
 use App\Actions\Orders\AddToPreorder;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\CheckoutRequest;
 use App\Models\Order;
 use App\Support\OrderAccess;
 use App\Support\OrderCatalog;
@@ -74,11 +75,7 @@ class OrderAdditionController extends Controller
         abort_unless(OrderAccess::allows($request, $order), 404);
         $data = $request->validate([
             'add_key' => ['required', 'uuid'],
-            'items' => ['required', 'array', 'min:1', 'max:50'],
-            'items.*' => ['array:product_id,quantity,quoted_price'],
-            'items.*.product_id' => ['required', 'integer', 'min:1', 'distinct'],
-            'items.*.quantity' => ['required', 'integer', 'min:1', 'max:99'],
-            'items.*.quoted_price' => ['required', 'integer', 'min:1', 'max:999999999'],
+            ...CheckoutRequest::itemRules(),
         ], ['items.required' => 'Pilih minimal satu produk untuk ditambahkan.', 'items.min' => 'Pilih minimal satu produk untuk ditambahkan.']);
         $add->handle($order, $data);
         // A fresh key for the next addition; a late retry of this one still resolves to the stored addition.

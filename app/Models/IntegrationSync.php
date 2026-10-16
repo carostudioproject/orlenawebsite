@@ -6,14 +6,14 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * One outbound sync with an external system (Erzap). Statuses:
- * pending → synced, or failed (retried with backoff), waiting_config (credentials not set yet),
+ * pending → sending (claimed while the request runs) → synced, or failed (retried with backoff), waiting_config (credentials not set yet),
  * needs_mapping (outlet/product without an Erzap ID), skipped (nothing to send).
  */
 class IntegrationSync extends Model
 {
     public const LABELS = [
         'pending' => 'Queued', 'synced' => 'Sent', 'failed' => 'Failed', 'waiting_config' => 'Awaiting setup',
-        'needs_mapping' => 'Needs mapping', 'skipped' => 'Skipped',
+        'needs_mapping' => 'Needs mapping', 'skipped' => 'Skipped', 'sending' => 'Sending',
     ];
 
     /** Rows the scheduler picks up again. */

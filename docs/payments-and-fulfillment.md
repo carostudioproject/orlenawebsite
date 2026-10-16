@@ -5,7 +5,16 @@ Payments use **DOKU Checkout** (non-SNAP API). Midtrans was replaced on 29 Septe
 ## Decisions
 
 - Customers pay the full order total (subtotal + delivery fee) in one DOKU Checkout transaction. No deposits.
-- A payment link is valid for 24 hours, but always closes by the order deadline (H-1, default 18:00 WITA) for the requested date. A link with less than 15 minutes left is refused. Staff must agree a new date with the customer first.
+- A payment link is valid for 2 hours, but always closes by the payment close (H-1, default 21:00 WITA) for the requested date. A link with less than 15 minutes left is refused. Staff must agree a new date with the customer first.
+- Paid after the order deadline (H-1, default 19:00 WITA): the order moves to the next open date, same time (`orders.moved_from_date`, a review row and `order.moved_after_cutoff` audit). This happens before the Erzap sync, so Erzap gets the new date. The order page shows a **Tell the customer** WhatsApp button.
+- Still unpaid at the payment close: `orders:cancel-unpaid` (every minute) checks open links at DOKU, then cancels the order with the reason in the status history. Partly paid orders are left for staff.
+- Dates go up to 30 days ahead (PO schedule → Order up to), checked on the order form, at submit and when staff change the schedule.
+- Capacity per outlet (Outlets → Capacity and pickup hours): a daily quota (100, 30 at the malls) for pickup and delivery from the outlet, and at most 20 pickups per hourly slot. Slots run from the first slot (13:00) until an hour before closing. Cancelled orders free their place. The order form calendar (`GET /order/jadwal`) greys out dates past the cutoff, closed or full, and shows the places left per slot; `CreatePreorder` checks again under a lock on the outlet. Staff changing the date, time or outlet in the review form are held to the same quota.
+- Delivery: the customer chooses an outlet that ships delivery (Outlets → Ships delivery) or **Pilihkan outlet terdekat**. A nearest-outlet order starts at the first delivery outlet and is flagged on the order page; staff pick the outlet in the review form (item prices stay as quoted). The recipient's WhatsApp and a Google Maps link are required; the delivery tolerance (PO schedule, default 60 minutes) is shown on the form and the payment page.
+- Orders waiting for review longer than 1 hour are flagged on the dashboard and the order page.
+- Delivery minimum order and radius (PO schedule, both optional): the minimum is enforced on the order form and at submit; the radius is shown to customers and checked by staff from the location link (short Google Maps links carry no coordinates).
+- Reschedule after payment: staff only, when the customer asks, **once**, before the current date's cutoff (`RescheduleOrder`). Only the date and time change, never the outlet, within the outlet's quota. The sale is **not** sent to Erzap again: Erzap only has the PO date in the order note, so the sale stays right; staff may update the note there by hand. The order page then offers a **Tell the customer** WhatsApp message.
+- Refund of a sale already in Erzap: Erzap API v1.2 has no cancel, so staff cancel or return the sale in Erzap by hand. Such orders are listed on the Erzap page (**Cancel in Erzap by hand**) and flagged on the order page until staff press **Done in Erzap** (`orders.erzap_voided_at`).
 - Staff may create a new link after the previous one failed, expired, or was cancelled. A reason is required. The old attempt stays in the history.
 
 ## Working flow
@@ -39,3 +48,39 @@ The review form stays editable while the order is `pending_review` or `confirmed
 
 - Customer-facing payment page or automatic WhatsApp sending; staff still send the link manually.
 - Partial refunds and chargebacks are recorded as `needs_review` events only.
+
+## Without DOKU (`DOKU_ENABLED=false`, the default)
+
+Until DOKU is configured, **Confirm order** only confirms the order (no payment link, no call to DOKU). Staff ask the customer to pay by transfer or at the outlet, then use **Mark as paid** on the order (method: bank transfer, cash, QRIS at the outlet, other; optional note). This records a `payments` row with `provider = manual` and goes through the same status handling as a DOKU SUCCESS, so the order becomes paid and is queued for Erzap. **Mark as paid** stays available after DOKU is turned on, for payments received outside DOKU.
+
+## Customer chooses VA BCA or QRIS on Orlena's page (`DOKU_MODE=direct`)
+
+Same page as below, with two buttons: **Virtual Account BCA** and **QRIS** (`DOKU_METHODS`). Both use the DOKU Direct API (SNAP) with the same token and signing.
+
+- No default method: **Confirm order** only confirms and sets the payment deadline (`orders.payment_due_at`, 2 hours capped by the H-1 payment close). Staff send `/bayar/{code}` (copy or WhatsApp button); the VA number or QR is created when the customer picks a method. Cek Pesanan's "Bayar sekarang" opens the same page.
+- After the deadline the page no longer offers the choice; staff use **Create new payment link** (with a reason) to reopen it with a new deadline.
+- With only one method in `DOKU_METHODS`, confirming creates that code right away (no choice step).
+
+- VA BCA: `create-va` (DOKU generates the number, closed amount, single use, expires with the payment). The page shows the number with copy buttons and m-BCA / ATM / KlikBCA steps.
+- Switching method (`POST /bayar/{code}/metode`): the open code is first checked at DOKU (if it was just paid, the payment is recorded and nothing switches), then closed (`delete-va` or `qr-expire`) and the new one created with the **same deadline**. Each switch is a new payment attempt (max 12 per order, 6 per minute per IP).
+- If creating a code fails, the order stays confirmed without a link: the customer can pick a method on the page again, or staff use **Try creating the link again**.
+- Payment detection: page polling and `payments:reconcile` use the VA status API (`/orders/v1.0/transfer-va/status`). `/webhooks/doku-va` applies a notification directly only when DOKU's signature verifies with DOKU's public key (`DOKU_SNAP_DOKU_PUBLIC_KEY_PATH`); otherwise it only triggers a status check.
+- Setup: from DOKU, the BCA VA **partnerServiceId** and **customerNo prefix** (`DOKU_VA_BCA_PARTNER_SERVICE_ID`, `DOKU_VA_BCA_CUSTOMER_PREFIX`); VA Notification URL `{APP_URL}/webhooks/doku-va`. The DOKU sandbox has VA but no QRIS, so test the sandbox with `DOKU_METHODS=va_bca` and the VA simulator: https://sandbox.doku.com/integration/simulator/
+- `DOKU_MODE=demo` shows the same choice with a sample VA number and QR (no DOKU).
+
+## QRIS on Orlena's own payment page (`DOKU_MODE=qris`)
+
+With DOKU enabled, **Confirm & Create Payment** asks the DOKU QRIS Direct API (SNAP) for a QRIS and the payment link becomes `{APP_URL}/bayar/{order code}`: Orlena's page with the order summary, the QR (drawn in the browser), the deadline and a "Simpan QR" button. It shows no name, phone number or address. Cek Pesanan's "Bayar sekarang" and the staff WhatsApp message open the same page.
+
+- Auth: a B2B access token (`/authorization/v1/access-token/b2b`, SHA256withRSA over `clientId|timestamp` with our private key) cached for 10 minutes; QRIS calls are signed with HMAC-SHA512 over `POST:path:token:sha256(body):timestamp`.
+- Payment detection: the page polls `/bayar/{code}/status` every 5 s, which asks DOKU (QRIS query, at most every 5 s per payment). `/webhooks/doku-qris` only triggers the same query, so a forged notification cannot mark an order paid. `payments:reconcile` also checks and expires old links.
+- Cancelling an order expires its QRIS (`qr-expire`).
+- `DOKU_MODE=checkout` switches back to the hosted DOKU Checkout page.
+
+Setup (sandbox first): ask DOKU to activate **QRIS** and send the **Merchant ID (mall ID)** and **Terminal ID**; generate an RSA key pair on the server (`openssl genrsa -out storage/app/private/doku-snap-private.pem 2048`, then `openssl rsa -in … -pubout`) and upload the public key in the DOKU dashboard; set the QRIS Notification URL to `{APP_URL}/webhooks/doku-qris`; fill `DOKU_ENABLED=true`, `DOKU_CLIENT_ID`, `DOKU_SECRET_KEY` (or `DOKU_SNAP_CLIENT_SECRET`), `DOKU_QRIS_MERCHANT_ID`, `DOKU_QRIS_TERMINAL_ID`, `DOKU_QRIS_POSTAL_CODE`. Test with the DOKU QRIS simulator: https://sandbox.doku.com/qris-simulator/
+
+## Settlement and status checks
+
+- An order is **paid** when the money received on all its payment attempts covers its **current** total. An older link paid after the total went up (e.g. a delivery fee added) is recorded but does not settle the order: the order page shows "Received Rp X of Rp Y", and Mark as paid records only the difference. Overpayments are flagged for a refund.
+- When an order becomes paid, any other open link is closed (also at DOKU), so the customer cannot pay twice. A refund on one attempt only reopens the order if the money still held no longer covers it.
+- `payments:reconcile` (every 10 minutes) reads DOKU for open links (each at most every 10 minutes) and for links expired or closed in the last 2 days (hourly), so a lost notification or a late payment is still recorded. Callbacks and page polling check one payment at most every 5 seconds.

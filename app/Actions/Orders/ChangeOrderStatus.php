@@ -5,7 +5,7 @@ namespace App\Actions\Orders;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
-use App\Services\Doku\DokuClient;
+use App\Services\Payments\PaymentGateways;
 use App\Support\Audit;
 use App\Support\OrderHistory;
 use Illuminate\Support\Facades\DB;
@@ -20,7 +20,7 @@ class ChangeOrderStatus
         'delivering' => ['completed'],
     ];
 
-    public function __construct(private DokuClient $doku) {}
+    public function __construct(private PaymentGateways $gateways) {}
 
     public function advance(Order $order, string $from, string $to, User $actor): void
     {
@@ -41,30 +41,35 @@ class ChangeOrderStatus
         }, 3);
     }
 
-    /** Returns false when an open DOKU link could not be closed and may still accept payment. */
-    public function cancel(Order $order, string $from, string $reason, User $actor): bool
+    /** Returns false when an open DOKU link could not be closed and may still accept payment. A null actor is the system (unpaid at payment close). */
+    public function cancel(Order $order, string $from, string $reason, ?User $actor, ?callable $guard = null): bool
     {
-        $closing = DB::transaction(function () use ($order, $from, $reason, $actor) {
+        $closing = DB::transaction(function () use ($order, $from, $reason, $actor, $guard) {
             $locked = $this->lock($order, $from);
+            // The system re-checks its reason on the locked row (e.g. staff moved the date meanwhile).
+            if ($guard && ! $guard($locked)) {
+                $this->fail('The order changed; it no longer qualifies for this cancellation.');
+            }
             if (in_array($from, ['completed', 'cancelled'], true)) {
                 $this->fail('Completed or cancelled orders cannot be cancelled.');
             }
-            if ($locked->payment_status === 'paid' && ! $actor->can('cancel-paid-orders')) {
+            if ($locked->payment_status === 'paid' && ! $actor?->can('cancel-paid-orders')) {
                 $this->fail('Paid orders can only be cancelled by an Admin because they need a refund.');
             }
             $open = Payment::where('order_id', $locked->id)->whereIn('status', Payment::OPEN)->lockForUpdate()->get();
             foreach ($open as $payment) {
                 $payment->update(['status' => 'cancelled', 'open_order_id' => null]);
-                Audit::record('payment.cancelled', $payment, ['attempt' => $payment->attempt], $actor->id);
+                Audit::record('payment.cancelled', $payment, ['attempt' => $payment->attempt], $actor?->id);
             }
             $locked->update(['order_status' => 'cancelled'] + ($locked->payment_status === 'pending' ? ['payment_status' => 'cancelled'] : []));
-            OrderHistory::record($locked, $from, 'cancelled', $actor->id, $reason);
-            Audit::record('order.cancelled', $locked, ['from' => $from, 'payment_status' => $locked->payment_status], $actor->id);
+            OrderHistory::record($locked, $from, 'cancelled', $actor?->id, $reason);
+            Audit::record('order.cancelled', $locked, ['from' => $from, 'payment_status' => $locked->payment_status], $actor?->id);
 
-            return $open->filter(fn ($payment) => $payment->checkout_token !== null && $payment->provider_request_id !== null);
+            return $open;
         }, 3);
 
-        return $closing->map(fn ($payment) => $this->doku->cancel($payment->provider_order_id, $payment->provider_request_id))->every(fn ($closed) => $closed);
+        // Each open link is closed by the gateway that created it; manual payments have none.
+        return $closing->every(fn ($payment) => $this->gateways->for($payment)?->cancel($payment) ?? true);
     }
 
     private function lock(Order $order, string $from): Order

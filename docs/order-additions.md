@@ -28,7 +28,7 @@ Opening `/orders/{code}/tambah` without access redirects to `/order/tambah?code=
 | Rule | Behaviour |
 |---|---|
 | Who can add | Only the original browser session, or a browser that verified Order Code + WhatsApp number. The Order Code alone grants no access. |
-| When | Only while `order_status = pending_review`, `payment_status = not_created`, no payment link is open, and before the cutoff (H-1 18:00 WITA, Asia/Makassar). |
+| When | Only while `order_status = pending_review`, `payment_status = not_created`, no payment link is open, and before the cutoff (H-1 19:00 WITA by default, Asia/Makassar). |
 | After confirmation or payment | Blocked. The page explains why and tells the customer to contact Orlena. Staff handle the change manually. |
 | Add only | Customers cannot reduce or remove items that were already ordered. Reductions go through staff. |
 | Merging | A product that is already in the order at the same price is merged into that line (2x + 1x = 3x). Otherwise a new line is added. |
@@ -53,7 +53,7 @@ Opening `/orders/{code}/tambah` without access redirects to `/order/tambah?code=
 
 | Case | Result |
 |---|---|
-| Customer adds at 18:01 on H-1 | Rejected: "past the H-1 18:00 WITA cutoff". Total unchanged. |
+| Customer adds at 19:01 on H-1 | Rejected: "past the H-1 19:00 WITA cutoff". Total unchanged. |
 | Staff confirm while the customer's add page is open | Saving is rejected and the page shows that the order is already confirmed. |
 | Product deactivated after the page was opened | Rejected at save; the customer picks again. |
 | Wrong WhatsApp number | Generic "Order Code atau nomor WhatsApp tidak cocok." After 5 tries, locked for 5 minutes, even with the correct number. |

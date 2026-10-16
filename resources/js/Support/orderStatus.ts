@@ -10,7 +10,7 @@ export const paymentStatusLabels: Record<string, string> = {
 };
 
 export const syncStatusLabels: Record<string, string> = {
-    pending: 'Queued', synced: 'Sent', failed: 'Failed', waiting_config: 'Awaiting setup', needs_mapping: 'Needs mapping', skipped: 'Skipped',
+    pending: 'Queued', synced: 'Sent', failed: 'Failed', waiting_config: 'Awaiting setup', needs_mapping: 'Needs mapping', skipped: 'Skipped', sending: 'Sending',
 };
 export const syncTypeLabels: Record<string, string> = { 'transaction.push': 'Send transaction', 'transaction.cancel': 'Cancel transaction' };
 

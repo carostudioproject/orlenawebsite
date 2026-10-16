@@ -9,15 +9,20 @@ use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\PaymentController;
 use App\Http\Controllers\Admin\PostController;
 use App\Http\Controllers\Admin\ProductImportController;
+use App\Http\Controllers\Admin\ProductionController;
 use App\Http\Controllers\Admin\ProfileController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\ScheduleController;
+use App\Http\Controllers\Admin\SystemController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Auth\SessionController;
 use App\Http\Controllers\PublicPageController;
 use App\Http\Controllers\Shop\CheckoutController;
 use App\Http\Controllers\Shop\OrderAdditionController;
 use App\Http\Controllers\Shop\OrderStatusController;
+use App\Http\Controllers\Shop\PaymentPageController;
+use App\Http\Controllers\Webhooks\DokuQrisWebhookController;
+use App\Http\Controllers\Webhooks\DokuVaWebhookController;
 use App\Http\Controllers\Webhooks\DokuWebhookController;
 use App\Http\Middleware\PrivateOrderResponse;
 use Illuminate\Support\Facades\Route;
@@ -33,6 +38,7 @@ Route::get('/robots.txt', [PublicPageController::class, 'robots']);
 Route::middleware(PrivateOrderResponse::class)->group(function () {
     Route::get('/order', [CheckoutController::class, 'index'])->block(10, 10);
     Route::post('/order', [CheckoutController::class, 'store'])->middleware('throttle:preorder-submit')->block(10, 10);
+    Route::get('/order/jadwal', [CheckoutController::class, 'availability'])->middleware('throttle:60,1');
     Route::redirect('/products', '/order');
     Route::redirect('/products/{product}', '/order')->whereNumber('product');
     Route::redirect('/cart', '/order');
@@ -47,9 +53,16 @@ Route::middleware(PrivateOrderResponse::class)->group(function () {
     Route::get('/cek-pesanan', [OrderStatusController::class, 'find']);
     Route::post('/cek-pesanan', [OrderStatusController::class, 'lookup'])->middleware('throttle:order-track');
     Route::get('/cek-pesanan/{code}', [OrderStatusController::class, 'show']);
+    // Orlena's own payment page (VA BCA or QRIS), its status polling and the method choice.
+    Route::get('/bayar/{code}', [PaymentPageController::class, 'show'])->block(10, 10);
+    Route::get('/bayar/{code}/status', [PaymentPageController::class, 'status'])->middleware('throttle:payment-status');
+    Route::post('/bayar/{code}/metode', [PaymentPageController::class, 'choose'])->middleware('throttle:payment-choose');
+    Route::post('/bayar/{code}/simulasi', [PaymentPageController::class, 'simulate'])->middleware('throttle:preorder-submit');
 });
 
 Route::post('/webhooks/doku', DokuWebhookController::class)->middleware('throttle:payment-webhook');
+Route::post('/webhooks/doku-qris', DokuQrisWebhookController::class)->middleware('throttle:payment-webhook');
+Route::post('/webhooks/doku-va', DokuVaWebhookController::class)->middleware('throttle:payment-webhook');
 
 Route::middleware('guest')->group(function () {
     Route::get('/admin/login', [SessionController::class, 'create'])->name('login');
@@ -67,6 +80,9 @@ Route::middleware(['auth', 'active-staff'])->prefix('admin')->group(function () 
         Route::get('/customers', [CustomerController::class, 'index']);
         Route::get('/customers/{whatsapp}', [CustomerController::class, 'show']);
         Route::get('/payments', [PaymentController::class, 'index']);
+        // Rekap CK: what the central kitchen produces for a date (page, PDF, WhatsApp).
+        Route::get('/production', [ProductionController::class, 'index']);
+        Route::get('/production/pdf', [ProductionController::class, 'pdf'])->middleware('throttle:report-export');
     });
     Route::middleware('can:view-reports')->prefix('/reports')->group(function () {
         Route::get('/', [ReportController::class, 'index']);
@@ -80,6 +96,12 @@ Route::middleware(['auth', 'active-staff'])->prefix('admin')->group(function () 
         Route::post('/closed-dates', [ScheduleController::class, 'storeClosedDate']);
         Route::delete('/closed-dates/{closedDate}', [ScheduleController::class, 'destroyClosedDate']);
     });
+    // Developer tools: integration status, API, logs and maintenance tasks.
+    Route::middleware('can:manage-system')->prefix('/system')->group(function () {
+        Route::get('/', [SystemController::class, 'show']);
+        Route::post('/run', [SystemController::class, 'run'])->middleware('throttle:payment-check');
+        Route::post('/snap-key', [SystemController::class, 'generateKey']);
+    });
     Route::middleware('can:manage-integrations')->prefix('/integrations')->group(function () {
         Route::get('/', [IntegrationController::class, 'index']);
         Route::get('/mapping', [IntegrationController::class, 'mapping']);
@@ -90,10 +112,13 @@ Route::middleware(['auth', 'active-staff'])->prefix('admin')->group(function () 
         Route::post('/review', [OrderController::class, 'review']);
         Route::post('/confirm', [OrderController::class, 'confirm']);
         Route::post('/payments/retry', [OrderController::class, 'retryPayment']);
+        Route::post('/payments/manual', [OrderController::class, 'markPaid']);
         Route::post('/payments/renew', [OrderController::class, 'renewPayment']);
         Route::post('/payments/{payment}/check', [OrderController::class, 'checkPayment'])->whereNumber('payment')->middleware('throttle:payment-check');
         Route::post('/status', [OrderController::class, 'advance']);
         Route::post('/cancel', [OrderController::class, 'cancel']);
+        Route::post('/reschedule', [OrderController::class, 'reschedule']);
+        Route::post('/erzap-voided', [OrderController::class, 'erzapVoided']);
     });
     // Erzap product export import: preview first, then apply (photos and website settings are never changed).
     Route::middleware('can:manage-catalog')->prefix('/products/import')->group(function () {

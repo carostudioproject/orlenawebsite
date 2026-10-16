@@ -4,6 +4,20 @@ Public website, staff/catalog foundation, and customer pre-order flow using Lara
 
 Rendering: the public pages (`/`, `/about`, `/blog`, `/blog/{slug}`) are **server-rendered Blade** (`resources/views/pages`, shared header/footer in `resources/views/partials`) so search engines and AI crawlers read the full text without JavaScript; `resources/js/public.ts` only adds sliders, the mobile menu and smooth section scrolling. They include schema.org data (`Bakery` with outlets, `BlogPosting`). The order pages and the dashboard (`/admin`) are Inertia + Vue; order pages reuse the same Blade header and footer. `tests/Feature/PublicWebsiteTest.php` checks the raw HTML against `tests/fixtures/public-pages.json`, the approved copy captured from the previous Vue version.
 
+## Code structure
+
+| Folder | Contents |
+|---|---|
+| `app/Http/Controllers/{Admin,Shop,Api,Webhooks,Auth}` | Thin controllers per area: dashboard, customer order pages, REST API, DOKU notifications, login |
+| `app/Actions/{Orders,Payments,Integrations,Users}` | Business steps (create/confirm order, payment status, Erzap sync), each one transaction |
+| `app/Services/Payments` | Payment gateways behind one interface: `DokuQrisGateway` (own `/bayar` page), `DokuCheckoutGateway`, `DemoGateway`; `PaymentGateways` picks one from `DOKU_MODE` |
+| `app/Services/{Doku,Erzap,Ordering,Reports}` | API clients and domain services (DOKU HTTP/SNAP, Erzap OLZAP + product import, pricing, sales report) |
+| `app/Support` | Small helpers (audit log, PO dates, site content, WhatsApp text, order access) |
+| `resources/views` | Blade: public pages, shared header/footer, splash loader, Inertia root |
+| `resources/js/Pages/{Admin,Shop,Auth}` | Inertia pages; `Components` (shared, e.g. `Field.vue`, `OrderSummary.vue`), `Components/Admin`, `Components/Shop` |
+| `resources/css` | `brand.css` (public site), `header.css`, `admin.css` (dashboard plus the form/card/button styles customer pages reuse, hence the `admin-*` class names), `shop.css` (order form), `pages/*` |
+| `docs/` | Feature notes, staff guide (Indonesian), deployment, `templates/` (Excel import files) |
+
 ## Run locally (Windows PowerShell)
 
 Requirements: PHP 8.2+, Composer, Node 22.12+ (verified with Node 24), npm, and a running MySQL-compatible database. The local workspace uses XAMPP MariaDB; deployment remains MySQL-compatible.

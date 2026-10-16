@@ -30,10 +30,37 @@ return [
 
     // DOKU Checkout (non-SNAP). Client ID and Secret Key from DOKU Back Office > Integration > API Keys.
     'doku' => [
+        // false: no payment links; staff confirm orders and record payments manually (transfer, cash).
+        'enabled' => (bool) env('DOKU_ENABLED', false),
         'client_id' => env('DOKU_CLIENT_ID'),
         'secret_key' => env('DOKU_SECRET_KEY'),
         'is_production' => (bool) env('DOKU_IS_PRODUCTION', false),
         'timeout' => (int) env('DOKU_TIMEOUT', 20),
+        // Payment mode:
+        //   direct   our own payment page; the customer chooses from `methods` (BCA Virtual Account and/or QRIS, DOKU Direct API SNAP)
+        //   qris     our own payment page with a QRIS from the DOKU QRIS Direct API (SNAP; production only)
+        //   va       DOKU's hosted Checkout page with Virtual Accounts only (see va_methods)
+        //   checkout DOKU's hosted Checkout page with every method enabled in DOKU
+        //   demo     our payment page with a sample QR and a "simulate payment" button (no DOKU; never on the live site)
+        'mode' => env('DOKU_MODE', 'qris'),
+        // Demo mode on a production install (a demo server) must be allowed explicitly; never on the live shop.
+        'allow_demo' => (bool) env('DOKU_ALLOW_DEMO', false),
+        // va: DOKU Checkout showing only these Virtual Accounts (works in the DOKU sandbox, with its VA simulator).
+        'va_methods' => array_values(array_filter(array_map('trim', explode(',', (string) env('DOKU_VA_METHODS', 'VIRTUAL_ACCOUNT_BCA,VIRTUAL_ACCOUNT_BANK_MANDIRI,VIRTUAL_ACCOUNT_BRI,VIRTUAL_ACCOUNT_BNI,VIRTUAL_ACCOUNT_BANK_PERMATA,VIRTUAL_ACCOUNT_BANK_CIMB'))))),
+        // direct and demo: methods offered on /bayar (va_bca, qris). With two the customer chooses; with one it is created on confirm. The DOKU sandbox has no QRIS.
+        'methods' => array_values(array_filter(array_map('trim', explode(',', (string) env('DOKU_METHODS', 'va_bca,qris'))))),
+        // BCA Virtual Account (SNAP): partnerServiceId (BIN/company code) and customerNo prefix from DOKU, e.g. 19008 and 0.
+        'va_bca_partner_service_id' => env('DOKU_VA_BCA_PARTNER_SERVICE_ID'),
+        'va_bca_customer_prefix' => env('DOKU_VA_BCA_CUSTOMER_PREFIX', ''),
+        // DOKU's public key (DOKU dashboard), to trust signed SNAP notifications; without it each notification triggers a status check.
+        'snap_doku_public_key_path' => env('DOKU_SNAP_DOKU_PUBLIC_KEY_PATH') ?: storage_path('app/private/doku-snap-doku-public.pem'),
+        'qris_merchant_id' => env('DOKU_QRIS_MERCHANT_ID'),
+        'qris_terminal_id' => env('DOKU_QRIS_TERMINAL_ID'),
+        'qris_postal_code' => env('DOKU_QRIS_POSTAL_CODE', '80361'),
+        // SNAP: our RSA private key (its public key is uploaded to DOKU) and, if DOKU issues a separate one, the SNAP client secret.
+        'snap_private_key_path' => env('DOKU_SNAP_PRIVATE_KEY_PATH') ?: storage_path('app/private/doku-snap-private.pem'),
+        'snap_client_secret' => env('DOKU_SNAP_CLIENT_SECRET'),
+        'snap_token_path' => env('DOKU_SNAP_TOKEN_PATH', '/authorization/v1/access-token/b2b'),
     ],
 
     // Filled in once Erzap sends API documentation and sandbox credentials. Paths are placeholders until then.
@@ -49,6 +76,8 @@ return [
         'timeout' => (int) env('ERZAP_TIMEOUT', 20),
         // false sends "kode": null so Erzap uses its own order numbering.
         'send_order_code' => (bool) env('ERZAP_SEND_ORDER_CODE', true),
+        // Token Erzap sends in X-Erzap-Token when it calls /web_service/... (the account token unless Erzap gives another one).
+        'inbound_token' => env('ERZAP_INBOUND_TOKEN') ?: env('ERZAP_TOKEN'),
     ],
 
     // Bearer tokens for the read-only REST API (comma separated). Empty means the protected endpoints are closed.

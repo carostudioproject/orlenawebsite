@@ -53,7 +53,7 @@ class OrderApiController extends Controller
             'subtotal' => $order->subtotal, 'delivery_fee' => $order->delivery_fee, 'total' => $order->total,
             'order_status' => $order->order_status, 'payment_status' => $order->payment_status,
             'items' => $order->items->map(fn ($item) => [
-                'product_id' => $item->product_id, 'sku' => $item->sku_snapshot, 'name' => $item->product_name_snapshot, 'variant' => $item->variant_snapshot,
+                'id' => $item->id, 'parent_item_id' => $item->parent_item_id, 'product_id' => $item->product_id, 'sku' => $item->sku_snapshot, 'name' => $item->product_name_snapshot, 'variant' => $item->variant_snapshot,
                 'category' => $item->category_snapshot, 'unit_price' => $item->unit_price_snapshot, 'quantity' => $item->quantity, 'subtotal' => $item->subtotal,
             ])->values(),
             'created_at' => $order->created_at?->toIso8601String(), 'updated_at' => $order->updated_at?->toIso8601String(),

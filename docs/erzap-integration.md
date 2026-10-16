@@ -35,15 +35,30 @@ check the preview, then **Apply**.
 | `alamat`, `alamat_pengiriman` | Delivery address (empty for pickup) |
 | `tempat_penjemputan` | Pickup outlet name (pickup only) |
 | `pelanggan_ekspedisi` | `GOJEK/GRAB` or `PICKUP` |
-| `ongkos_kirim` | Delivery fee (delivery only) |
+| `ongkos_kirim`, `nominal_gratis_ongkir` | Delivery fee (`"0.0"` for pickup); no free-shipping discount (`"0.0"`) |
 | `total_pesanan` | Product subtotal |
 | `total_pembayaran` | Amount paid via DOKU |
-| `konfirmasi_dari_bank`, `konfirmasi_tanggal_bayar`, `pelanggan_payment_channel` | `DOKU`, paid time (WITA), e.g. `DOKU-QRIS` or `DOKU-VIRTUAL_ACCOUNT_BCA` |
+| `konfirmasi_dari_bank`, `konfirmasi_tanggal_bayar`, `pelanggan_payment_channel` | `DOKU`, payment date (WITA, `YYYY-MM-DD`), e.g. `DOKU-QRIS` or `DOKU-VIRTUAL_ACCOUNT_BCA` |
 | `informasi_tambahan_text` | "Website order {Order Code}", pickup/delivery, PO date and time, payment method, customer note |
 | `idoutlet_penerima_pesanan_online_erzap` | Outlet's Erzap outlet ID (Mapping), else `ERZAP_DEFAULT_OUTLET_ID` |
 | `iduser_sales_penerima_pesanan_online_erzap` | `ERZAP_SALES_USER_ID` |
 | `token_erzap` | `ERZAP_TOKEN` (added when sending, never stored in the log) |
-| `shopping_cart_details[]` | `barcode_produk` (product barcode), `harga_satuan`, `jumlah` |
+| `shopping_cart_details[]` | `barcode_produk` (product barcode), `harga_satuan`, `jumlah` (decimal strings, e.g. `"2.0"`) |
+
+## Erzap → website (`/web_service/...`, Erzap API v1.2 section 2)
+
+Once Erzap registers the website domain in the ORLENA account, Erzap calls these URLs (POST, `routes/erzap.php`, stateless, no CSRF). Every call must carry `X-Erzap-Token`; it is compared with `ERZAP_INBOUND_TOKEN` (or `ERZAP_TOKEN` when empty) and anything else gets HTTP 401. Developer tools lists the URLs with the last call received.
+
+| URL | What the website does |
+|---|---|
+| `import_produk_json/new` | Matched by barcode. Existing products: price updated (`harga_jual_web`, else `harga_jual`; a lower discount wins); `is_active: false` hides the product, `true` never shows it (a staff decision). Name, photo, category and size stay as set on the website. New barcodes (when `create_data_if_not_exist`): created **inactive** with `nama_web`/`nama`, `kategori_nama`, `produk_ukuran_nama`. |
+| `sinkronisasi_harga/new` | Same price rule for known barcodes. |
+| `sinkronisasi_stok/new` | Accepted and ignored: the website does not track stock. |
+| `check_pesanan/new` | Paid orders not yet saved in Erzap (sync not **Sent**), oldest first, max 20, same `shopping_carts` fields as the push with `kode` = Order Code. Orders with a product without barcode are left out (they show as **Needs mapping**). |
+| `update_status_pesanan/new` | Status `5` marks the order **Sent** in the sync log. Unknown code: `status 0`. |
+| `sinkronisasi_gambar/new` | Multipart (`erzap_json` + `file_<ref>`). The cover image becomes the photo **only for products without one** (stored as WebP); staff photos are never replaced. |
+
+Pushing (`simpan_pesanan_penjualan`, below) and Erzap pulling (`check_pesanan`) can both run: Erzap rejects a repeated `kode`, so an order is never saved twice. For image batches, the server's `upload_max_filesize`, `post_max_size` and `max_file_uploads` must be large enough (Erzap's note in Lampiran A).
 
 ## Setup
 
@@ -51,9 +66,14 @@ check the preview, then **Apply**.
 2. Fill `.env`: `ERZAP_BASE_URL`, `ERZAP_TOKEN`, `ERZAP_SALES_USER_ID`, optionally `ERZAP_DEFAULT_OUTLET_ID`, then `ERZAP_ENABLED=true`.
 3. Dashboard → **Erzap integration → Outlet & product mapping**: Erzap outlet ID per outlet (or rely on the default) and the **Erzap barcode for every product sold on the website, including hampers** (filled automatically by the import; hampers created only on the website need it entered here).
 4. Pay one test order and check the log shows **Sent** and the order appears in Erzap.
+5. Ask Erzap to register the website domain in the ORLENA account (and confirm the X-Erzap-Token value); then check Developer tools shows calls arriving.
 
 ## Open questions for Erzap
 
 - Does the order arrive as a finished (paid) sale or as a sales order to process in Erzap?
 - Must `kode` follow Erzap's own numbering, or may it be our Order Code? If Erzap should number it, does `kode: null` do that? Is a repeated `kode` rejected?
 - Exact request format (JSON body, `Content-Type`) and whether port 4443 is required; shared hosting may block outgoing ports other than 80/443.
+
+## Sending
+
+A sync row is claimed (`sending`, for up to 2 minutes) in a short transaction, the request to Erzap runs outside any database transaction, and the result is recorded afterwards unless Erzap's own status 5 settled the row meanwhile. A run that dies mid-request leaves the row to be picked up again when its claim expires. Rows waiting for settings or mapping are retried every 30 minutes (saving the mapping requeues them at once); cancelled orders are never sent.

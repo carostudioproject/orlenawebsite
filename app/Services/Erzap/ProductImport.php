@@ -18,6 +18,8 @@ use RuntimeException;
  * The website owns everything else and an import never touches it: photo, description, active/visible status,
  * hampers contents, sale period, outlet prices, and the category/variant of products that already exist.
  * New products are created inactive so staff choose what is sold as PO and add photos first.
+ * The optional Tipe / Jumlah Isi / Isi Dari / Harga Isi columns (template produk-orlena.xlsx) set hampers and boxes whose
+ * contents the customer chooses; an empty Tipe cell leaves that setting as it is, "Biasa" turns it off.
  */
 class ProductImport
 {
@@ -34,9 +36,15 @@ class ProductImport
         // Optional, only used when a product is created: "Ya" marks it as hampers, contents one per line or separated by ";".
         'hamper' => ['hampers', 'hamper', 'produkhampers'],
         'hamper_contents' => ['isihampers', 'isihamper', 'isipaket', 'hampercontents'],
+        // Optional: contents chosen by the customer (Biasa / Hampers / Box), how many, from which product codes, Ditambah / Termasuk.
+        'content_type' => ['tipe', 'tipeproduk', 'jenisproduk'],
+        'content_count' => ['jumlahisi'],
+        'content_from' => ['isidari', 'pilihanisi'],
+        'content_pricing' => ['hargaisi'],
     ];
 
-    public const LABELS = ['barcode' => 'Barcode', 'sku' => 'Product code', 'name' => 'Name', 'price' => 'Selling price', 'category' => 'Category', 'variant' => 'Size / variant', 'hamper' => 'Hampers (Ya/Tidak)', 'hamper_contents' => 'Hampers contents'];
+    public const LABELS = ['barcode' => 'Barcode', 'sku' => 'Product code', 'name' => 'Name', 'price' => 'Selling price', 'category' => 'Category', 'variant' => 'Size / variant', 'hamper' => 'Hampers (Ya/Tidak)', 'hamper_contents' => 'Hampers contents',
+        'content_type' => 'Type (Biasa/Hampers/Box)', 'content_count' => 'Items per unit', 'content_from' => 'Contents from (codes)', 'content_pricing' => 'Contents price (Ditambah/Termasuk)'];
 
     /** Reads the first sheet: first non-empty row is the header. Returns [headers, rows]. */
     public function read(string $path, string $extension): array
@@ -119,7 +127,7 @@ class ProductImport
      */
     public function plan(array $rows, array $mapping, bool $updateNames = false): array
     {
-        $products = Product::with('category:id,name')->get();
+        $products = Product::with('category:id,name', 'contentOptions:id,sku,barcode')->get();
         $byBarcode = $products->filter(fn ($p) => filled($p->barcode))->keyBy(fn ($p) => mb_strtolower($p->barcode));
         $bySku = $products->keyBy(fn ($p) => mb_strtolower($p->sku));
         $byName = $products->filter(fn ($p) => blank($p->barcode))->keyBy(fn ($p) => $this->nameKey($p->name, $p->variant));
@@ -127,13 +135,14 @@ class ProductImport
         $claimed = [];
         $plan = [];
         foreach ($rows as $index => $row) {
-            $get = fn (string $field) => $mapping[$field] === null ? null : ($row[$mapping[$field]] ?? null);
+            $get = fn (string $field) => ($mapping[$field] ?? null) === null ? null : ($row[$mapping[$field]] ?? null);
             $item = [
                 'line' => $index + 2,
                 'barcode' => $this->text($get('barcode'), 80), 'sku' => $this->text($get('sku'), 80), 'name' => $this->text($get('name'), 160),
                 'price' => $this->price($get('price')), 'category' => $this->text($get('category'), 120), 'variant' => $this->text($get('variant'), 40),
                 'hamper' => in_array(mb_strtolower(trim((string) $get('hamper'))), ['ya', 'y', 'yes', '1', 'true', 'hampers'], true),
                 'hamper_contents' => $this->contents($get('hamper_contents')),
+                ...$this->contentSettings($get('content_type'), $get('content_count'), $get('content_from'), $get('content_pricing')),
             ];
             $key = mb_strtolower($item['barcode'] ?? 'sku:'.$item['sku']);
             if (! $item['name'] || (! $item['barcode'] && ! $item['sku'])) {
@@ -160,8 +169,9 @@ class ProductImport
                 continue;
             }
 
+            $unknown = $this->unknownCodes($item['content_from'] ?? [], $known ??= $this->knownCodes($products, $rows, $mapping));
             if (! $product) {
-                $plan[] = [...$item, 'action' => 'create', 'changes' => [], 'warning' => $item['barcode'] ? null : 'No barcode: orders with this product cannot be sent to Erzap.'];
+                $plan[] = [...$item, 'action' => 'create', 'changes' => [], 'warning' => $item['barcode'] ? $unknown : 'No barcode: orders with this product cannot be sent to Erzap.'];
 
                 continue;
             }
@@ -180,10 +190,11 @@ class ProductImport
             if ($sku && $sku !== $product->sku && ! $products->contains(fn ($p) => $p->id !== $product->id && mb_strtolower($p->sku) === mb_strtolower($sku))) {
                 $changes['sku'] = [$product->sku, $sku];
             }
+            $changes += $this->contentChanges($item, $product);
             $plan[] = [
                 ...$item, 'action' => $changes ? 'update' : 'unchanged', 'changes' => $changes, 'product_id' => $product->id,
                 'current' => $product->label(), 'matched_by' => $matchedBy,
-                'warning' => ! ($changes['barcode'][1] ?? $product->barcode) ? 'No barcode: orders with this product cannot be sent to Erzap.' : null,
+                'warning' => ! ($changes['barcode'][1] ?? $product->barcode) ? 'No barcode: orders with this product cannot be sent to Erzap.' : $unknown,
             ];
         }
 
@@ -203,10 +214,12 @@ class ProductImport
         return DB::transaction(function () use ($rows, $mapping, $actor, $fileName, $updateNames) {
             $plan = $this->plan($rows, $mapping, $updateNames);
             $categories = Category::all()->keyBy(fn ($c) => mb_strtolower($c->name));
+            $touched = [];
             foreach ($plan as $item) {
                 if ($item['action'] === 'update') {
                     $product = Product::lockForUpdate()->find($item['product_id']);
-                    $product->forceFill(array_map(fn ($change) => $change[1], $item['changes']))->save();
+                    $product->forceFill(array_map(fn ($change) => $change[1], array_diff_key($item['changes'], ['contents' => true])))->save();
+                    $touched[] = [$product, $item];
                     Audit::record('catalog.erzap_import_updated', $product, $item['changes'], $actor);
                 } elseif ($item['action'] === 'create') {
                     $categoryName = $item['category'] ?: 'Imported from Erzap';
@@ -216,8 +229,17 @@ class ProductImport
                         'category_id' => $category->id, 'name' => $item['name'], 'variant' => $item['variant'], 'barcode' => $item['barcode'],
                         'is_hamper' => $item['hamper'] || $item['hamper_contents'] !== null, 'hamper_contents' => $item['hamper_contents'],
                         'sku' => $this->uniqueSku($item['sku'] ?? $item['barcode']), 'price' => $item['price'], 'is_active' => false,
+                        ...array_intersect_key($this->contentColumns($item, null), array_flip(['content_type', 'content_count', 'content_pricing'])),
                     ]);
+                    $touched[] = [$product, $item];
                     Audit::record('catalog.erzap_import_created', $product, $product->only('name', 'variant', 'barcode', 'sku', 'price'), $actor);
+                }
+            }
+            // Contents ("Isi Dari") are linked once every product of the file exists, so codes may point to new products.
+            foreach ($touched as [$product, $item]) {
+                if ($item['content_type'] !== null && $item['content_from'] !== null) {
+                    $ids = in_array($product->content_type, ['hampers', 'box', 'set'], true) ? $this->resolveCodes($item['content_from'], $product->id) : [];
+                    $product->contentOptions()->sync(array_map(fn ($count) => ['quantity' => $product->content_type === 'set' ? $count : 1], array_count_values($ids)));
                 }
             }
             $summary = $this->summary($plan);
@@ -225,6 +247,131 @@ class ProductImport
 
             return $summary;
         });
+    }
+
+    /**
+     * Tipe / Jumlah Isi / Isi Dari / Harga Isi of one row. content_type null means "leave as it is" (no column or empty cell),
+     * "" means a regular product. Hampers always hold 1 item and add its price unless Harga Isi says otherwise.
+     */
+    private function contentSettings(mixed $type, mixed $count, mixed $from, mixed $pricing): array
+    {
+        $type = mb_strtolower(trim((string) $type));
+        $type = match (true) {
+            $type === '' => null,
+            str_starts_with($type, 'hamper') => 'hampers',
+            // "Box isi tetap": flavours fixed by Orlena; checked before plain "Box".
+            str_contains($type, 'tetap') || $type === 'set' => 'set',
+            str_starts_with($type, 'box') || str_starts_with($type, 'mix') => 'box',
+            str_starts_with($type, 'rasa') || str_starts_with($type, 'isi') || str_starts_with($type, 'flavour') => 'flavour',
+            default => '',
+        };
+        $pricing = mb_strtolower(trim((string) $pricing));
+        // "2x BR0054" counts twice; only a fixed box keeps repeats.
+        $codes = [];
+        foreach (array_filter(array_map('trim', preg_split('/[,;\r\n]+/', (string) $from)), fn ($code) => $code !== '') as $code) {
+            $repeat = preg_match('/^(\d{1,2})\s*[x×]\s*(\S.*)$/iu', $code, $match) ? max(1, (int) $match[1]) : 1;
+            array_push($codes, ...array_fill(0, $repeat, trim($match[2] ?? $code)));
+        }
+        $codes = $type === 'set' ? $codes : array_values(array_unique($codes));
+
+        return [
+            'content_type' => $type,
+            'content_count' => match ($type) {
+                'hampers' => 1,
+                'box' => is_numeric($count) && (int) $count >= 1 ? min(50, (int) $count) : null,
+                'set' => $codes ? count($codes) : null,
+                default => null,
+            },
+            'content_from' => trim((string) $from) === '' ? null : $codes,
+            'content_pricing' => match (true) {
+                ! in_array($type, ['hampers', 'box'], true) => null,
+                str_starts_with($pricing, 'tambah') || str_starts_with($pricing, 'ditambah') => 'added',
+                str_starts_with($pricing, 'termasuk') => 'included',
+                default => $type === 'box' ? 'included' : 'added',
+            },
+        ];
+    }
+
+    /** Columns a row sets on a product (only when its Tipe cell is filled). */
+    private function contentColumns(array $item, ?Product $product): array
+    {
+        if ($item['content_type'] === null) {
+            return [];
+        }
+        if ($item['content_type'] === '') {
+            return ['content_type' => null, 'content_count' => null, 'content_pricing' => null];
+        }
+
+        $choice = in_array($item['content_type'], ['hampers', 'box'], true);
+
+        return [
+            'content_type' => $item['content_type'],
+            'content_count' => match ($item['content_type']) {
+                'flavour' => null,
+                'set' => $item['content_count'] ?? $product?->content_count,
+                default => $item['content_count'] ?? $product?->content_count ?? 1,
+            },
+            'content_pricing' => $choice ? $item['content_pricing'] : null,
+        ];
+    }
+
+    private function contentChanges(array $item, Product $product): array
+    {
+        $changes = [];
+        foreach ($this->contentColumns($item, $product) as $column => $value) {
+            if ($value !== $product->{$column}) {
+                $changes[$column] = [$product->{$column}, $value];
+            }
+        }
+        if (in_array($item['content_type'], ['hampers', 'box', 'set'], true) && $item['content_from'] !== null) {
+            $current = $product->contentOptions->flatMap(fn ($option) => array_fill(0, max(1, (int) $option->pivot->quantity), $option->sku))->sort()->values()->all();
+            $wanted = collect($item['content_from'])->map(fn ($code) => $this->sku($code))->sort()->values()->all();
+            if (array_map('mb_strtolower', $current) !== array_map('mb_strtolower', $wanted)) {
+                $changes['contents'] = [implode(', ', $current), implode(', ', $item['content_from'])];
+            }
+        }
+
+        return $changes;
+    }
+
+    /** Every product code and barcode, in the catalog or in the file (lowercase keys), to check Isi Dari codes. */
+    private function knownCodes($products, array $rows, array $mapping): array
+    {
+        $known = $products->flatMap(fn ($p) => [mb_strtolower((string) $p->sku), mb_strtolower((string) $p->barcode)])->all();
+        foreach ($rows as $row) {
+            foreach (['sku', 'barcode'] as $field) {
+                if ($mapping[$field] !== null && filled($row[$mapping[$field]] ?? null)) {
+                    $known[] = mb_strtolower((string) $this->text($row[$mapping[$field]], 80));
+                }
+            }
+        }
+
+        return array_flip(array_filter($known));
+    }
+
+    /** Isi Dari codes that match no product code or barcode. */
+    private function unknownCodes(array $codes, array $known): ?string
+    {
+        $missing = array_filter($codes, fn ($code) => ! isset($known[mb_strtolower($code)]));
+
+        return $missing ? 'Isi Dari: code not found: '.implode(', ', array_slice($missing, 0, 5)).'.' : null;
+    }
+
+    /** Product IDs for Isi Dari codes (product code or barcode): regular products and box flavours, never hampers or boxes. */
+    private function resolveCodes(array $codes, int $self): array
+    {
+        $lower = array_map('mb_strtolower', $codes);
+        $byCode = [];
+        Product::where(fn ($query) => $query->whereNull('content_type')->orWhere('content_type', 'flavour'))->whereKeyNot($self)
+            ->where(fn ($query) => $query->whereIn(DB::raw('LOWER(sku)'), $lower)->orWhereIn(DB::raw('LOWER(barcode)'), $lower))
+            ->get(['id', 'sku', 'barcode'])
+            ->each(function (Product $product) use (&$byCode) {
+                $byCode[mb_strtolower((string) $product->sku)] = $product->id;
+                $byCode[mb_strtolower((string) $product->barcode)] = $product->id;
+            });
+
+        // One ID per code, repeats kept (a fixed box with "2x BR0054" lists it twice).
+        return array_values(array_filter(array_map(fn ($code) => $byCode[$code] ?? null, $lower)));
     }
 
     /** Hampers contents: one item per line; ";" also separates items. */
@@ -283,7 +430,7 @@ class ProductImport
         return mb_substr(trim(preg_replace('/[^A-Za-z0-9_-]+/', '-', $value), '-'), 0, 80) ?: 'ERZ';
     }
 
-    private function uniqueSku(string $value): string
+    public function uniqueSku(string $value): string
     {
         $base = $this->sku($value);
         $sku = $base;

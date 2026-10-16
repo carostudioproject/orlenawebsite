@@ -19,6 +19,8 @@ class ReviewOrderRequest extends FormRequest
             'note' => ['required', 'string', 'max:2000'],
             'requested_date' => ['sometimes', 'required', 'date_format:Y-m-d'],
             'requested_time' => ['sometimes', 'nullable', 'date_format:H:i'],
+            // E.g. the nearest outlet for a delivery the customer left to Orlena. Item prices stay as quoted.
+            'outlet_id' => ['sometimes', 'integer', 'min:1'],
         ];
     }
 

@@ -2,7 +2,7 @@
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import AdminLayout from '../../../Layouts/AdminLayout.vue';
-import Field from '../../../Components/Admin/Field.vue';
+import Field from '../../../Components/Field.vue';
 import ImageInput from '../../../Components/Admin/ImageInput.vue';
 import type { ContentBlock } from '../../../Types/content';
 defineOptions({ layout: AdminLayout });

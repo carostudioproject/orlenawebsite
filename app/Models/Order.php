@@ -15,7 +15,7 @@ class Order extends Model
 
     protected function casts(): array
     {
-        return ['requested_date' => 'date:Y-m-d', 'subtotal' => 'integer', 'delivery_fee' => 'integer', 'total' => 'integer'];
+        return ['requested_date' => 'date:Y-m-d', 'payment_due_at' => 'datetime', 'moved_from_date' => 'date:Y-m-d', 'nearest_outlet' => 'boolean', 'rescheduled_from' => 'date:Y-m-d', 'rescheduled_at' => 'datetime', 'erzap_voided_at' => 'datetime', 'subtotal' => 'integer', 'delivery_fee' => 'integer', 'total' => 'integer'];
     }
 
     public function customer(): BelongsTo
@@ -26,6 +26,21 @@ class Order extends Model
     public function items(): HasMany
     {
         return $this->hasMany(OrderItem::class);
+    }
+
+    /** Stores a priced line (OrderPricing::quote item) and its chosen contents as lines under it. */
+    public function addLine(array $item): OrderItem
+    {
+        $snapshot = fn (array $line) => [
+            'product_id' => $line['product_id'], 'product_name_snapshot' => $line['name'], 'category_snapshot' => $line['category'], 'variant_snapshot' => $line['variant'],
+            'sku_snapshot' => $line['sku'], 'unit_price_snapshot' => $line['unit_price'], 'quantity' => $line['quantity'], 'subtotal' => $line['subtotal'],
+        ];
+        $parent = $this->items()->create($snapshot($item));
+        foreach ($item['contents'] ?? [] as $content) {
+            $this->items()->create([...$snapshot($content), 'parent_item_id' => $parent->id]);
+        }
+
+        return $parent;
     }
 
     public function payments(): HasMany
@@ -53,6 +68,17 @@ class Order extends Model
         }
 
         return null;
+    }
+
+    /**
+     * A sale already in Erzap that was cancelled after payment or refunded (also after completion, e.g. a damaged product)
+     * and not yet voided there by hand (Erzap has no cancel API).
+     */
+    public function scopeNeedsErzapVoid($query): void
+    {
+        $query->where(fn ($q) => $q->where('payment_status', 'refunded')->orWhere(fn ($q) => $q->where('order_status', 'cancelled')->where('payment_status', 'paid')))
+            ->whereNull('erzap_voided_at')
+            ->whereIn('id', IntegrationSync::where('provider', 'erzap')->where('subject_type', 'orders')->where('status', 'synced')->select('subject_id'));
     }
 
     public function outlet(): BelongsTo

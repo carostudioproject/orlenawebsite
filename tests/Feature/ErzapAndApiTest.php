@@ -15,6 +15,7 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as HttpRequest;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -42,7 +43,7 @@ class ErzapAndApiTest extends TestCase
         $category = Category::create(['name' => 'Brownies', 'is_active' => true]);
         $this->product = Product::create(['category_id' => $category->id, 'variant' => 'Fullsize', 'sku' => 'B-F', 'name' => 'Berry', 'price' => 80000, 'is_active' => true]);
         $this->outlet = Outlet::create(['code' => 'O', 'name' => 'Test Outlet', 'address' => 'Jl', 'is_active' => true]);
-        config(['services.erzap' => [...config('services.erzap'), 'enabled' => false, 'base_url' => null, 'token' => null], 'services.api.tokens' => []]);
+        config(['services.erzap' => [...config('services.erzap'), 'enabled' => false, 'base_url' => null, 'token' => null, 'default_outlet_id' => null, 'sales_user_id' => null, 'send_order_code' => true], 'services.api.tokens' => []]);
     }
 
     /** A confirmed order with a pending link, then a DOKU SUCCESS notification. */
@@ -85,6 +86,10 @@ class ErzapAndApiTest extends TestCase
 
         // Configured but no barcode / outlet ID: waits for mapping, still nothing sent.
         config(['services.erzap.enabled' => true, 'services.erzap.base_url' => 'https://erzap.test:4443', 'services.erzap.token' => 'erzap-secret', 'services.erzap.sales_user_id' => '8']);
+        // A row waiting for settings is parked: the next run leaves it until its time comes, so it cannot fill every batch.
+        $this->artisan('erzap:sync')->assertSuccessful();
+        $this->assertSame('waiting_config', $sync->fresh()->status);
+        $this->travel(31)->minutes();
         $this->artisan('erzap:sync')->assertSuccessful();
         $this->assertSame('needs_mapping', $sync->fresh()->status);
         $this->assertStringContainsString('Erzap outlet ID for Test Outlet', $sync->fresh()->last_error);
@@ -117,7 +122,8 @@ class ErzapAndApiTest extends TestCase
                 && $cart['total_pesanan'] === '160000.0' && $cart['ongkos_kirim'] === '15000.0' && $cart['total_pembayaran'] === '175000.0'
                 && $cart['nama'] === 'Sinta' && $cart['telepon'] === '6281234567890' && $cart['alamat_pengiriman'] === 'Secret address 1'
                 && $cart['pelanggan_ekspedisi'] === 'GOJEK/GRAB' && $cart['pelanggan_payment_channel'] === 'DOKU-QRIS'
-                && $cart['shopping_cart_details'] == [['harga_satuan' => 80000, 'jumlah' => 2, 'tgl_check_in' => null, 'barcode_produk' => '200207230802']];
+                && $cart['shopping_cart_details'] === [['harga_satuan' => '80000.0', 'jumlah' => '2.0', 'tgl_check_in' => null, 'barcode_produk' => '200207230802']]
+                && $cart['nominal_gratis_ongkir'] === '0.0' && $cart['biaya_admin'] === '0.0' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $cart['konfirmasi_tanggal_bayar']) === 1;
         });
         $this->get('/admin/orders/'.$order->id)->assertInertia(fn (Assert $page) => $page->where('erzapSync.status', 'synced'));
         $this->get('/admin/integrations?status=synced')->assertInertia(fn (Assert $page) => $page->has('syncs.data', 1)->where('syncs.data.0.order_code', $order->order_code)->where('configured', true)->where('missingSettings', []));
@@ -141,13 +147,36 @@ class ErzapAndApiTest extends TestCase
             && $request['shopping_carts']['kode'] === null && str_starts_with($request['shopping_carts']['informasi_tambahan_text'], 'Website order '.$order->order_code));
     }
 
+    public function test_the_staff_who_confirmed_the_order_is_the_erzap_sales_user(): void
+    {
+        Http::fake(['erzap.test/*' => Http::response(['status' => '1', 'message ' => ''])]);
+        config(['services.erzap.enabled' => true, 'services.erzap.base_url' => 'https://erzap.test', 'services.erzap.token' => 't', 'services.erzap.sales_user_id' => '54', 'services.erzap.default_outlet_id' => '1']);
+        $this->product->update(['barcode' => '111']);
+
+        // Admin sets the staff member's Erzap user ID on their account.
+        $staff = User::factory()->create(['role' => 'staff']);
+        $this->actingAs(User::factory()->create(['role' => 'admin']))->put('/admin/users/'.$staff->id, [
+            'name' => $staff->name, 'username' => $staff->username, 'email' => $staff->email, 'role' => 'staff', 'is_active' => true, 'erzap_sales_user_id' => 77,
+        ])->assertSessionHasNoErrors();
+        $this->assertSame(77, $staff->fresh()->erzap_sales_user_id);
+
+        $order = $this->paidOrder();
+        DB::table('order_status_histories')->insert(['order_id' => $order->id, 'actor_id' => $staff->id, 'from_status' => 'pending_review', 'to_status' => 'confirmed', 'created_at' => now()]);
+        $other = $this->paidOrder();
+        $this->artisan('erzap:sync')->assertSuccessful();
+
+        Http::assertSent(fn (HttpRequest $request) => $request['shopping_carts']['kode'] === $order->order_code && $request['shopping_carts']['iduser_sales_penerima_pesanan_online_erzap'] === 77);
+        // Confirmed by nobody with an Erzap ID: the default sales user.
+        Http::assertSent(fn (HttpRequest $request) => $request['shopping_carts']['kode'] === $other->order_code && $request['shopping_carts']['iduser_sales_penerima_pesanan_online_erzap'] === 54);
+    }
+
     public function test_rest_api_serves_public_catalog_and_token_protected_orders(): void
     {
-        $this->outlet->update(['is_delivery_hub' => true]);
+        $this->outlet->update(['delivers' => true]);
         $this->getJson('/api/v1/products')->assertOk()->assertJsonPath('data.0.name', 'Berry')->assertJsonPath('data.0.variant', 'Fullsize')->assertJsonMissingPath('data.0.sku');
         $this->getJson('/api/v1/outlets')->assertOk()->assertJsonPath('data.0.code', 'O');
         $this->getJson('/api/v1/categories')->assertOk()->assertJsonCount(1, 'data');
-        $this->getJson('/api/v1/schedule')->assertOk()->assertJsonPath('data.earliest_date', '2030-01-02')->assertJsonPath('data.cutoff_label', 'H-1 pukul 18.00 WITA');
+        $this->getJson('/api/v1/schedule')->assertOk()->assertJsonPath('data.earliest_date', '2030-01-02')->assertJsonPath('data.cutoff_label', 'H-1 pukul 19.00 WITA');
         $this->getJson('/api/v1/products?outlet_id=999')->assertNotFound();
 
         $order = $this->paidOrder();

@@ -9,7 +9,7 @@ defineOptions({ layout: ShopLayout });
 interface TrackedOrder {
     order_code: string; order_status: Status; payment_status: PaymentStatus; fulfillment_method: 'pickup' | 'delivery'; outlet_name_snapshot: string;
     requested_date: string; requested_time: string | null; subtotal: number; delivery_fee: number | null; total: number; created_at: string;
-    items: Pick<OrderItem, 'id' | 'product_name_snapshot' | 'category_snapshot' | 'variant_snapshot' | 'quantity' | 'subtotal'>[];
+    items: Pick<OrderItem, 'id' | 'parent_item_id' | 'product_name_snapshot' | 'category_snapshot' | 'variant_snapshot' | 'quantity' | 'subtotal'>[];
 }
 const props = defineProps<{ order: TrackedOrder; payment: { url: string; expires_at: string | null } | null; whatsappUrl: string | null }>();
 
@@ -38,7 +38,7 @@ const nextHint = computed(() => {
     if (cancelled.value) return 'Pesanan ini dibatalkan. Hubungi Orlena bila ada pertanyaan.';
     if (props.order.order_status === 'pending_review') return 'Tim Orlena sedang memeriksa produk, jadwal, dan ongkir. Link pembayaran akan dikirim melalui WhatsApp.';
     if (props.payment) return 'Pesanan sudah dikonfirmasi. Silakan selesaikan pembayaran sebelum batas waktu.';
-    if (!paid.value) return 'Link pembayaran belum tersedia atau sudah kedaluwarsa. Hubungi Orlena untuk link baru.';
+    if (!paid.value) return 'Pesanan sudah dikonfirmasi. Silakan lakukan pembayaran sesuai instruksi dari Orlena melalui WhatsApp.';
     if (props.order.order_status === 'completed') return 'Pesanan selesai. Terima kasih sudah memesan di Orlena!';
     return 'Pembayaran diterima. Pesanan Anda sedang disiapkan sesuai jadwal.';
 });

@@ -17,3 +17,18 @@ Products start inactive for PO until enabled by Admin. No outlet price overrides
 ## Updates from Erzap
 
 Later catalog updates come from Erzap: **Products → Import from Erzap** (see [Erzap integration](erzap-integration.md)). The first import matches these 36 products by name and size and fills their barcode and Erzap product code; photos and descriptions stay.
+
+## Hampers and boxes with chosen contents
+
+A product can let the customer choose what goes inside (**Products → edit → Contents and sale period**, or the Excel columns `Tipe`, `Jumlah Isi`, `Isi Dari`, `Harga Isi` of `docs/templates/produk-orlena.xlsx`):
+
+| Type | Contents | Price |
+|---|---|---|
+| **Hampers** | 1 item from its "Isi Dari" list, usually the same size (e.g. Hampers Galungan Fullsize + one Fullsize brownies) | hampers price + the item's normal price |
+| **Box** | `Jumlah Isi` items (e.g. 4 for Mini Size 2x2), repeats allowed | box price; contents Rp 0 |
+
+- Each size is its own product and card on the order form. A regular product also offers the active hampers that allow it ("Jadikan hampers?"), so hampers are reachable from the product and from the Hampers category.
+- Each unit chooses its own contents; the same hampers with different contents become separate cart lines.
+- Contents are stored as order lines under the hampers/box line (their own name, barcode and price) and sent to Erzap as separate products; the same barcode at the same price is one Erzap line.
+- The "Isi Dari" list is kept by hand: new products are never added to a hampers or box automatically. Box contents (e.g. Mini flavours at Rp 0) may stay inactive so they are not sold alone.
+- A fixed package (set contents) remains a regular product with the "Fixed hampers package" text.

@@ -129,7 +129,8 @@ class RolesAndContentTest extends TestCase
         $this->post('/admin/categories', ['name' => 'SAUCE', 'is_active' => false])->assertSessionHasNoErrors();
         [$brownies, $cookies, $sauce] = [Category::where('name', 'Brownies')->sole(), Category::where('name', 'Cookies')->sole(), Category::where('name', 'SAUCE')->sole()];
         $this->assertStringStartsWith('/storage/content/', $brownies->image);
-        $this->get('/admin/categories')->assertInertia(fn (Assert $page) => $page->where('records.data.0.image', $brownies->image));
+        $this->get('/admin/categories')->assertInertia(fn (Assert $page) => $page->where('records.data.0.name', 'SAUCE'));
+        $this->get('/admin/categories?sort=name')->assertInertia(fn (Assert $page) => $page->where('records.data.0.image', $brownies->image));
         // New categories are not added to the homepage automatically, and the category form cannot do it.
         $this->post('/admin/categories', ['name' => 'Tart', 'show_on_website' => true])->assertSessionHasNoErrors();
         $this->assertFalse(Category::where('name', 'Tart')->value('show_on_website'));

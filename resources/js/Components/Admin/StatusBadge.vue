@@ -4,7 +4,7 @@ import { orderStatusLabel, paymentStatusLabel, syncStatusLabels } from '../../Su
 const props = defineProps<{ status: string; kind: 'order' | 'payment' | 'sync' }>();
 // Brand palette by meaning; the text label always carries the status, so colour is never the only cue.
 const tone: Record<string, string> = {
-    pending_review: 'wait', not_created: 'wait', creating: 'wait', pending: 'wait', waiting_config: 'wait', needs_mapping: 'wait',
+    pending_review: 'wait', not_created: 'wait', creating: 'wait', pending: 'wait', waiting_config: 'wait', needs_mapping: 'wait', sending: 'wait',
     confirmed: 'info', refunded: 'info', skipped: 'info',
     processing: 'progress', ready: 'progress', delivering: 'progress',
     completed: 'done', paid: 'done', synced: 'done',

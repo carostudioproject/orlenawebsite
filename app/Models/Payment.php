@@ -16,7 +16,7 @@ class Payment extends Model
 
     protected function casts(): array
     {
-        return ['amount' => 'integer', 'attempt' => 'integer', 'expires_at' => 'datetime', 'paid_at' => 'datetime'];
+        return ['amount' => 'integer', 'attempt' => 'integer', 'expires_at' => 'datetime', 'paid_at' => 'datetime', 'checked_at' => 'datetime'];
     }
 
     public function order(): BelongsTo

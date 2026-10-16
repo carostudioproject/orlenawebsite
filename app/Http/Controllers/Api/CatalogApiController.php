@@ -19,7 +19,7 @@ class CatalogApiController extends Controller
 
     public function outlets()
     {
-        return ['data' => Outlet::takingPreorders()->orderBy('position')->orderBy('name')->get(['id', 'code', 'name', 'address', 'maps_url', 'image', 'is_delivery_hub'])];
+        return ['data' => Outlet::takingPreorders()->orderBy('position')->orderBy('name')->get(['id', 'code', 'name', 'address', 'maps_url', 'image', 'delivers'])];
     }
 
     /** Orderable products; prices follow `outlet_id` when given (outlet price, else base price). */

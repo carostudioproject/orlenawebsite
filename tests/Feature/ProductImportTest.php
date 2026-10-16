@@ -82,7 +82,7 @@ class ProductImportTest extends TestCase
         $this->get('/admin/products/import?token='.$token)->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Admin/Catalog/Import')
             ->where('upload.summary', ['create' => 1, 'update' => 2, 'unchanged' => 0, 'skip' => 2])
-            ->where('upload.mapping', ['barcode' => 1, 'sku' => 0, 'name' => 2, 'price' => 5, 'category' => 3, 'variant' => 4, 'hamper' => null, 'hamper_contents' => null])
+            ->where('upload.mapping', ['barcode' => 1, 'sku' => 0, 'name' => 2, 'price' => 5, 'category' => 3, 'variant' => 4, 'hamper' => null, 'hamper_contents' => null, 'content_type' => null, 'content_count' => null, 'content_from' => null, 'content_pricing' => null])
             ->where('upload.errors', [])->where('upload.update_names', false)
             // Names of existing products stay unless staff opt in.
             ->where('upload.rows.1.current', 'Matcha (Fullsize)')->missing('upload.rows.1.changes.name'));
@@ -160,9 +160,9 @@ class ProductImportTest extends TestCase
         $path = $response->baseResponse->getFile()->getPathname();
 
         [$headers, $rows] = (new ProductImport)->read($path, 'xlsx');
-        $this->assertSame(['Kode Produk', 'Barcode', 'Nama Produk', 'Kategori', 'Ukuran', 'Harga Jual'], $headers);
-        $this->assertSame(['barcode' => 1, 'sku' => 0, 'name' => 2, 'price' => 5, 'category' => 3, 'variant' => 4, 'hamper' => null, 'hamper_contents' => null], (new ProductImport)->detect($headers));
-        $this->assertSame(['ORL-FB-001', '', 'Berry Cheese', 'Fullsize Brownies', 'Fullsize', 80000], $rows[0]);
+        $this->assertSame(['Kode Produk', 'Barcode', 'Nama Produk', 'Kategori', 'Ukuran', 'Harga Jual', 'Tipe', 'Jumlah Isi', 'Isi Dari', 'Harga Isi'], $headers);
+        $this->assertSame(['barcode' => 1, 'sku' => 0, 'name' => 2, 'price' => 5, 'category' => 3, 'variant' => 4, 'hamper' => null, 'hamper_contents' => null, 'content_type' => 6, 'content_count' => 7, 'content_from' => 8, 'content_pricing' => 9], (new ProductImport)->detect($headers));
+        $this->assertSame(['ORL-FB-001', '', 'Berry Cheese', 'Fullsize Brownies', 'Fullsize', 80000, 'Biasa'], array_slice($rows[0], 0, 7));
         $this->assertSame('8990002', $rows[1][1]);
 
         // Staff add the Erzap barcode and upload the same file: only that product changes.

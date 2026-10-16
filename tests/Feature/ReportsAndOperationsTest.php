@@ -122,10 +122,13 @@ class ReportsAndOperationsTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'content_editor']))->get('/admin/customers')->assertForbidden();
         $this->actingAs(User::factory()->create(['role' => 'finance']));
 
-        $this->get('/admin/customers?sort=spent')->assertInertia(fn (Assert $page) => $page->component('Admin/Customers/Index')->has('customers.data', 2)
+        $this->get('/admin/customers?sort=spent&dir=desc')->assertInertia(fn (Assert $page) => $page->component('Admin/Customers/Index')->has('customers.data', 2)->where('sort', ['sort' => 'spent', 'dir' => 'desc'])
             // Sinta: 235.000 + 900.000 (paid, earlier period); refunded and unpaid orders excluded.
             ->where('customers.data.0', fn ($row) => $row['whatsapp'] === '6281111111111' && $row['spent'] === 1135000 && $row['orders'] === 4)
             ->where('customers.data.1.name', 'Budi W'));
+        // Ascending puts the smaller spender first; an unknown column keeps the default order.
+        $this->get('/admin/customers?sort=spent&dir=asc')->assertInertia(fn (Assert $page) => $page->where('customers.data.0.name', 'Budi W'));
+        $this->get('/admin/customers?sort=password&dir=asc')->assertOk()->assertInertia(fn (Assert $page) => $page->where('sort', ['sort' => null, 'dir' => null]));
         $this->get('/admin/customers?search=budi')->assertInertia(fn (Assert $page) => $page->has('customers.data', 1));
         $this->get('/admin/customers/6282222222222')->assertInertia(fn (Assert $page) => $page->component('Admin/Customers/Show')
             ->where('names', ['Budi W', 'Budi'])->where('totals.orders', 2)->where('totals.spent', 100000)->has('orders.data', 2)->where('favourites.0.name', 'Berry'));
