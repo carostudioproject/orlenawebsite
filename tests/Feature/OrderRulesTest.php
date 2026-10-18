@@ -208,6 +208,13 @@ class OrderRulesTest extends TestCase
         $this->actingAs(User::factory()->create());
         $this->get('/admin/orders/'.$order->id)->assertInertia(fn (Assert $page) => $page->where('order.nearest_outlet', true)->has('outlets', 3));
         $review = ['review_version' => 0, 'delivery_fee' => 20000, 'note' => 'Nearest outlet'];
+        // The suggested outlet is a placeholder: no review or confirmation until staff choose one.
+        $this->post('/admin/orders/'.$order->id.'/review', [...$review, 'outlet_id' => ''])->assertSessionHasErrors('outlet_id');
+        $this->post('/admin/orders/'.$order->id.'/review', $review)->assertSessionHasErrors('outlet_id');
+        $order->update(['delivery_fee' => 20000]);
+        $this->post('/admin/orders/'.$order->id.'/confirm', ['review_version' => 0]);
+        $this->assertSame(['pending_review', true], [$order->fresh()->order_status, $order->fresh()->nearest_outlet]);
+        $order->update(['delivery_fee' => null]);
         $this->post('/admin/orders/'.$order->id.'/review', [...$review, 'outlet_id' => $pickupOnly->id])->assertSessionHasErrors('outlet_id');
         $this->post('/admin/orders/'.$order->id.'/review', [...$review, 'outlet_id' => $near->id])->assertSessionHasErrors('requested_date');
         $near->update(['daily_quota' => 2]);

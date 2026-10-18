@@ -46,6 +46,10 @@ class CreatePaymentLink
             if ($locked->delivery_fee === null) {
                 $this->fail('Tentukan ongkir terlebih dahulu melalui form pemeriksaan.');
             }
+            // The outlet suggested for "nearest outlet" is only a placeholder; staff choose it in the review form.
+            if ($locked->nearest_outlet) {
+                $this->fail('Choose the shipping outlet in the review form first: the customer asked for the nearest outlet.');
+            }
             $locked->update(['order_status' => 'confirmed']);
             OrderHistory::record($locked, 'pending_review', 'confirmed', $actor);
             Audit::record('order.confirmed', $locked, ['order_status' => 'confirmed', 'total' => $locked->total], $actor);

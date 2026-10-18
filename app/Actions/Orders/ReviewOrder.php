@@ -48,6 +48,9 @@ class ReviewOrder
             if ($date !== $locked->requested_date->toDateString() && $closed = $dates->closedReason($date, english: true)) {
                 throw ValidationException::withMessages(['requested_date' => $closed.' Reopen it under PO schedule if this was agreed.']);
             }
+            if ($locked->nearest_outlet && empty($data['outlet_id'])) {
+                throw ValidationException::withMessages(['outlet_id' => 'The customer asked for the nearest outlet: choose the outlet that ships this order.']);
+            }
             // Locked like checkout, so two changes cannot both take the last place at an outlet.
             $outlet = Outlet::lockForUpdate()->find($locked->outlet_id);
             $outletChanged = isset($data['outlet_id']) && (int) $data['outlet_id'] !== $locked->outlet_id;
