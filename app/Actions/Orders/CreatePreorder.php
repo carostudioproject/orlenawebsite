@@ -35,6 +35,11 @@ class CreatePreorder
         if ($request->session()->get('checkout_key') !== $data['checkout_key']) {
             throw ValidationException::withMessages(['checkout' => 'Sesi form berubah. Muat ulang halaman untuk melanjutkan.']);
         }
+        // Nobody chooses products, a date and fills in their details in a few seconds; scripts do.
+        $issued = $request->session()->get('checkout_issued_at');
+        if (is_int($issued) && now()->getTimestamp() - $issued < (int) config('site.checkout_min_seconds', 5)) {
+            throw ValidationException::withMessages(['checkout' => 'Form terkirim terlalu cepat. Periksa pesanan Anda lalu kirim lagi.']);
+        }
 
         return DB::transaction(function () use ($data, $pricing, $ownerHash, $requestHash) {
             // Pickup uses the chosen outlet; delivery (Gojek/Grab) ships from the chosen delivery outlet, or from the first one
@@ -73,6 +78,14 @@ class CreatePreorder
             }
             if ($full = $capacity->problem($outlet, $data['requested_date'], $data['requested_time'], $data['fulfillment_method'])) {
                 throw ValidationException::withMessages([str_contains($full, 'Slot jam') ? 'requested_time' : 'requested_date' => $full]);
+            }
+            // Unpaid orders hold places in the quota: one WhatsApp number may have 3 open unpaid orders and send 5 a day.
+            $sameNumber = Order::whereHas('customer', fn ($query) => $query->where('whatsapp', $data['whatsapp']));
+            $open = (clone $sameNumber)->whereIn('order_status', ['pending_review', 'confirmed'])->where('payment_status', '!=', 'paid')->count();
+            if ($open >= 3 || (clone $sameNumber)->where('created_at', '>=', now()->subDay())->count() >= 5) {
+                throw ValidationException::withMessages(['whatsapp' => $open >= 3
+                    ? 'Nomor WhatsApp ini masih punya 3 pesanan yang belum dibayar. Selesaikan pembayaran atau hubungi Orlena melalui WhatsApp.'
+                    : 'Nomor WhatsApp ini sudah mengirim 5 pesanan dalam 24 jam. Hubungi Orlena melalui WhatsApp untuk pesanan berikutnya.']);
             }
             // Do not merge customers based on an unverified phone/email supplied by another visitor.
             $customer = Customer::create(['name' => $data['name'], 'whatsapp' => $data['whatsapp'], 'email' => $data['email'] ?? null]);

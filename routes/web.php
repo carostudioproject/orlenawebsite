@@ -38,7 +38,7 @@ Route::get('/robots.txt', [PublicPageController::class, 'robots']);
 
 Route::middleware(PrivateOrderResponse::class)->group(function () {
     Route::get('/order', [CheckoutController::class, 'index'])->block(10, 10);
-    Route::post('/order', [CheckoutController::class, 'store'])->middleware('throttle:preorder-submit')->block(10, 10);
+    Route::post('/order', [CheckoutController::class, 'store'])->middleware('throttle:preorder-create')->block(10, 10);
     Route::get('/order/jadwal', [CheckoutController::class, 'availability'])->middleware('throttle:60,1');
     Route::redirect('/products', '/order');
     Route::redirect('/products/{product}', '/order')->whereNumber('product');

@@ -53,6 +53,13 @@ class AppServiceProvider extends ServiceProvider
             return $known ? Limit::perMinute(120)->by('token:'.hash('sha256', $token)) : Limit::perMinute(60)->by('ip:'.$request->ip());
         });
         RateLimiter::for('preorder-submit', fn (Request $request) => Limit::perMinute(5)->by($request->ip()));
+        // Sending a new order: unpaid orders hold a place in the outlet quota until H-1 21.00, so floods are capped per
+        // minute, hour and day. Mobile networks share IPs, so the daily cap stays well above one family's orders.
+        RateLimiter::for('preorder-create', fn (Request $request) => [
+            Limit::perMinute(5)->by('min:'.$request->ip()),
+            Limit::perHour(15)->by('hour:'.$request->ip()),
+            Limit::perDay(20)->by('day:'.$request->ip()),
+        ]);
         // The payment page polls every few seconds while a QRIS is open.
         RateLimiter::for('payment-status', fn (Request $request) => Limit::perMinute(40)->by($request->ip()));
         // Choosing VA BCA or QRIS on /bayar creates a DOKU link each time.

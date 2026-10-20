@@ -31,6 +31,8 @@ class CheckoutController extends Controller
         }
         if (! $request->session()->has('checkout_key')) {
             $request->session()->put('checkout_key', (string) Str::uuid());
+            // When this form was first shown: a submission seconds later is a bot (CreatePreorder).
+            $request->session()->put('checkout_issued_at', now()->getTimestamp());
         }
 
         return ShopPage::render($request, 'OrderForm', 'Form pre-order', [

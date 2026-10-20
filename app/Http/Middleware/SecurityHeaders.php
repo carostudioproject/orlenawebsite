@@ -31,6 +31,11 @@ class SecurityHeaders
                 $response->headers->set($name, $value);
             }
         }
+        // No PHP version in the response: it only helps someone looking for a known weakness.
+        $response->headers->remove('X-Powered-By');
+        if (! app()->runningInConsole()) {
+            header_remove('X-Powered-By');
+        }
 
         return $response;
     }

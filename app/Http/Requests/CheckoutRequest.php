@@ -87,6 +87,8 @@ class CheckoutRequest extends FormRequest
                     : $fail('Tempel link lokasi dari Google Maps (diawali https://maps.app.goo.gl/ atau https://www.google.com/maps/).')],
             'customer_note' => ['nullable', 'string', 'max:2000'],
             'card_message' => ['nullable', 'string', 'max:300'],
+            // Honeypot: a field people never see. Only bots that fill every input send it.
+            'website' => ['prohibited'],
         ];
     }
 
@@ -106,6 +108,7 @@ class CheckoutRequest extends FormRequest
             'items.*.quantity.max' => 'Jumlah maksimal 99 per produk.',
             'requested_date.date_format' => 'Pilih tanggal PO yang valid.',
             'card_message.max' => 'Pesan kartu ucapan maksimal 300 karakter.',
+            'website.prohibited' => 'Pesanan tidak dapat dikirim. Muat ulang halaman lalu coba lagi.',
             'requested_time.date_format' => 'Pilih jam yang valid.',
         ];
     }

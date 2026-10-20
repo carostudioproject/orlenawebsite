@@ -23,6 +23,8 @@ const form = useForm({
     checkout_key: props.checkoutKey, items: [] as CartLine[],
     name: '', whatsapp: '', email: '', fulfillment_method: 'pickup' as 'pickup' | 'delivery', outlet_id: '' as number | '' | 'nearest',
     requested_date: '', requested_time: '', delivery_address: '', recipient_whatsapp: '', location_url: '', customer_note: '', card_message: '',
+    // Honeypot: hidden from people, so only bots fill it in (the server refuses the order).
+    website: '',
 });
 watch(() => props.checkoutKey, key => { form.checkout_key = key; });
 
@@ -174,6 +176,7 @@ const panelLines = computed<PanelLine[]>(() => cart.value.map(row => ({
     <div v-if="!products.length || !outlets.length" role="status" class="my-8 rounded-2xl bg-cream p-6"><h2 class="text-xl">Pemesanan belum tersedia</h2><p class="mt-2 text-sm">Produk dan outlet sedang disiapkan. Form dapat digunakan setelah pilihan tersedia.</p></div>
 
     <form class="mt-8 space-y-6 pb-28" novalidate @submit.prevent="submit">
+        <div class="order-honeypot" aria-hidden="true"><label for="website">Website</label><input id="website" v-model="form.website" name="website" type="text" tabindex="-1" autocomplete="off"></div>
         <div v-if="form.hasErrors" ref="errorSummary" tabindex="-1" role="alert" class="admin-alert admin-alert-error"><p class="font-bold">Pesanan belum terkirim. Periksa kembali:</p><ul class="list-disc pl-5"><li v-for="(error, key) in form.errors" :key="key">{{ error }}</li></ul><button type="button" class="mt-2 underline" :disabled="quoting || form.processing" @click="refreshQuote">Muat ulang harga</button></div>
 
         <section class="admin-card space-y-5" aria-labelledby="step-products">
