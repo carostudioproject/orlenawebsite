@@ -73,7 +73,7 @@ function pick(product: OrderProduct, option: ContentOption, step: number) {
     if (next < 0 || (step > 0 && picked(product) >= (product.content_count ?? 0))) return;
     state.picks[option.id] = next;
 }
-/** Hampers and Mix n Match boxes ask for contents; a box with fixed flavours does not. */
+/** Hampers and Mini Size Mix boxes ask for contents; a box with fixed flavours does not. */
 const isChoice = (product: OrderProduct) => product.content_type === 'hampers' || product.content_type === 'box';
 const chosenHampers = (product: OrderProduct) => props.products.find(hampers => hampers.id === card(product).hampersId) ?? null;
 /** Price of one unit, including the chosen contents or hampers. */

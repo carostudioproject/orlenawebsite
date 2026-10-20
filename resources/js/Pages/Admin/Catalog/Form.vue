@@ -47,7 +47,7 @@ const kind = ref<Kind>(form.content_type === 'flavour' ? 'content' : form.conten
 const kinds: { value: Kind; label: string; hint: string; icon: string }[] = [
     { value: 'regular', label: 'Regular product', hint: 'Sold on its own, e.g. Blueberry Cheese Fullsize.', icon: 'fa-cookie-bite' },
     { value: 'hampers', label: 'Hampers', hint: 'The customer picks 1 product inside; its price is added.', icon: 'fa-gift' },
-    { value: 'box', label: 'Box (Mix n Match)', hint: 'The customer picks several items, e.g. 4 Mini flavours; one price per box.', icon: 'fa-box-open' },
+    { value: 'box', label: 'Box (Mini Size Mix)', hint: 'The customer picks several items, e.g. 4 Mini flavours; one price per box.', icon: 'fa-box-open' },
     { value: 'set', label: 'Box with fixed flavours', hint: 'Orlena sets the flavours, e.g. 2 Almond + 2 Choco; the customer just adds it.', icon: 'fa-box' },
     { value: 'content', label: 'Box flavour only', hint: 'E.g. Mini Size Almond: Rp 0, only chosen inside a box.', icon: 'fa-layer-group' },
 ];
@@ -123,7 +123,7 @@ function submit() {
             <Field id="variant" label="Variant (optional)" hint="E.g. Fullsize, Halfsize (20x10), Box 2x2. Each size is its own product (own card, photo, price and Erzap barcode)." :error="form.errors.variant"><template #default="{ describedBy }"><input id="variant" v-model="form.variant" maxlength="40" list="variant-suggestions" placeholder="Leave empty if there is only one kind" :aria-describedby="describedBy" :aria-invalid="!!form.errors.variant"><datalist id="variant-suggestions"><option value="Fullsize" /><option value="Halfsize" /></datalist></template></Field>
             <Field id="description" label="Description" :error="form.errors.description"><template #default="{ describedBy }"><textarea id="description" v-model="form.description" rows="4" maxlength="5000" :aria-describedby="describedBy"></textarea></template></Field>
             <Field v-if="kind !== 'content'" id="price" :label="kind === 'box' ? 'Price per box (Rp)' : kind === 'hampers' ? 'Hampers price without its contents (Rp)' : 'Price (Rp)'" :error="form.errors.price"><template #default="{ describedBy }"><input id="price" v-model="form.price" type="number" min="0" max="999999999" step="1" :required="form.is_active" :aria-describedby="describedBy" :aria-invalid="!!form.errors.price"></template></Field>
-            <p v-else class="admin-alert admin-alert-info m-0 text-sm"><i class="fa-solid fa-layer-group" aria-hidden="true"></i> Price Rp 0 and inactive: this flavour is not shown as its own product. Tick it in the box (e.g. Mix n Match) under <em>Can be chosen as contents</em>. Its barcode still goes to Erzap.</p>
+            <p v-else class="admin-alert admin-alert-info m-0 text-sm"><i class="fa-solid fa-layer-group" aria-hidden="true"></i> Price Rp 0 and inactive: this flavour is not shown as its own product. Tick it in the box (e.g. Mini Size Mix) under <em>Can be chosen as contents</em>. Its barcode still goes to Erzap.</p>
             <fieldset class="space-y-4 rounded-xl border border-chocolate/15 p-4">
                 <legend class="px-2 text-sm font-bold">Contents and sale period</legend>
                 <template v-if="form.content_type && form.content_type !== 'flavour'">
