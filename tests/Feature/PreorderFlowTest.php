@@ -251,7 +251,8 @@ class PreorderFlowTest extends TestCase
     public function test_checkout_is_rate_limited_and_sensitive_pages_never_load_tracking(): void
     {
         [$product, $outlet] = $this->catalog();
-        config(['site.meta_pixel_enabled' => true]);
+        // Order pages load the Pixel only with META_PIXEL_ORDER_PAGES; payment, tracking and dashboard pages never do.
+        config(['services.meta.enabled' => true, 'services.meta.pixel_id' => '123456789012345', 'services.meta.order_pages' => false]);
         $payload = $this->checkout($product, $outlet);
         $this->get('/order?outlet_id='.$outlet->id)->assertDontSee('/assets/js/meta-pixel.js', false)->assertSee('noindex,nofollow', false);
         for ($i = 0; $i < 5; $i++) {

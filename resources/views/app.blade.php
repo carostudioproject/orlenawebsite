@@ -28,6 +28,7 @@
         @include('partials.site-header')
         <main id="main-content" tabindex="-1">@inertia</main>
         @include('partials.site-footer')
+        @include('partials.meta-pixel', ['pixelId' => \App\Support\MetaPixel::forOrderPage(request())])
     @else
         @inertia
     @endif

@@ -65,6 +65,19 @@ return [
         'snap_token_path' => env('DOKU_SNAP_TOKEN_PATH', '/authorization/v1/access-token/b2b'),
     ],
 
+    // Meta (Facebook/Instagram) Ads Pixel: PageView, Contact (WhatsApp), FindLocation (Google Maps) and the submitted
+    // PO request (lead). Purchase is reported by the ads team by hand. Nothing loads until META_PIXEL_ENABLED is true
+    // and META_PIXEL_ID is set; the customer's name, WhatsApp number or address are never sent.
+    'meta' => [
+        'enabled' => (bool) env('META_PIXEL_ENABLED', false),
+        'pixel_id' => (string) env('META_PIXEL_ID', ''),
+        // Also on /order, the order confirmation and "Tambah pesanan": the submitted PO request (lead) is sent from the confirmation.
+        // Payment, order tracking and dashboard pages never load the Pixel.
+        'order_pages' => (bool) env('META_PIXEL_ORDER_PAGES', false),
+        // Event sent when a PO request is submitted: Lead or SubmitApplication (the ads team's choice).
+        'lead_event' => in_array(env('META_LEAD_EVENT', 'Lead'), ['Lead', 'SubmitApplication'], true) ? env('META_LEAD_EVENT', 'Lead') : 'Lead',
+    ],
+
     // Filled in once Erzap sends API documentation and sandbox credentials. Paths are placeholders until then.
     'erzap' => [
         // OLZAP "simpan_pesanan_penjualan": base URL like https://<domain_erzap>:4443, token sent in the body as token_erzap.

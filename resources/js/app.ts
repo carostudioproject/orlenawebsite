@@ -6,6 +6,7 @@ import '@fortawesome/fontawesome-free/css/fontawesome.min.css';
 import { createApp, h, type DefineComponent } from 'vue';
 import { createInertiaApp, router } from '@inertiajs/vue3';
 import { hidePageLoader } from './Support/pageLoader';
+import { track } from './Support/metaPixel';
 
 createInertiaApp({
     // One chunk per page: public visitors never download the dashboard pages.
@@ -18,6 +19,13 @@ createInertiaApp({
         hidePageLoader();
     },
     progress: { color: '#3b0304', delay: 150 },
+});
+
+// Meta Pixel: in-app page changes count as page views, only on pages the server allows (order pages; see MetaPixel.php).
+let firstVisit = true;
+router.on('navigate', () => {
+    if (firstVisit) { firstVisit = false; return; }
+    track('PageView');
 });
 
 // Page changes that take a moment get a spinner overlay. Live filters, polling and partial reloads keep the page usable.

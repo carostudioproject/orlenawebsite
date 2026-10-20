@@ -30,9 +30,6 @@
     @if ($site['whatsappNumber'] ?? null)
         <a href="https://wa.me/{{ $site['whatsappNumber'] }}" target="_blank" rel="noopener noreferrer" class="whatsapp-floating" aria-label="Chat with Orlena on WhatsApp"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i></a>
     @endif
-    @if (config('site.meta_pixel_enabled'))
-        <script src="/assets/js/meta-pixel.js" defer></script>
-        <noscript><img height="1" width="1" style="display:none" alt="" src="https://www.facebook.com/tr?id=787759320264256&amp;ev=PageView&amp;noscript=1"></noscript>
-    @endif
+    @include('partials.meta-pixel', ['pixelId' => \App\Support\MetaPixel::id()])
 </body>
 </html>

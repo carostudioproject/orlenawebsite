@@ -146,7 +146,7 @@ class AdminFoundationTest extends TestCase
 
     public function test_admin_pages_are_never_indexed_or_tracked(): void
     {
-        config(['site.indexable' => true, 'site.meta_pixel_enabled' => true]);
+        config(['site.indexable' => true, 'services.meta' => ['enabled' => true, 'pixel_id' => '123456789012345', 'order_pages' => true]]);
         $this->get('/admin/login')->assertOk()->assertSee('noindex,nofollow', false)->assertDontSee('/assets/js/meta-pixel.js', false);
     }
 

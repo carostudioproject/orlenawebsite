@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\MetaPixel;
 use App\Support\PreorderDate;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -14,7 +15,9 @@ class HandleInertiaRequests extends Middleware
     {
         if (! $request->is('admin', 'admin/*')) {
             // Order pages: the header and footer (with social links) are server-rendered in app.blade.php.
-            return [...parent::share($request), 'poCutoff' => fn () => app(PreorderDate::class)->cutoffLabel()];
+            return [...parent::share($request), 'poCutoff' => fn () => app(PreorderDate::class)->cutoffLabel(),
+                // Set only where the Meta Pixel loads on order pages: the event name for a submitted PO request.
+                'metaLeadEvent' => fn () => MetaPixel::forOrderPage($request) ? MetaPixel::leadEvent() : null];
         }
 
         $user = $request->user();
