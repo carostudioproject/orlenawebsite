@@ -123,7 +123,9 @@ class ErzapAndApiTest extends TestCase
                 && $cart['nama'] === 'Sinta' && $cart['telepon'] === '6281234567890' && $cart['alamat_pengiriman'] === 'Secret address 1'
                 && $cart['pelanggan_ekspedisi'] === 'GOJEK/GRAB' && $cart['pelanggan_payment_channel'] === 'DOKU-QRIS'
                 && $cart['shopping_cart_details'] === [['harga_satuan' => '80000.0', 'jumlah' => '2.0', 'tgl_check_in' => null, 'barcode_produk' => '200207230802']]
-                && $cart['nominal_gratis_ongkir'] === '0.0' && $cart['biaya_admin'] === '0.0' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $cart['konfirmasi_tanggal_bayar']) === 1;
+                && $cart['nominal_gratis_ongkir'] === '0.0' && $cart['biaya_admin'] === '0.0' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $cart['konfirmasi_tanggal_bayar']) === 1
+                // The note is three lines: order, where and when, how it was paid (no address or other private details).
+                && preg_match("/^Website Order {$order->order_code}\nDelivery \(Gojek\/Grab\) from .+, \d{4}-\d{2}-\d{2}( \d{2}:\d{2})? WITA\nPaid via DOKU \(QRIS\)$/", $cart['informasi_tambahan_text']) === 1;
         });
         $this->get('/admin/orders/'.$order->id)->assertInertia(fn (Assert $page) => $page->where('erzapSync.status', 'synced'));
         $this->get('/admin/integrations?status=synced')->assertInertia(fn (Assert $page) => $page->has('syncs.data', 1)->where('syncs.data.0.order_code', $order->order_code)->where('configured', true)->where('missingSettings', []));
@@ -144,7 +146,7 @@ class ErzapAndApiTest extends TestCase
         $this->assertSame('synced', IntegrationSync::sole()->status);
         // Without our code Erzap numbers the order itself; the Order Code stays readable in the note.
         Http::assertSent(fn (HttpRequest $request) => $request['shopping_carts']['idoutlet_penerima_pesanan_online_erzap'] === 5
-            && $request['shopping_carts']['kode'] === null && str_starts_with($request['shopping_carts']['informasi_tambahan_text'], 'Website order '.$order->order_code));
+            && $request['shopping_carts']['kode'] === null && str_starts_with($request['shopping_carts']['informasi_tambahan_text'], 'Website Order '.$order->order_code."\n"));
     }
 
     public function test_the_staff_who_confirmed_the_order_is_the_erzap_sales_user(): void

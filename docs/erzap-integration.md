@@ -39,7 +39,7 @@ check the preview, then **Apply**.
 | `total_pesanan` | Product subtotal |
 | `total_pembayaran` | Amount paid via DOKU |
 | `konfirmasi_dari_bank`, `konfirmasi_tanggal_bayar`, `pelanggan_payment_channel` | `DOKU`, payment date (WITA, `YYYY-MM-DD`), e.g. `DOKU-QRIS` or `DOKU-VIRTUAL_ACCOUNT_BCA` |
-| `informasi_tambahan_text` | "Website order {Order Code}", pickup/delivery, PO date and time, payment method, customer note |
+| `informasi_tambahan_text` | Three lines: "Website Order {Order Code}", pickup/delivery outlet with PO date and time, payment method |
 | `idoutlet_penerima_pesanan_online_erzap` | Outlet's Erzap outlet ID (Mapping), else `ERZAP_DEFAULT_OUTLET_ID` |
 | `iduser_sales_penerima_pesanan_online_erzap` | `ERZAP_SALES_USER_ID` |
 | `token_erzap` | `ERZAP_TOKEN` (added when sending, never stored in the log) |

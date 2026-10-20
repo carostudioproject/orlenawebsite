@@ -192,17 +192,13 @@ class ErzapSync
         $delivery = $order->fulfillment_method === 'delivery';
         $address = $delivery ? (string) $order->delivery_address : '';
         $schedule = $order->requested_date->toDateString().($order->requested_time ? ' '.substr($order->requested_time, 0, 5) : '').' WITA';
-        $note = implode(' | ', array_filter([
-            'Website order '.$order->order_code,
+        // Three short lines, as Orlena reads them in Erzap: order, where and when, how it was paid.
+        // Address, recipient, location, notes and card texts stay on the website (order page, Rekap CK).
+        $note = implode("\n", [
+            'Website Order '.$order->order_code,
             ($delivery ? 'Delivery (Gojek/Grab) from '.$order->outlet_name_snapshot : 'Pickup '.$order->outlet_name_snapshot).', '.$schedule,
-            $delivery && $order->recipient_whatsapp ? 'Recipient WA: '.$order->recipient_whatsapp : null,
-            $delivery && $order->location_url ? 'Location: '.$order->location_url : null,
             'Paid via '.($payment?->provider === 'manual' ? 'manual payment' : 'DOKU').($payment?->payment_type ? ' ('.$payment->payment_type.')' : ''),
-            $order->customer_note ? 'Note: '.$order->customer_note : null,
-            $order->card_message ? 'Greeting card: '.$order->card_message : null,
-            // Texts the customer wrote on a line (greeting card, writing on a cake…).
-            ...$order->items->flatMap(fn ($item) => array_map(fn ($text) => $item->product_name_snapshot.' - '.$text, $item->inputLines()))->all(),
-        ]));
+        ]);
 
         return [
             'alamat' => $address, 'alamat_pengiriman' => $address,
