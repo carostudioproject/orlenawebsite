@@ -18,7 +18,7 @@
   <section class="blog-detail-featured">
     <div class="container">
       <div class="blog-detail-image">
-        <img src="{{ $blog['image'] }}" alt="{{ $blog['title'] }}" fetchpriority="high" />
+        <img src="{{ $blog['image'] }}"{{ \App\Support\ResponsiveImage::attrs($blog['image'], '(max-width: 767px) 100vw, 1000px') }} alt="{{ $blog['title'] }}" fetchpriority="high" />
       </div>
     </div>
   </section>

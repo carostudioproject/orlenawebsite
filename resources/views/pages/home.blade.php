@@ -14,7 +14,7 @@
             @foreach ($hero as $index => $slide)
             <li class="splide__slide slide-img">
               <div class="slide-wrapper">
-                <img src="{{ $slide['image'] }}" alt="{{ $slide['alt'] }}" @if ($index === 0) fetchpriority="high" @else loading="lazy" @endif />
+                <img src="{{ $slide['image'] }}"{{ \App\Support\ResponsiveImage::attrs($slide['image'], '(max-width: 767px) 80vw, 720px') }} alt="{{ $slide['alt'] }}" @if ($index === 0) fetchpriority="high" @else loading="lazy" @endif />
               </div>
             </li>
             @endforeach
@@ -49,7 +49,7 @@
             <li class="splide__slide">
               <div class="baked-category-card">
                 <div class="baked-category-image">
-                  <img src="{{ $item['image'] }}" alt="{{ $item['name'] }}" loading="lazy">
+                  <img src="{{ $item['image'] }}"{{ \App\Support\ResponsiveImage::attrs($item['image'], '(max-width: 767px) 60vw, 280px') }} alt="{{ $item['name'] }}" loading="lazy">
                 </div>
                 <div class="baked-category-content">
                   <h3>{{ $item['name'] }}</h3>
@@ -77,7 +77,7 @@
             <li class="splide__slide">
               <article class="home-outlet-card">
                 <div class="home-outlet-image">
-                  <img src="{{ $outlet['image'] }}" alt="{{ $outlet['alt'] }}" loading="lazy">
+                  <img src="{{ $outlet['image'] }}"{{ \App\Support\ResponsiveImage::attrs($outlet['image'], '(max-width: 767px) 80vw, 280px') }} alt="{{ $outlet['alt'] }}" loading="lazy">
                 </div>
                 <div class="home-outlet-content">
                   <h3>
@@ -115,7 +115,7 @@
             <li class="splide__slide">
               <article class="brand-collaboration-card">
                 <div class="brand-collaboration-image">
-                  <img src="{{ $collaboration['image'] }}" alt="Orlena x {{ $collaboration['name'] }}" loading="lazy">
+                  <img src="{{ $collaboration['image'] }}"{{ \App\Support\ResponsiveImage::attrs($collaboration['image'], '(max-width: 767px) 85vw, 280px') }} alt="Orlena x {{ $collaboration['name'] }}" loading="lazy">
                 </div>
                 <div class="brand-collaboration-info">
                   <span class="brand-collaboration-name">
@@ -156,7 +156,7 @@
             <li class="splide__slide">
               <article class="blog-card">
                 <a href="/blog" class="blog-image-wrapper">
-                  <img src="{{ $blog['image'] }}" alt="{{ $blog['title'] }}" class="blog-image" loading="lazy" />
+                  <img src="{{ $blog['image'] }}"{{ \App\Support\ResponsiveImage::attrs($blog['image'], '(max-width: 767px) 75vw, 360px') }} alt="{{ $blog['title'] }}" class="blog-image" loading="lazy" />
                 </a>
                 <div class="blog-card-content">
                   <span class="blog-category">

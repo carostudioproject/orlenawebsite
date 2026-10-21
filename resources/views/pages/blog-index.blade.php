@@ -21,7 +21,7 @@
         @foreach ($blogs as $index => $blog)
         <article class="blog-page-card">
           <a href="/blog/{{ $blog['slug'] }}" class="blog-page-image">
-            <img src="{{ $blog['image'] }}" alt="{{ $blog['title'] }}" @if ($index > 1) loading="lazy" @endif />
+            <img src="{{ $blog['image'] }}"{{ \App\Support\ResponsiveImage::attrs($blog['image'], '(max-width: 767px) 90vw, 560px') }} alt="{{ $blog['title'] }}" @if ($index > 1) loading="lazy" @endif />
           </a>
           <div class="blog-page-card-content">
             <span class="blog-page-category">

@@ -57,7 +57,7 @@
             <li class="splide__slide">
               <article class="about-outlet-card">
                 <div class="about-outlet-image">
-                  <img src="{{ $outlet['image'] }}" alt="{{ $outlet['alt'] }}" loading="lazy">
+                  <img src="{{ $outlet['image'] }}"{{ \App\Support\ResponsiveImage::attrs($outlet['image'], '(max-width: 767px) 80vw, 280px') }} alt="{{ $outlet['alt'] }}" loading="lazy">
                 </div>
                 <div class="about-outlet-info">
                   <h3>

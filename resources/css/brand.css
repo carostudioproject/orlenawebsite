@@ -4,6 +4,7 @@
   src: url(/assets/fonts/neue_regrade/Neue\ Regrade\ Regular.otf) format('opentype');
   font-weight: normal;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
@@ -11,6 +12,7 @@
   src: url(/assets/fonts/neue_regrade/Neue\ Regrade\ Bold.otf) format('opentype');
   font-weight: bold;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
@@ -18,6 +20,7 @@
   src: url(/assets/fonts/neue_regrade/Neue\ Regrade\ Medium.otf) format('opentype');
   font-weight: normal;
   font-style: normal;
+  font-display: swap;
 }
 
 @font-face {
@@ -25,6 +28,7 @@
   src: url(/assets/fonts/Jinglers-Font/jinglers.otf) format('opentype');
   font-weight: normal;
   font-style: normal;
+  font-display: swap;
 }
 
 

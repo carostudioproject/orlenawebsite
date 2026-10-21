@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Support\ResponsiveImage;
 use DOMDocument;
 use DOMXPath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -100,6 +101,20 @@ class PublicWebsiteTest extends TestCase
         config(['site.indexable' => true]);
         $this->get('/robots.txt')->assertSee('Sitemap:', false);
         $this->get('/')->assertSee('content="index,follow"', false);
+    }
+
+    public function test_site_photos_offer_smaller_copies_and_uploads_are_left_alone(): void
+    {
+        $set = ResponsiveImage::srcset('/assets/images/hero-section/Header orlena-01.png');
+        $this->assertStringContainsString('/assets/images/hero-section/Header%20orlena-01.w480.webp 480w', $set);
+        $this->assertStringEndsWith('/assets/images/hero-section/Header%20orlena-01.png 1122w', $set);
+        $this->assertNull(ResponsiveImage::srcset('/storage/content/upload.webp'));
+        $this->assertNull(ResponsiveImage::srcset('/assets/images/Orlena-Logo.png'));
+        $this->assertNull(ResponsiveImage::srcset('/assets/images/../../.env.png'));
+
+        $hero = $this->dom('/')->query('//img[@fetchpriority="high" and contains(@src,"hero-section")]')->item(0);
+        $this->assertStringContainsString('w480.webp 480w', $hero->getAttribute('srcset'));
+        $this->assertSame('(max-width: 767px) 80vw, 720px', $hero->getAttribute('sizes'));
     }
 
     public function test_order_pages_share_the_server_rendered_header_and_footer(): void

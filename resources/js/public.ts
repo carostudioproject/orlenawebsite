@@ -13,9 +13,12 @@ initMobileMenu();
 initNavigation();
 mountSliders();
 
-// The splash stays until images are in, but never longer than 2.5 s so text is readable quickly on slow networks.
-if (document.readyState === 'complete') hidePageLoader();
+// The splash only waits for the page's main photo (the first hero banner or article cover), not for every image,
+// and never longer than 1.5 s, so the first screen shows as early as possible on slow networks.
+const mainPhoto = document.querySelector<HTMLImageElement>('main img[fetchpriority="high"]');
+if (!mainPhoto || mainPhoto.complete) hidePageLoader();
 else {
-    window.addEventListener('load', hidePageLoader, { once: true });
-    window.setTimeout(hidePageLoader, 2500);
+    mainPhoto.addEventListener('load', hidePageLoader, { once: true });
+    mainPhoto.addEventListener('error', hidePageLoader, { once: true });
+    window.setTimeout(hidePageLoader, 1500);
 }
