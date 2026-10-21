@@ -9,6 +9,8 @@
 }
 .nav-underline:hover::after, .nav-underline:focus-visible::after { transform: scaleX(1); transform-origin: left center; }
 
+/* Instagram and TikTok in the header: inline SVG at the size the icon font had (Instagram was fa-lg). */
+.header-social .icon-instagram { width: 1.25em; height: 1.25em; }
 .header-social { display: inline-flex; transition: opacity .25s ease, transform .25s var(--ease-out-soft); }
 .header-social:hover { opacity: .7; transform: translateY(-2px); }
 

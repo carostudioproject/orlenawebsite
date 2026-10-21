@@ -1,5 +1,11 @@
 @extends('layouts.site')
 
+@if ($first = $hero[0]['image'] ?? null)
+    @push('preload')
+    <link rel="preload" as="image" href="{{ $first }}"{!! ($set = \App\Support\ResponsiveImage::srcset($first)) ? ' imagesrcset="'.e($set).'" imagesizes="(max-width: 767px) 80vw, 720px"' : '' !!} fetchpriority="high">
+    @endpush
+@endif
+
 @section('content')
 @php
     // Same rule as the original card excerpt: at most 100 characters, then "...".

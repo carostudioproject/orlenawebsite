@@ -7,14 +7,14 @@ use Illuminate\Support\HtmlString;
 /**
  * srcset for the website's own photos, so phones download a small copy instead of the full banner.
  *
- * scripts/make-image-sizes.mjs writes "photo.w480.webp", "photo.w800.webp", "photo.w1200.webp" beside
+ * scripts/make-image-sizes.mjs writes "photo.w480.webp" … "photo.w1200.webp" (480, 640, 800, 1200 px) beside
  * "/assets/images/…/photo.png"; this lists the copies that exist plus the original at its own width (served
  * as WebP through the .htaccess twin rule). Uploaded photos and photos without copies get no srcset.
  * Only file headers and file existence are read, so no cache is needed and new copies show up at once.
  */
 class ResponsiveImage
 {
-    private const WIDTHS = [480, 800, 1200];
+    private const WIDTHS = [480, 640, 800, 1200];
 
     /** The srcset value, or null when the image has no smaller copies. */
     public static function srcset(?string $src): ?string

@@ -16,6 +16,8 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="robots" content="{{ $seo['indexable'] ? 'index,follow' : 'noindex,nofollow' }}">
     <link rel="icon" href="/favicon.ico">
+    {{-- The page's main photo (hero banner, article cover) starts downloading before the CSS and scripts. --}}
+    @stack('preload')
     @vite('resources/js/public.ts')
     @foreach ($structuredData ?? [] as $data)
         <script type="application/ld+json">{!! json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!}</script>
@@ -28,7 +30,7 @@
     <main id="main-content" tabindex="-1">@yield('content')</main>
     @include('partials.site-footer')
     @if ($site['whatsappNumber'] ?? null)
-        <a href="https://wa.me/{{ $site['whatsappNumber'] }}" target="_blank" rel="noopener noreferrer" class="whatsapp-floating" aria-label="Chat with Orlena on WhatsApp"><i class="fa-brands fa-whatsapp" aria-hidden="true"></i></a>
+        <a href="https://wa.me/{{ $site['whatsappNumber'] }}" target="_blank" rel="noopener noreferrer" class="whatsapp-floating" aria-label="Chat with Orlena on WhatsApp">@include('partials.icon', ['name' => 'whatsapp'])</a>
     @endif
     @include('partials.meta-pixel', ['pixelId' => \App\Support\MetaPixel::id()])
 </body>

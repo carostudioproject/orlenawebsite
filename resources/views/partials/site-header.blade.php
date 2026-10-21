@@ -15,8 +15,8 @@
                 @endforeach
             </ul>
             <div class="flex items-center gap-4">
-                @if ($instagram)<a href="{{ $instagram }}" target="_blank" rel="noopener noreferrer" aria-label="Instagram" class="header-social"><i class="fab fa-instagram fa-lg" aria-hidden="true"></i></a>@endif
-                @if ($tiktok)<a href="{{ $tiktok }}" target="_blank" rel="noopener noreferrer" aria-label="TikTok" class="header-social"><i class="fa-brands fa-tiktok" aria-hidden="true"></i></a>@endif
+                @if ($instagram)<a href="{{ $instagram }}" target="_blank" rel="noopener noreferrer" aria-label="Instagram" class="header-social">@include('partials.icon', ['name' => 'instagram'])</a>@endif
+                @if ($tiktok)<a href="{{ $tiktok }}" target="_blank" rel="noopener noreferrer" aria-label="TikTok" class="header-social">@include('partials.icon', ['name' => 'tiktok'])</a>@endif
             </div>
         </div>
         <button type="button" class="or-mobile-toggle min-[992px]:!hidden" aria-expanded="false" aria-controls="mobile-menu" aria-label="Open menu" data-menu-open><span></span><span></span></button>

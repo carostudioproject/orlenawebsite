@@ -1,7 +1,7 @@
 // Makes smaller WebP copies of the website's own photos so browsers download a size that fits the screen.
 //
 // For every JPG/PNG under public/assets/images (logos and labels excepted) it writes, beside the original:
-//   "Header orlena-01.png" -> "Header orlena-01.w480.webp", ".w800.webp", ".w1200.webp"
+//   "Header orlena-01.png" -> "Header orlena-01.w480.webp", ".w640.webp", ".w800.webp", ".w1200.webp"
 // Only widths smaller than the original are made, and existing copies are kept unless --force is given.
 // The pages pick them up automatically through App\Support\ResponsiveImage (srcset).
 //
@@ -12,7 +12,7 @@ import { join, extname } from 'node:path';
 import sharp from 'sharp';
 
 const ROOT = 'public/assets/images';
-const WIDTHS = [480, 800, 1200];
+const WIDTHS = [480, 640, 800, 1200];
 const SKIP = /(Orlena-Logo|label)\.png$/i;
 // Raw menu photos kept out of git (see .gitignore) are not website images.
 const SKIP_DIRS = new Set(['PNG MENU ORLENA']);
@@ -34,7 +34,7 @@ for await (const file of photos(ROOT)) {
   for (const w of WIDTHS.filter(w => w < width)) {
     const out = `${base}.w${w}.webp`;
     if (!force && await exists(out)) continue;
-    await sharp(file).rotate().resize({ width: w }).webp({ quality: 78, effort: 5 }).toFile(out);
+    await sharp(file).rotate().resize({ width: w }).webp({ quality: 72, effort: 6 }).toFile(out);
     made++;
     console.log(`${out}  ${Math.round((await stat(out)).size / 1024)} KB`);
   }

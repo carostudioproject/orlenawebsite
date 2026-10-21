@@ -7,7 +7,7 @@
                     <img src="/assets/images/Orlena-Logo.png" alt="Orlena" class="or-footer-logo" loading="lazy">
                 </a>
                 <div class="or-footer-certification">
-                    <img src="/assets/images/ID51110019402520824-label.png" alt="Halal" class="or-footer-halal" loading="lazy">
+                    <img src="/assets/images/ID51110019402520824-label-small.png" alt="Halal" class="or-footer-halal" width="87" height="162" loading="lazy">
                 </div>
             </div>
 
