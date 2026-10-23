@@ -85,6 +85,10 @@ return [
         'base_url' => env('ERZAP_BASE_URL'),
         'token' => env('ERZAP_TOKEN'),
         'order_path' => env('ERZAP_ORDER_PATH', '/apis/simpan_pesanan_penjualan'),
+        // API v1.3: the shop domain registered in Erzap ("host_web", required), by default the host of APP_URL.
+        'host_web' => env('ERZAP_HOST_WEB') ?: parse_url((string) env('APP_URL', ''), PHP_URL_HOST),
+        // API v1.3 "kode_outlet": Erzap outlet code that receives the order; empty uses the outlet set in Erzap.
+        'outlet_code' => (string) env('ERZAP_OUTLET_CODE', ''),
         // Receiving outlet when an outlet has no Erzap outlet ID in Mapping, and the sales user recorded on every order.
         'default_outlet_id' => env('ERZAP_DEFAULT_OUTLET_ID'),
         'sales_user_id' => env('ERZAP_SALES_USER_ID'),

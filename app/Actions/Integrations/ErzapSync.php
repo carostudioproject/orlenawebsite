@@ -182,7 +182,7 @@ class ErzapSync
     }
 
     /**
-     * OLZAP "shopping_carts" as in the Erzap API v1.2 document (token added by the client).
+     * OLZAP "shopping_carts" as in the Erzap API v1.3 document (token added by the client).
      * Numbers are decimal strings ("120000.0"), the payment date is a date only ("2026-08-27").
      */
     private function cart(Order $order): array
@@ -224,6 +224,8 @@ class ErzapSync
             'pelanggan_payment_channel' => strtoupper($payment?->provider === 'manual' ? (string) $payment->payment_type : 'DOKU'.($payment?->payment_type ? '-'.$payment->payment_type : '')),
             'pelanggan_ekspedisi' => $delivery ? 'GOJEK/GRAB' : 'PICKUP',
             'pelanggan_kode' => null,
+            // v1.3 names the receiving outlet by code; the two ID fields of the earlier payload are still sent alongside.
+            'kode_outlet' => config('services.erzap.outlet_code', ''),
             'idoutlet_penerima_pesanan_online_erzap' => $this->outletId($order),
             'iduser_sales_penerima_pesanan_online_erzap' => $this->salesUserId($order),
             'informasi_tambahan_text' => mb_substr($note, 0, 500),

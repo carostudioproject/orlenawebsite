@@ -28,6 +28,8 @@ check the preview, then **Apply**.
 
 ## Request mapping (`shopping_carts`)
 
+Body (API v1.3): `{"host_web": ..., "shopping_carts": {...}}`. `host_web` is `ERZAP_HOST_WEB`, else the host of `APP_URL` (`orlenalycious.com`). Erzap answers `status: 1` both for a new order and for a `kode` it already has ("Pesanan yang ingin disimpan sudah ada"); both count as **Sent**.
+
 | Erzap field | From the website |
 |---|---|
 | `kode` | Order Code, or `null` with `ERZAP_SEND_ORDER_CODE=false` so Erzap uses its own numbering (no OLZAP endpoint returns the last Erzap number, so the website never guesses it) |
@@ -40,12 +42,13 @@ check the preview, then **Apply**.
 | `total_pembayaran` | Amount paid via DOKU |
 | `konfirmasi_dari_bank`, `konfirmasi_tanggal_bayar`, `pelanggan_payment_channel` | `DOKU`, payment date (WITA, `YYYY-MM-DD`), e.g. `DOKU-QRIS` or `DOKU-VIRTUAL_ACCOUNT_BCA` |
 | `informasi_tambahan_text` | Three lines: "Website Order {Order Code}", pickup/delivery outlet with PO date and time, payment method |
+| `kode_outlet` | `ERZAP_OUTLET_CODE` (v1.3, optional; empty = the outlet set in Erzap) |
 | `idoutlet_penerima_pesanan_online_erzap` | Outlet's Erzap outlet ID (Mapping), else `ERZAP_DEFAULT_OUTLET_ID` |
 | `iduser_sales_penerima_pesanan_online_erzap` | `ERZAP_SALES_USER_ID` |
 | `token_erzap` | `ERZAP_TOKEN` (added when sending, never stored in the log) |
 | `shopping_cart_details[]` | `barcode_produk` (product barcode), `harga_satuan`, `jumlah` (decimal strings, e.g. `"2.0"`) |
 
-## Erzap → website (`/web_service/...`, Erzap API v1.2 section 2)
+## Erzap → website (`/web_service/...`, Erzap API v1.3 section 2, unchanged since v1.2)
 
 Once Erzap registers the website domain in the ORLENA account, Erzap calls these URLs (POST, `routes/erzap.php`, stateless, no CSRF). Every call must carry `X-Erzap-Token`; it is compared with `ERZAP_INBOUND_TOKEN` (or `ERZAP_TOKEN` when empty) and anything else gets HTTP 401. Developer tools lists the URLs with the last call received.
 

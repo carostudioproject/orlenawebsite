@@ -85,7 +85,7 @@ class ErzapAndApiTest extends TestCase
         Http::assertNothingSent();
 
         // Configured but no barcode / outlet ID: waits for mapping, still nothing sent.
-        config(['services.erzap.enabled' => true, 'services.erzap.base_url' => 'https://erzap.test:4443', 'services.erzap.token' => 'erzap-secret', 'services.erzap.sales_user_id' => '8']);
+        config(['services.erzap.enabled' => true, 'services.erzap.base_url' => 'https://erzap.test:4443', 'services.erzap.token' => 'erzap-secret', 'services.erzap.sales_user_id' => '8', 'services.erzap.host_web' => 'orlena.test', 'services.erzap.outlet_code' => 'OUT4']);
         // A row waiting for settings is parked: the next run leaves it until its time comes, so it cannot fill every batch.
         $this->artisan('erzap:sync')->assertSuccessful();
         $this->assertSame('waiting_config', $sync->fresh()->status);
@@ -117,6 +117,7 @@ class ErzapAndApiTest extends TestCase
             $cart = $request['shopping_carts'];
 
             return $request->url() === 'https://erzap.test:4443/apis/simpan_pesanan_penjualan' && $request->method() === 'POST'
+                && $request['host_web'] === 'orlena.test' && $cart['kode_outlet'] === 'OUT4'
                 && $cart['kode'] === $order->order_code && $cart['token_erzap'] === 'erzap-secret'
                 && $cart['idoutlet_penerima_pesanan_online_erzap'] === 1 && $cart['iduser_sales_penerima_pesanan_online_erzap'] === 8
                 && $cart['total_pesanan'] === '160000.0' && $cart['ongkos_kirim'] === '15000.0' && $cart['total_pembayaran'] === '175000.0'

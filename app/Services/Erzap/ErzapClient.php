@@ -7,8 +7,9 @@ use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 
 /**
- * Sends paid orders to Erzap through the OLZAP "simpan_pesanan_penjualan" API.
- * Erzap authenticates with token_erzap inside the body and answers {"status": "1"} on success, "0" with a message on error.
+ * Sends paid orders to Erzap through the OLZAP "simpan_pesanan_penjualan" API (v1.3: {"host_web", "shopping_carts"}).
+ * Erzap authenticates with token_erzap inside the body and answers {"status": 1} on success (also when the kode was saved
+ * before, "Pesanan yang ingin disimpan sudah ada"), 0 with a message on error.
  */
 class ErzapClient
 {
@@ -19,6 +20,7 @@ class ErzapClient
             'ERZAP_ENABLED' => ! config('services.erzap.enabled'),
             'ERZAP_BASE_URL' => blank(config('services.erzap.base_url')),
             'ERZAP_TOKEN' => blank(config('services.erzap.token')),
+            'ERZAP_HOST_WEB' => blank(config('services.erzap.host_web')),
             'ERZAP_SALES_USER_ID' => blank(config('services.erzap.sales_user_id')),
         ]));
     }
@@ -37,7 +39,7 @@ class ErzapClient
         $cart['token_erzap'] = config('services.erzap.token');
         try {
             $response = Http::baseUrl(rtrim(config('services.erzap.base_url'), '/'))->acceptJson()->asJson()
-                ->timeout((int) config('services.erzap.timeout', 20))->post(config('services.erzap.order_path'), ['shopping_carts' => $cart]);
+                ->timeout((int) config('services.erzap.timeout', 20))->post(config('services.erzap.order_path'), ['host_web' => config('services.erzap.host_web'), 'shopping_carts' => $cart]);
         } catch (ConnectionException) {
             throw new ErzapException('Could not reach Erzap');
         }
